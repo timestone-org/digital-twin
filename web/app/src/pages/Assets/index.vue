@@ -11,7 +11,6 @@
  * 嵌套层），故二次确认里必须把「用它的大屏会显示取不到」说清楚。
  * 交互编排在 `scripts/useAssetsPage.ts`，库状态在 `features/assets/`。
  */
-import { onMounted } from 'vue'
 import { PERMISSION_CODES } from '@dt/contracts'
 import type { DtDataColumn } from '@dt/contracts'
 import {
@@ -56,8 +55,6 @@ const COLUMNS: readonly DtDataColumn[] = [
 const view = useViewMode('assets')
 const page = useAssetsPage()
 const library = page.library
-
-onMounted(() => void library.reload(page.kind.value))
 </script>
 
 <template>

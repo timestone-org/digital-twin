@@ -5,7 +5,7 @@
  * 关掉弹窗之后还在偷偷传，传完往一个已经没人看的界面写状态；改名后重拉整页则会
  * 把「加载更多」取回来的后几页悄悄丢掉。
  */
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 
@@ -88,6 +88,7 @@ describe('列表加载防竞态', () => {
     const { library } = mountLibrary()
 
     const first = library.reload('model')
+    await flushPromises()
     const second = library.reload('icon')
     fast.settle([asset('new')])
     await second
@@ -102,6 +103,7 @@ describe('列表加载防竞态', () => {
     api.listAssets.mockReturnValueOnce(slow.promise)
     const { library } = mountLibrary()
     const first = library.reload('model')
+    await flushPromises()
     api.listAssets.mockResolvedValue([asset('new')])
     await library.reload('icon')
     slow.settle(Promise.reject(new Error('慢的那次炸了')) as never)
@@ -109,6 +111,27 @@ describe('列表加载防竞态', () => {
 
     expect(library.error.value).toBe('')
     expect(library.assets.value.map((item) => item.id)).toEqual(['new'])
+  })
+
+  it('第一次的类型目录慢到时，只按当前地址的筛选取列表', async () => {
+    const slow = deferred<AssetKindSpec[]>()
+    api.listAssetKinds.mockReturnValueOnce(slow.promise)
+    const { library, unmount } = mountLibrary()
+    try {
+      const first = library.reload('image', '旧')
+      await library.reload('model', '新')
+      slow.settle(KINDS)
+      await first
+
+      expect(api.listAssets).toHaveBeenCalledTimes(1)
+      expect(api.listAssets).toHaveBeenCalledWith('model', {
+        limit: 50,
+        offset: 0,
+        q: '新',
+      })
+    } finally {
+      unmount()
+    }
   })
 })
 

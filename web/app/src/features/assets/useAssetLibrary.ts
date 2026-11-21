@@ -35,7 +35,7 @@ export interface AssetLibrary {
   keyword: Ref<string>
   /** 服务端那边还有没有下一页。 */
   hasMore: Ref<boolean>
-  reload: (kind: AssetKind) => Promise<void>
+  reload: (kind: AssetKind, keyword?: string) => Promise<void>
   /** 换关键词并从第一页重来。 */
   search: (keyword: string) => Promise<void>
   /** 接着往下取一页。没有下一页或正在取时什么都不做。 */
@@ -111,7 +111,10 @@ export function useAssetLibrary(): AssetLibrary {
     error: state.error,
     keyword: state.keyword,
     hasMore: state.hasMore,
-    reload: (kind) => load(kind, 'reset'),
+    reload: (kind, keyword = state.keyword.value) => {
+      state.keyword.value = keyword.trim()
+      return load(kind, 'reset')
+    },
     clearFinishedUploads: uploads.clearFinished,
     abort: uploads.abort,
     ...createReads(state, load),
