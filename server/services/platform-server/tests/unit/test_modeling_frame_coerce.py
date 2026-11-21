@@ -1,11 +1,15 @@
-"""台账取数的数值转换：非有限值与转不动的值一样记成「转不动」。
+"""台账取数转换将非有限值记为转换失败。
 
 ⚠ 'NaN' / 'inf' 这类文本放过去会让摘要统计变成 NaN，进 JSONB 就落不了库。
 """
 
 import pytest
 
-from platform_server.apps.modeling.services.frame_source import _as_number
+from platform_server.apps.dataset.services import ColumnSpec
+from platform_server.apps.modeling.services.frame_source import (
+    _as_number,
+    _coerce,
+)
 
 
 @pytest.mark.parametrize("raw", ["NaN", "nan", "inf", "-Infinity", 10**400])
@@ -18,3 +22,9 @@ def test_non_finite_values_count_as_failed(raw: object) -> None:
 )
 def test_finite_values_pass(raw: object, expected: float) -> None:
     assert _as_number(raw) == (expected, False)
+
+
+@pytest.mark.parametrize("raw", [float("nan"), float("inf"), -float("inf")])
+def test_non_finite_numbers_cannot_become_true(raw: float) -> None:
+    column = ColumnSpec("running", "是否运行", "bool", "")
+    assert _coerce(raw, column) == (None, True)

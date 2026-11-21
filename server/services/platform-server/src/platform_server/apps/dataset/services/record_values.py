@@ -272,6 +272,14 @@ def _as_bool(value: Any, column: DatasetColumn) -> bool:
 
     Args: value, column。
     """
+    parsed = parse_boolean(value)
+    if parsed is not None:
+        return parsed
+    raise rejected(column.key, f"列「{column.name}」需要布尔值，收到 {value!r}")
+
+
+def parse_boolean(value: object) -> bool | None:
+    """按台账布尔列的输入约定转换，无法识别时返回空。Args: value。"""
     if isinstance(value, bool):
         return value
     if isinstance(value, int | float):
@@ -279,6 +287,4 @@ def _as_bool(value: Any, column: DatasetColumn) -> bool:
     text = str(value).strip().lower()
     if text in _TRUE_WORDS:
         return True
-    if text in _FALSE_WORDS:
-        return False
-    raise rejected(column.key, f"列「{column.name}」需要布尔值，收到 {value!r}")
+    return False if text in _FALSE_WORDS else None

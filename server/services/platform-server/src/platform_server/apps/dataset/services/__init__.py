@@ -55,7 +55,10 @@ from platform_server.apps.dataset.services.record_read import (
     EffectiveWindow,
     RecordFilters,
 )
-from platform_server.apps.dataset.services.record_values import Actor
+from platform_server.apps.dataset.services.record_values import (
+    Actor,
+    parse_boolean,
+)
 from platform_server.apps.dataset.services.record_write import (
     RecordLocator,
     RecordWriter,
@@ -93,6 +96,7 @@ __all__ = [
     "formula_service",
     "formula_usage",
     "library_service",
+    "parse_boolean",
     "recompute_service",
     "record_overrides",
     "record_read",
