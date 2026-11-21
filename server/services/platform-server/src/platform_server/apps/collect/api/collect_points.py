@@ -232,14 +232,28 @@ async def write_point(
     Args: point_id, payload, session, write。
     """
     return ok(
-        await write.run_once(
-            endpoint="write_collect_point",
-            model=WriteOut,
-            action=lambda: field_service.write_point(
-                session, bus=write.bus, point_id=point_id, value=payload.value
-            ),
-        ),
+        await _write_once(session, point_id, payload, write),
         message="写值已下发",
+    )
+
+
+async def _write_once(
+    session: AsyncSession,
+    point_id: uuid.UUID,
+    payload: WriteIn,
+    write: WriteContext,
+) -> WriteOut:
+    """把设备写入接到已有幂等占位。Args: session, point_id, payload, write。"""
+    return await write.run_once(
+        endpoint="write_collect_point",
+        model=WriteOut,
+        action=lambda: field_service.write_point(
+            session,
+            bus=write.bus,
+            point_id=point_id,
+            value=payload.value,
+            actor=write.audit_actor,
+        ),
     )
 
 

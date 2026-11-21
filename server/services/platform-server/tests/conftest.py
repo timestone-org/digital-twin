@@ -194,6 +194,13 @@ def postgres_available(settings: Settings) -> bool:
 
 
 @pytest.fixture
+def _require_postgres(postgres_available: bool) -> None:
+    """要求测试可使用真实 PostgreSQL。Args: postgres_available。"""
+    if not postgres_available:
+        pytest.skip("本机连不到 Postgres")
+
+
+@pytest.fixture
 def sign(settings: Settings) -> SignHeaders:
     """造一组边缘会下发的签名身份头。
 
@@ -445,13 +452,11 @@ def _wire_fakes(
 @pytest.fixture
 async def app_context(
     settings: Settings,
-    postgres_available: bool,
+    _require_postgres: None,
     sign: SignHeaders,
     external_fakes: ExternalFakes,
 ) -> AsyncIterator[AppContext]:
     """每个用例使用真实平台应用、同一条回滚连接与隔离的外部依赖。"""
-    if not postgres_available:
-        pytest.skip("本机连不到 Postgres")
     application = build_app(settings)
     connection = await application.state.container.database.engine.connect()
     transaction = await connection.begin()
