@@ -287,6 +287,7 @@ defineExpose({
   position: absolute;
   inset: 52px 8px auto;
   z-index: 2;
+  pointer-events: none;
 }
 
 // 舞台把视口居中；视口自己按目标格子的宽高比留边。
