@@ -492,6 +492,14 @@ export interface DatasetRowRef {
   tableId: string
   rowId: string
   ts: string
+  locatorTs?: string
+}
+
+/** 保留旧平台的毫秒查询。@param row 行定位 */
+function recordTimeQuery(row: DatasetRowRef): Record<string, string> {
+  return row.locatorTs === undefined
+    ? { ts: row.ts }
+    : { locator_ts: row.locatorTs }
 }
 
 /**
@@ -509,7 +517,7 @@ export async function updateDatasetRecord(
     `/dataset-tables/${row.tableId}/records/${row.rowId}`,
     onPlatform({
       method: 'PATCH',
-      query: { ts: row.ts },
+      query: recordTimeQuery(row),
       body: input,
       headers: idempotent(key),
     }),
@@ -531,7 +539,7 @@ export async function deleteDatasetRecord(
     `/dataset-tables/${row.tableId}/records/${row.rowId}`,
     onPlatform({
       method: 'DELETE',
-      query: { ts: row.ts },
+      query: recordTimeQuery(row),
       headers: idempotent(key),
     }),
   )
@@ -554,7 +562,7 @@ export async function clearDatasetRecordOverrides(
     `/dataset-tables/${row.tableId}/records/${row.rowId}/overrides`,
     onPlatform({
       method: 'DELETE',
-      query: { ts: row.ts },
+      query: recordTimeQuery(row),
       body: { keys },
       headers: idempotent(key),
     }),

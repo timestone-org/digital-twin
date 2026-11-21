@@ -166,6 +166,18 @@ describe('提交', () => {
     expect(input?.values).toHaveProperty('kwh', '77')
   })
 
+  it('精确时刻定位，未修改的数据时间不进载荷', async () => {
+    const locatorTs = '2026-08-12T09:20:00.123456Z'
+    await open(record({ locator_ts: locatorTs, source: 'manual' }))
+    await type(0, '20')
+    await save()
+
+    const [row, input] =
+      vi.mocked(dataset.updateDatasetRecord).mock.calls[0] ?? []
+    expect(row).toEqual({ tableId: 't1', rowId: 'r1', ts: ROW_TS, locatorTs })
+    expect(input).not.toHaveProperty('ts')
+  })
+
   it('⚠ 改数据时间时，`?ts=` 仍是改之前那一刻——它是分区键', async () => {
     await open(record({ source: 'manual' }))
     await pickMoment(MOVED_TS)

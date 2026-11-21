@@ -17,6 +17,7 @@ import type {
 } from '@dt/contracts'
 
 import { formatDateTime } from '@/utils/datetime'
+import type { DatasetRowRef } from '@/api/dataset'
 
 /** 喂给 `DtDataView` 的一行。它要求每行有 `id`，而台账行的身份是 `row_id`。 */
 export interface RecordRow {
@@ -32,10 +33,25 @@ export interface RecordRow {
  */
 export function toRecordRows(records: readonly DatasetRecord[]): RecordRow[] {
   return records.map((record) => ({
-    id: record.row_id,
+    id: record.locator_ts
+      ? `${record.row_id}|${record.locator_ts}`
+      : record.row_id,
     time: formatDateTime(record.ts),
     record,
   }))
+}
+
+/**
+ * 快照中的行定位。旧平台只提供显示时间。
+ * @param tableId 台账 id
+ * @param record 选中的记录
+ */
+export function recordRowRef(
+  tableId: string,
+  record: DatasetRecord,
+): DatasetRowRef {
+  const row = { tableId, rowId: record.row_id, ts: record.ts }
+  return record.locator_ts ? { ...row, locatorTs: record.locator_ts } : row
 }
 
 /**

@@ -4,8 +4,7 @@
  *
  * ⚠ 点位汇总列填进去的值会被记成**人工修正**（盖住采集原值）而不是改采集值，
  * 所以只提交用户真的动过的那几格——理由与做法见 `scripts/recordForm.ts`。
- * ⚠ 编辑时 URL 上的 `?ts=` 必须是**改之前**那个时刻：它是超表的分区键，
- * 而 `values.ts` 才是要改成的新时刻。两者写反会去另一个 chunk 里找这一行。
+ * ⚠ 查询用原时刻定位。只有在表单里改了数据时间，才提交新时刻。
  */
 import { computed, ref, watch } from 'vue'
 import type { DatasetColumn, DatasetRecord } from '@dt/contracts'
@@ -21,7 +20,7 @@ import {
 import * as dataset from '@/api/dataset'
 import { describeError } from '@/composables/useAsyncList'
 import { useFormDirty } from '@/composables/useFormDirty'
-import { formatCell } from '../scripts/recordView'
+import { formatCell, recordRowRef } from '../scripts/recordView'
 import {
   BOOL_OPTIONS,
   formulaColumns,
@@ -101,8 +100,8 @@ async function save(): Promise<void> {
     return
   }
   const saved = await dataset.updateDatasetRecord(
-    { tableId: props.tableId, rowId: target.row_id, ts: target.ts },
-    input,
+    recordRowRef(props.tableId, target),
+    input.ts === opened.value.ts ? { values: input.values } : input,
   )
   emit('saved', '数据行已更新', saved.has_stale_downstream)
 }
