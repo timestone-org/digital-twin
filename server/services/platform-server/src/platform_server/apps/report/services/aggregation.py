@@ -92,7 +92,8 @@ def format_value(
             if precision is None
             else format_number(value, precision, unit)
         )
-    if kind == "boolean":
+    # 台账允许改列类型，历史文本与数值保留原值。
+    if kind == "boolean" or (kind == "bool" and isinstance(value, bool)):
         return "true" if value is True else "false"
     return str(value)
 
