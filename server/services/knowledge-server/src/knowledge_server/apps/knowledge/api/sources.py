@@ -6,6 +6,7 @@
 """
 
 import uuid
+from datetime import timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -112,4 +113,7 @@ def _deps(
         store=container.objectstore,
         stream=container.stream,
         group=container.ingest_group(),
+        pending_retry_after=timedelta(
+            milliseconds=container.settings.ingest_claim_idle_ms
+        ),
     )

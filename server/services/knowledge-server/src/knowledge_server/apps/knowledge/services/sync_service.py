@@ -6,9 +6,8 @@ import uuid
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge import crud
@@ -17,7 +16,11 @@ from knowledge_server.apps.knowledge.errors import (
     SourceSyncConflict,
 )
 from knowledge_server.apps.knowledge.schemas import SyncOut
-from knowledge_server.apps.knowledge.services import document_service
+from knowledge_server.apps.knowledge.services import (
+    document_service,
+    ingest_queue,
+    source_versions,
+)
 from knowledge_server.apps.knowledge.services.sources import (
     DiscoveredItem,
     KnowledgeSource,
@@ -25,6 +28,7 @@ from knowledge_server.apps.knowledge.services.sources import (
     source_for,
     suffix_of,
 )
+from knowledge_server.settings import DEFAULT_INGEST_CLAIM_IDLE_MS
 from lib.errors import AppError
 from lib.logging import get_logger
 from lib.objectstore import ObjectStore
@@ -56,6 +60,9 @@ class SyncDeps:
     stream: StreamLike
     group: StreamGroup
     max_pages: int = MAX_PAGES
+    pending_retry_after: timedelta = timedelta(
+        milliseconds=DEFAULT_INGEST_CLAIM_IDLE_MS
+    )
 
 
 @dataclass(frozen=True)
@@ -70,7 +77,7 @@ class _SourceState:
 
 @dataclass(frozen=True)
 class _Batch:
-    documents: tuple[crud.document.DocumentWrite, ...]
+    documents: tuple[source_versions.SourceItem, ...]
     cursor: str | None
 
 
@@ -114,7 +121,7 @@ async def _prepare(
 ) -> _Batch:
     picked = source_for(source.kind, deps.sources)
     cursor = source.cursor
-    documents: list[crud.document.DocumentWrite] = []
+    documents: list[source_versions.SourceItem] = []
     for _ in range(deps.max_pages):
         page = await picked.discover(source.config, cursor)
         for item in page.items:
@@ -126,7 +133,9 @@ async def _prepare(
                 item.content,
                 content_type=item.media_type or "text/markdown",
             )
-            documents.append(write)
+            documents.append(
+                source_versions.SourceItem(item.external_ref, write)
+            )
         cursor = page.cursor
         if cursor is None:
             break
@@ -134,24 +143,20 @@ async def _prepare(
 
 
 async def _register(
-    session: AsyncSession, deps: SyncDeps, write: crud.document.DocumentWrite
+    session: AsyncSession, deps: SyncDeps, item: source_versions.SourceItem
 ) -> bool:
-    try:
-        async with session.begin_nested():
-            await crud.document.insert_document(session, write)
-    except IntegrityError:
-        if not await crud.document.has_content_hash(
-            session, write.base_id, write.content_hash
-        ):
-            raise
-        return False
-    row = await crud.document.get_document(session, write.document_id)
-    if row is None:
-        raise RuntimeError("文档刚登记就取不到了")
-    document_service.queue_ingest(
-        session, deps.stream, deps.group, document_service.document_out(row)
+    result = await source_versions.observe(
+        session, item, deps.pending_retry_after
     )
-    return True
+    if result.queued is not None:
+        document_service.queue_ingest(
+            session,
+            deps.stream,
+            ingest_queue.source_version_group(deps.group),
+            document_service.document_out(result.queued),
+            result.queued.ingest_generation,
+        )
+    return result.is_changed
 
 
 def _matches(
@@ -186,8 +191,16 @@ async def _save(
                 "这一路来源的配置或同步结果已更新，请刷新后重新同步"
             )
         registered = 0
-        for write in batch.documents:
-            if await _register(session, deps, write):
+        observed: dict[str, str] = {}
+        for item in batch.documents:
+            previous = observed.setdefault(
+                item.record_key, item.write.content_hash
+            )
+            if previous != item.write.content_hash:
+                raise SourceSyncConflict(
+                    "本次同步中同一记录出现不同内容，请重新同步"
+                )
+            if await _register(session, deps, item):
                 registered += 1
         await crud.source.mark_synced(
             session, source.id, batch.cursor, utcnow()
