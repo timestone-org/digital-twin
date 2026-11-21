@@ -128,6 +128,8 @@ class HistoryCache:
     window_rows: dict[str, list[RowSnapshot]] = field(
         default_factory=dict[str, list[RowSnapshot]]
     )
+    #: 批量重算的本表窗口中，当前行的旧快照下标。
+    window_excluded: int | None = None
     #: {列key: 整列聚合底数}
     whole_stats: dict[str, WholeStats] = field(
         default_factory=dict[str, WholeStats]
@@ -234,8 +236,13 @@ def _window_aggregate(
     """
     lower = window_lower_bound(ts, ref.spec, cache.tz)
     start, end = ts_bounds(rows, lower, ts, is_closed=ref.spec.is_today)
+    excluded = cache.window_excluded if ref.table_code is None else None
     if ref.spec.step_s is not None:
-        picked = [*rows[start:end], *([] if extra is None else [extra])]
+        picked = [*rows[start:end]]
+        if excluded is not None and start <= excluded < end:
+            picked.pop(excluded - start)
+        if extra is not None:
+            picked.append(extra)
         return sum_complete_window(
             ((row.ts, row.get(ref.column_key)) for row in picked),
             lower,
@@ -244,7 +251,8 @@ def _window_aggregate(
         )
     column = cache.window_index.column(rows, ref.column_key)
     return _aggregate(
-        ref.func, WindowSlice(column, start, end, ref.column_key, extra)
+        ref.func,
+        WindowSlice(column, start, end, ref.column_key, extra, excluded),
     )
 
 

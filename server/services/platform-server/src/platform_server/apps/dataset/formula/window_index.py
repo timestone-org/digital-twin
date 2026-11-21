@@ -1,7 +1,7 @@
 """窗口聚合的增量索引：一串行上每列只转一次数，切窗变成二分 + 切片。
 
-⚠ 只对**只追加**的行序列成立——整表重算那一趟的历史串与跨表行都是这么用的。
-换了一串行（按身份认）或行数变少都整份重建，不拿旧账。
+行序列只追加。同刻求值结束要丢掉缓存快照时，调用方先删尾并同步回退索引。
+换了一串行（按身份认）或未同步缩短时整份重建。
 """
 
 from bisect import bisect_left, bisect_right
@@ -54,6 +54,14 @@ class ColumnIndex:
                 self.numbers.append(number)
         self.seen = len(self.rows)
 
+    def rewind(self, keep: int) -> None:
+        """删去短暂追加的同刻缓存。Args: keep。"""
+        numeric = bisect_left(self.numeric_at, keep)
+        del self.present_at[bisect_left(self.present_at, keep) :]
+        del self.numeric_at[numeric:]
+        del self.numbers[numeric:]
+        self.seen = keep
+
 
 @dataclass(frozen=True)
 class WindowSlice:
@@ -64,18 +72,28 @@ class WindowSlice:
     end: int
     key: str
     extra: RowSnapshot | None = None
+    excluded: int | None = None
 
     def count(self) -> int:
         """有值（不为空）的格数。"""
         inside = bisect_left(self.column.present_at, self.end) - bisect_left(
             self.column.present_at, self.start
         )
+        excluded = self._inside_exclusion()
+        if (
+            excluded is not None
+            and self.column.rows[excluded].get(self.key) is not None
+        ):
+            inside -= 1
         return inside + (0 if self._extra_raw() is None else 1)
 
     def first(self) -> object:
         """第一格有值的原值（不转数）。"""
-        at = bisect_left(self.column.present_at, self.start)
-        if at < len(self.column.present_at):
+        positions = self.column.present_at
+        at = bisect_left(positions, self.start)
+        if at < len(positions) and positions[at] == self.excluded:
+            at += 1
+        if at < len(positions):
             position = self.column.present_at[at]
             if position < self.end:
                 return self.column.rows[position].get(self.key)
@@ -86,8 +104,11 @@ class WindowSlice:
         extra = self._extra_raw()
         if extra is not None:
             return extra
-        at = bisect_left(self.column.present_at, self.end) - 1
-        if at >= 0 and self.column.present_at[at] >= self.start:
+        positions = self.column.present_at
+        at = bisect_left(positions, self.end) - 1
+        if at >= 0 and positions[at] == self.excluded:
+            at -= 1
+        if at >= 0 and positions[at] >= self.start:
             return self.column.rows[self.column.present_at[at]].get(self.key)
         return None
 
@@ -96,10 +117,24 @@ class WindowSlice:
         low = bisect_left(self.column.numeric_at, self.start)
         high = bisect_left(self.column.numeric_at, self.end)
         series = self.column.numbers[low:high]
+        excluded = self._inside_exclusion()
+        if excluded is not None:
+            at = bisect_left(self.column.numeric_at, excluded, low, high)
+            if at < high and self.column.numeric_at[at] == excluded:
+                series.pop(at - low)
         extra = window_number(self._extra_raw())
         if extra is not None:
             series.append(extra)
         return series
+
+    def _inside_exclusion(self) -> int | None:
+        """当前行的旧快照落在窗口内时，返回其下标。"""
+        excluded = self.excluded
+        return (
+            excluded
+            if excluded is not None and self.start <= excluded < self.end
+            else None
+        )
 
     def _extra_raw(self) -> object:
         """当前行在这一列上的原值。"""
@@ -128,6 +163,12 @@ class WindowIndex:
             self.columns[slot] = entry
         entry.catch_up(key)
         return entry
+
+    def rewind(self, rows: Sequence[RowSnapshot], keep: int) -> None:
+        """回退本表序列的临时尾部，保留之前的列索引。Args: rows, keep。"""
+        for column in self.columns.values():
+            if column.rows is rows and column.seen > keep:
+                column.rewind(keep)
 
 
 def ts_bounds(
