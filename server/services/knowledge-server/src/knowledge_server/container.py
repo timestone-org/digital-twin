@@ -233,12 +233,15 @@ def _build_stream(settings: Settings) -> RedisStream:
     Args: settings。
     """
     timeout_s = settings.redis_timeout_s
-    if settings.app_role == ROLE_WORKER:
+    is_worker = settings.app_role == ROLE_WORKER
+    if is_worker:
         # ⚠ 空队列会正常阻塞，套接字预算必须覆盖 BLOCK 并留通信余量。
         timeout_s = max(
             timeout_s, settings.ingest_block_ms / 1000 + STREAM_READ_MARGIN_S
         )
-    return RedisStream(url=settings.url(), timeout_s=timeout_s)
+    return RedisStream(
+        url=settings.url(), timeout_s=timeout_s, should_delete_on_ack=is_worker
+    )
 
 
 def _build_embedder(settings: Settings, catalog: CatalogCache) -> Embedder:
