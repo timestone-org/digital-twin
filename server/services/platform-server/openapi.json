@@ -41851,7 +41851,7 @@
     },
     "/api/v1/platform/rooms/{room_id}/startup-batches": {
       "get": {
-        "description": "批次列表、当前批次、进度、组合覆盖度、数据范围与指纹是否过期。\n\nArgs: room_id, session, reader, _viewer。",
+        "description": "批次列表、当前批次、进度、组合覆盖度、数据范围与指纹是否过期。\n\nArgs: room_id, sessions, reader, _viewer。",
         "operationId": "list_startup_batches_api_v1_platform_rooms__room_id__startup_batches_get",
         "parameters": [
           {

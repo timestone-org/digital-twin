@@ -231,18 +231,6 @@ def to_episode_row(batch: AcStartupBatch, episode: Episode) -> AcStartupEpisode:
     )
 
 
-async def resolve_source_extent(
-    session: AsyncSession, reader: AcSourceReader, *, room_id: uuid.UUID
-) -> SourceExtent | None:
-    """房间里全部绑定对象合起来覆盖的时间跨度；一台都没绑就给 None。
-
-    ⚠ 取并集不取交集：某台空调是后装的、数据从去年才有，按交集算会把前面几年
-    的历史整段切掉，而那正是样本最多的一段。
-    Args: session, reader, room_id。
-    """
-    return await merge_extents(reader, await load_bound_units(session, room_id))
-
-
 async def merge_extents(
     reader: AcSourceReader, units: Sequence[BoundUnit]
 ) -> SourceExtent | None:

@@ -39,8 +39,8 @@ from platform_server.apps.hvac.services.ac_compliance_service import (
     effective_compliance,
 )
 from platform_server.apps.hvac.services.ac_room_configuration import (
+    BoundUnit,
     RoomConfiguration,
-    load_bound_units,
     load_configuration,
     restore_configuration,
 )
@@ -49,6 +49,7 @@ from platform_server.apps.hvac.services.ac_startup_extract import (
     merge_extents,
 )
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
+from platform_server.apps.hvac.services.sessions import Sessions
 from platform_server.apps.hvac.startups import (
     BATCH_RETENTION,
     OUTCOMES,
@@ -216,7 +217,7 @@ def _to_episode(
 
 
 async def list_batches(
-    session: AsyncSession,
+    sessions: Sessions,
     reader: AcSourceReader,
     *,
     room_id: uuid.UUID,
@@ -224,32 +225,36 @@ async def list_batches(
 ) -> StartupBatchesOut:
     """批次列表、当前批次、组合覆盖度、数据范围与「该不该重算」。
 
-    Args: session, reader, room_id, rules。
+    Args: sessions, reader, room_id, rules。
     """
-    await _require_room(session, room_id)
-    rows = await ac_startup_batch_crud.list_by_room(
-        session, room_id, limit=BATCH_RETENTION
-    )
-    current = await ac_startup_batch_crud.find_current(session, room_id)
-    configuration = await load_configuration(
-        session, room_id, timezone=reader.timezone, rules=rules
-    )
-    expected = configuration.fingerprint()
+    async with sessions.session() as read:
+        await _require_room(read, room_id)
+        rows = await ac_startup_batch_crud.list_by_room(
+            read, room_id, limit=BATCH_RETENTION
+        )
+        current = await ac_startup_batch_crud.find_current(read, room_id)
+        configuration = await load_configuration(
+            read, room_id, timezone=reader.timezone, rules=rules
+        )
+        expected = configuration.fingerprint()
+        items = [await _to_batch(read, row) for row in rows]
+        active = await _to_batch(read, current) if current is not None else None
+        coverage = await _coverage(read, current)
+        is_stale = (
+            current is not None and current.params_fingerprint != expected
+        )
     return StartupBatchesOut(
-        items=[await _to_batch(session, row) for row in rows],
-        current=(
-            await _to_batch(session, current) if current is not None else None
-        ),
-        coverage=await _coverage(session, current),
+        items=items,
+        current=active,
+        coverage=coverage,
         expected_fingerprint=expected,
-        # ⚠ 没有当前批次时不算「过期」：那是「还没算过」，要人做的事不一样
-        is_stale=current is not None and current.params_fingerprint != expected,
-        source_range=await _source_range(session, reader, room_id),
+        is_stale=is_stale,
+        source_range=await _source_range(reader, room_id, configuration.units),
     )
 
 
 async def _source_range(
-    session: AsyncSession, reader: AcSourceReader, room_id: uuid.UUID
+    reader: AcSourceReader, room_id: uuid.UUID, units: tuple[BoundUnit, ...]
 ) -> SourceRangeOut | None:
     """外库里实际有数据的那一段；没绑或外库不可达都给 None。
 
@@ -257,9 +262,8 @@ async def _source_range(
     字段依赖厂商库（CONTEXT §5）。取不到就说不知道，不返回陈旧值。
     ⚠ 限时只罩外库那一段：罩住会话上的查询的话，超时取消会把这个请求的连接
     留在半截状态。
-    Args: session, reader, room_id。
+    Args: reader, room_id, units。
     """
-    units = await load_bound_units(session, room_id)
     try:
         async with asyncio.timeout(SOURCE_RANGE_BUDGET_S):
             extent = await merge_extents(reader, units)

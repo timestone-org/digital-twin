@@ -10,6 +10,7 @@ from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import commit_before_receipt
+from lib.errors import Conflict
 from lib.logging import current_traceparent, get_logger
 from lib.stream import StreamGroup, StreamLike
 from lib.utils.ids import uuid7
@@ -39,12 +40,13 @@ from platform_server.apps.hvac.schemas import (
 )
 from platform_server.apps.hvac.services import ac_dispatch
 from platform_server.apps.hvac.services.ac_room_configuration import (
+    load_bound_units,
     load_configuration,
     restore_configuration,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_extract import (
-    resolve_source_extent,
+    merge_extents,
 )
 from platform_server.apps.hvac.services.ac_startup_queue import (
     ShardMessage,
@@ -107,10 +109,11 @@ class ResolvedWindow:
 
     window: TimeWindow
     is_clamped: bool
+    sources: frozenset[str]
 
 
 async def resolve_window(
-    session: AsyncSession,
+    sessions: Sessions,
     reader: AcSourceReader,
     *,
     room_id: uuid.UUID,
@@ -122,10 +125,12 @@ async def resolve_window(
     年只是当下的事实，现场会继续产出数据，也可能补录更早的。
     Args: session, reader, room_id, asked。
     """
-    await _require_room(session, room_id)
+    async with sessions.session() as read:
+        await _require_room(read, room_id)
+        units = await load_bound_units(read, room_id)
     if asked.window_start is not None and asked.window_end is not None:
         _require_ordered(asked.window_start, asked.window_end)
-    extent = await resolve_source_extent(session, reader, room_id=room_id)
+    extent = await merge_extents(reader, units)
     if extent is None:
         raise StartupSourceUnbound(
             "这个房间还没有可用的原始数据：先给空调绑定数据源，再重算"
@@ -140,6 +145,7 @@ async def resolve_window(
     return ResolvedWindow(
         window=TimeWindow(start=start, end=end),
         is_clamped=_is_clamped(asked, start, end),
+        sources=frozenset(unit.source_object for unit in units),
     )
 
 
@@ -170,7 +176,7 @@ async def request_rebuild(
     session: AsyncSession,
     *,
     room_id: uuid.UUID,
-    window: TimeWindow,
+    window: TimeWindow | ResolvedWindow,
     rules: ExtractionRules,
     timezone: str,
 ) -> RebuildPlan:
@@ -184,15 +190,23 @@ async def request_rebuild(
     # ⚠ 先锁房间再查「有没有在跑的」：不锁的话连点两下会双双通过检查
     await room_crud.lock_configuration(session, frozenset({room_id}))
     await _require_no_running_batch(session, room_id)
+    configuration = await load_configuration(
+        session, room_id, timezone=timezone, rules=rules
+    )
+    if isinstance(window, ResolvedWindow):
+        if window.sources != frozenset(
+            unit.source_object for unit in configuration.units
+        ):
+            raise Conflict(
+                "读取数据范围期间房间的数据源绑定已变更，请重新选择范围"
+            )
+        window = window.window
     months = plan_months(window.start, window.end)
     if not months:
         # ⚠ 空区间会切出零片，而零片的批次在收尾时「全都跑完了」当场成立：
         # 它会带着 0 条事件被切成当前批次，把这个房间的数据从页面上抹掉
         raise TimeRangeInvalid("抽取区间为空，无法切出任何分片")
     batch = _new_batch(room_id, window=window, rules=rules, shards=len(months))
-    configuration = await load_configuration(
-        session, room_id, timezone=timezone, rules=rules
-    )
     batch.configuration_snapshot = configuration.snapshot()
     batch.params_fingerprint = configuration.fingerprint()
     session.add(batch)
