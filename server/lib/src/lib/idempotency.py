@@ -37,11 +37,34 @@ class IdempotencyStore:
 
     `namespace` 把键分到各自的命名空间里——共用一个缓存实例的两个服务，
     同一个端点名撞上同一个幂等键时会互相返回对方的结果。
+    `claim_ttl_s` 是请求未结束时的占位期限。外部写值还需通过
+    `should_reserve_full_window` 只放行已确认未执行的失败。
     """
 
     cache: CacheLike
     namespace: str
     should_reserve_full_window: bool = False
+    claim_ttl_s: int = CLAIM_TTL_S
+
+    @classmethod
+    def for_database_writes(
+        cls, cache: CacheLike, namespace: str
+    ) -> "IdempotencyStore":
+        """事务写入使用完整查重窗口。Args: cache, namespace。"""
+        return cls(cache=cache, namespace=namespace, claim_ttl_s=RESULT_TTL_S)
+
+    def __post_init__(self) -> None:
+        if self.claim_ttl_s < 1:
+            raise ValueError("幂等占位期限必须是正数")
+
+    @property
+    def _claim_lifetime(self) -> int:
+        """请求没有返回时保留占位的时长。"""
+        return (
+            RESULT_TTL_S
+            if self.should_reserve_full_window
+            else self.claim_ttl_s
+        )
 
     async def lookup_result[ResultT: BaseModel](
         self,
@@ -86,7 +109,7 @@ class IdempotencyStore:
         try:
             result = await action()
         except asyncio.CancelledError:
-            if self.should_reserve_full_window:
+            if self._claim_lifetime >= RESULT_TTL_S:
                 await self._retain_unconfirmed(claim_key, owner, endpoint)
             raise
         except Exception as error:
@@ -154,12 +177,12 @@ class IdempotencyStore:
         """占位，返回缓存键和本次持有者。Args: endpoint, key, caller。"""
         claim_key = self._claim_key(endpoint, key, caller)
         owner = str(uuid7())
-        ttl_s = RESULT_TTL_S if self.should_reserve_full_window else CLAIM_TTL_S
+        ttl_s = self._claim_lifetime
         if await self.cache.set_if_absent(claim_key, owner, ttl_s=ttl_s):
             return claim_key, owner
         if await self.cache.get(claim_key) == _UNCONFIRMED_MARKER:
             raise Conflict("同一幂等键的上次操作结果未确认，请先核对操作结果")
-        if self.should_reserve_full_window:
+        if self._claim_lifetime >= RESULT_TTL_S:
             raise Conflict("同一幂等键的操作仍在处理或结果未确认，请先核对")
         raise Conflict("相同幂等键的请求正在处理中，请稍后重试")
 

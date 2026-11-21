@@ -344,3 +344,36 @@ async def test_full_window_keeps_an_unexpected_failure() -> None:
             action=action,
         )
     assert list(cache.ttl_s.values()) == [RESULT_TTL_S]
+
+
+async def test_long_reservation_releases_confirmed_failures() -> None:
+    cache = InMemoryCache()
+    store = IdempotencyStore.for_database_writes(cache, NAMESPACE)
+    attempts = []
+
+    async def write() -> Result:
+        attempts.append(1)
+        assert list(cache.ttl_s.values()) == [RESULT_TTL_S]
+        if len(attempts) == 1:
+            raise ValueError("明确未完成")
+        return Result(value=1)
+
+    with pytest.raises(ValueError, match="明确未完成"):
+        await store.run_once(
+            endpoint="create",
+            key="k",
+            caller=CALLER,
+            model=Result,
+            action=write,
+        )
+    result = await store.run_once(
+        endpoint="create", key="k", caller=CALLER, model=Result, action=write
+    )
+    assert result.value == 1
+
+
+def test_nonpositive_claim_lifetime_is_rejected() -> None:
+    with pytest.raises(ValueError, match="正数"):
+        IdempotencyStore(
+            cache=InMemoryCache(), namespace=NAMESPACE, claim_ttl_s=0
+        )
