@@ -11,7 +11,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from ai_assistant.mcp_settings import parse_write_policies
-from lib.config import AppSettings, PostgresSettings, RedisSettings
+from lib.config import HttpAppSettings, PostgresSettings, RedisSettings
 from llmcore import ChatEndpoint, EmbeddingEndpoint
 
 SERVICE_NAME = "ai-assistant"
@@ -142,7 +142,7 @@ class MigrationSettings(PostgresSettings):
     postgres_schema: str = DB_SCHEMA
 
 
-class Settings(AppSettings, PostgresSettings, RedisSettings):
+class Settings(HttpAppSettings, PostgresSettings, RedisSettings):
     """进程启动时构造一次并冻结。"""
 
     skills_directory: Path | None = None
