@@ -25,6 +25,7 @@ import type {
 import { ASSISTANT_ASK_TOOL } from '@dt/contracts'
 
 import { createFrameReader, type FrameReader } from './sseFrames'
+import { clientFailureGuard } from './clientFailureGuard'
 import {
   clientStepTitle,
   inputPreview,
@@ -148,19 +149,26 @@ export async function runLoop<Body extends LoopBody>(
   if (isCancelled(input.signal)) return
   // ⚠ 图只随第一帧走：后面每一帧都是工具回填，而回填不许夹带图
   let body = firstBody(input)
+  const guarded = clientFailureGuard(
+    input.dispatch,
+    input.saveReceipts !== undefined,
+  )
   for (let round = 0; round < input.maxRounds; round += 1) {
     if (isCancelled(input.signal)) return
     const outcome = await pumpUnlessCancelled(input, body, sink)
     if (outcome.kind === 'error' || isCancelled(input.signal)) return
     if (outcome.kind === 'pending') {
-      const batch = await runAll(
-        outcome.calls,
-        input.dispatch,
-        sink,
-        input.signal,
-      )
+      const batch = await runAll(outcome.calls, guarded, sink, input.signal)
       if (!(await saveActualReceipts(input, batch.results, sink))) return
-      if (shouldStopBatch(batch.hasUnknown, input.signal)) return
+      if (
+        shouldStopBatch(
+          batch.hasUnknown,
+          guarded.hasRepeated(),
+          sink,
+          input.signal,
+        )
+      )
+        return
       body = { ...input.envelope(), tool_results: batch.results }
       continue
     }
@@ -188,8 +196,15 @@ async function saveActualReceipts<Body extends LoopBody>(
   }
 }
 
-function shouldStopBatch(hasUnknown: boolean, signal?: AbortSignal): boolean {
-  return hasUnknown || isCancelled(signal)
+function shouldStopBatch(
+  hasUnknown: boolean,
+  repeated: boolean,
+  sink: LoopSink,
+  signal?: AbortSignal,
+): boolean {
+  if (repeated)
+    sink.onError('相同参数的工具调用已失败，已停止重复执行。请核对失败原因。')
+  return repeated || hasUnknown || isCancelled(signal)
 }
 
 function isCancelled(signal?: AbortSignal): boolean {
@@ -318,7 +333,7 @@ function handle<Body extends LoopBody>(
  */
 async function runAll(
   calls: readonly AssistantToolCall[],
-  dispatch: (call: AssistantToolCall) => Promise<unknown>,
+  guard: ReturnType<typeof clientFailureGuard>,
   sink: LoopSink,
   signal?: AbortSignal,
 ): Promise<{ results: ToolResult[]; hasUnknown: boolean }> {
@@ -328,14 +343,14 @@ async function runAll(
   const isMixedBatch = calls.some(isAsk) && calls.length > 1
   for (const call of calls) {
     // ⚠ 取消无法撤回已执行工具，但必须拦住后续工具并保留实际回执。
-    if (isCancelled(signal)) break
+    if (guard.stopsBefore(call, signal)) break
     if (isMixedBatch && !isAsk(call)) {
       results.push({ call_id: call.call_id, error: ASK_MUST_BE_ALONE })
       steps.push(stepOf(call, undefined, ASK_MUST_BE_ALONE))
       continue
     }
     try {
-      const receipt = await dispatch(call)
+      const receipt = await guard.dispatch(call)
       const isAborted = receipt instanceof CancelledToolReceipt
       const output = actualOutput(receipt)
       results.push({ call_id: call.call_id, output })
