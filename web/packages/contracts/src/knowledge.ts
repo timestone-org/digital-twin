@@ -85,6 +85,7 @@ export interface KnowledgeRerankCapability {
 
 /** 这套部署的知识库此刻能干什么。 */
 export interface KnowledgeCapability {
+  supports_base_metadata?: boolean
   /**
    * 嵌入档接上了吗。
    * ⚠ 为假时检索**如实回答「这个库还没建索引」**，不是返回空表——

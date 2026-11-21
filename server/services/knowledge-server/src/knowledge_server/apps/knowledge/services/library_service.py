@@ -20,6 +20,7 @@ from knowledge_server.apps.knowledge.models import (
 )
 from knowledge_server.apps.knowledge.schemas import (
     KnowledgeBaseIn,
+    KnowledgeBaseMetadataIn,
     KnowledgeBaseOut,
     SourceIn,
     SourceOut,
@@ -253,6 +254,31 @@ async def read_base(session: AsyncSession, base_id: uuid.UUID) -> KnowledgeBase:
     if row is None:
         raise KnowledgeBaseNotFound("知识库不存在")
     return row
+
+
+async def base_details(
+    session: AsyncSession, row: KnowledgeBase, embedder: Embedder
+) -> KnowledgeBaseOut:
+    """显示当前库的文档数和索引状态。Args: session, row, embedder。"""
+    page = await base_page(
+        session, [row], PageParams(page=1, size=1), 1, embedder
+    )
+    return page.items[0]
+
+
+async def update_metadata(
+    session: AsyncSession,
+    base_id: uuid.UUID,
+    body: KnowledgeBaseMetadataIn,
+    embedder: Embedder,
+) -> KnowledgeBaseOut:
+    """更新知识库管理元数据。Args: session, base_id, body, embedder。"""
+    row = await crud.knowledge_base.update_metadata(
+        session, base_id, body.name, body.description
+    )
+    if row is None:
+        raise KnowledgeBaseNotFound("知识库不存在")
+    return await base_details(session, row, embedder)
 
 
 async def add_source(

@@ -15,6 +15,7 @@ from knowledge_server.apps.knowledge.schemas.document import (
 )
 from knowledge_server.apps.knowledge.schemas.library import (
     KnowledgeBaseIn,
+    KnowledgeBaseMetadataIn,
     KnowledgeBaseOut,
     SourceIn,
     SourceOut,
@@ -37,6 +38,7 @@ __all__ = [
     "HitOut",
     "IndexCapabilityOut",
     "KnowledgeBaseIn",
+    "KnowledgeBaseMetadataIn",
     "KnowledgeBaseOut",
     "LocatorOut",
     "ParsingCapabilityOut",

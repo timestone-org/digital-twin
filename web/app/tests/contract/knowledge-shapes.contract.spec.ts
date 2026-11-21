@@ -69,6 +69,7 @@ type Keys<T> = Record<keyof T, true>
 
 const SHAPES: Record<string, Record<string, true>> = {
   CapabilityOut: {
+    supports_base_metadata: true,
     is_embedding_enabled: true,
     is_model_enabled: true,
     is_asr_enabled: true,

@@ -51,6 +51,9 @@ class RerankCapabilityOut(BaseModel):
 class CapabilityOut(BaseModel):
     """知识库能力。"""
 
+    has_base_metadata_editor: bool = Field(
+        default=True, alias="supports_base_metadata"
+    )
     # 嵌入档接上了吗。⚠ 没接时**摄取不了任何文档**：向量是检索的必经一路
     is_embedding_enabled: bool
     # 对话档接上了吗。它只决定 `agentic` 策略可不可用

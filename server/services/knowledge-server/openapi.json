@@ -936,6 +936,11 @@
             },
             "title": "Strategies",
             "type": "array"
+          },
+          "supports_base_metadata": {
+            "default": true,
+            "title": "Supports Base Metadata",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1837,6 +1842,26 @@
           "name"
         ],
         "title": "KnowledgeBaseIn",
+        "type": "object"
+      },
+      "KnowledgeBaseMetadataIn": {
+        "additionalProperties": false,
+        "description": "管理员提交的库名或描述。",
+        "minProperties": 1,
+        "properties": {
+          "description": {
+            "maxLength": 1000,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "KnowledgeBaseMetadataIn",
         "type": "object"
       },
       "KnowledgeBaseOut": {
@@ -3644,6 +3669,58 @@
           }
         },
         "summary": "Get One",
+        "tags": [
+          "library"
+        ]
+      },
+      "patch": {
+        "description": "更新提交的管理信息，空描述用于清除原描述。\n\nArgs: session, container, _actor, base_id, body。",
+        "operationId": "update_metadata_api_v1_knowledge_knowledge_bases__base_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBaseMetadataIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_KnowledgeBaseOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "修改知识库名称或描述",
         "tags": [
           "library"
         ]

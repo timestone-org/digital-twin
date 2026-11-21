@@ -82,6 +82,27 @@ async def get_base(
     return found.scalar_one_or_none()
 
 
+async def update_metadata(
+    session: AsyncSession,
+    base_id: uuid.UUID,
+    name: str | None,
+    description: str | None,
+) -> KnowledgeBase | None:
+    """只写提交的库名和描述。Args: session, base_id, name, description。"""
+    changes: dict[str, str] = {}
+    if name is not None:
+        changes["name"] = name
+    if description is not None:
+        changes["description"] = description
+    return await session.scalar(
+        update(KnowledgeBase)
+        .where(KnowledgeBase.id == base_id)
+        .values(**changes)
+        .returning(KnowledgeBase)
+        .execution_options(populate_existing=True)
+    )
+
+
 async def list_bases(
     session: AsyncSession,
     *,

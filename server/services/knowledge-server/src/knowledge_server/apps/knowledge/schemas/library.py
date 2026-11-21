@@ -2,9 +2,17 @@
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Self
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+from pydantic.json_schema import SkipJsonSchema
 
 from knowledge_server.apps.knowledge.models.knowledge_base import (
     DESCRIPTION_MAX_LENGTH,
@@ -44,6 +52,37 @@ class KnowledgeBaseIn(BaseModel):
         if given not in STRATEGIES:
             raise ValueError(f"没有叫 {given} 的检索策略")
         return given
+
+
+class KnowledgeBaseMetadataIn(BaseModel):
+    """管理员提交的库名或描述。"""
+
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"minProperties": 1}
+    )
+    name: (
+        Annotated[
+            str,
+            StringConstraints(
+                strip_whitespace=True, min_length=1, max_length=NAME_MAX_LENGTH
+            ),
+        ]
+        | SkipJsonSchema[None]
+    ) = Field(default_factory=lambda: None)
+    description: (
+        Annotated[str, StringConstraints(max_length=DESCRIPTION_MAX_LENGTH)]
+        | SkipJsonSchema[None]
+    ) = Field(default_factory=lambda: None)
+
+    @model_validator(mode="after")
+    def _submitted_metadata(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("请提供库名或描述")
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("库名不能为空")
+        if "description" in self.model_fields_set and self.description is None:
+            raise ValueError("清空描述请提交空字符串")
+        return self
 
 
 class KnowledgeBaseOut(BaseModel):

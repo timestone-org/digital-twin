@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.schemas import (
     KnowledgeBaseIn,
+    KnowledgeBaseMetadataIn,
     KnowledgeBaseOut,
     SourceIn,
     SourceOut,
@@ -108,10 +109,32 @@ async def get_one(
     Args: session, _viewer, base_id。
     """
     row = await library_service.read_base(session, base_id)
-    page = await library_service.base_page(
-        session, [row], PageParams(page=1, size=1), 1, container.embedder
+    return ok(
+        await library_service.base_details(session, row, container.embedder)
     )
-    return ok(page.items[0])
+
+
+@router.patch(
+    "/{base_id}",
+    response_model=ApiResponse[KnowledgeBaseOut],
+    summary="修改知识库名称或描述",
+)
+async def update_metadata(
+    session: SessionDep,
+    container: ContainerDep,
+    _actor: ManageDep,
+    base_id: uuid.UUID,
+    body: KnowledgeBaseMetadataIn,
+) -> ApiResponse[KnowledgeBaseOut]:
+    """更新提交的管理信息，空描述用于清除原描述。
+
+    Args: session, container, _actor, base_id, body。
+    """
+    return ok(
+        await library_service.update_metadata(
+            session, base_id, body, container.embedder
+        )
+    )
 
 
 @router.delete("/{base_id}", status_code=status.HTTP_204_NO_CONTENT)
