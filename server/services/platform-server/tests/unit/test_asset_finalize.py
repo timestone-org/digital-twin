@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 import pytest
+from integration.asset_fixtures import glb_bytes
 
 from lib.testing import FakeObjectStore
 from platform_server.apps.assets import crud, keys
@@ -13,13 +14,20 @@ from platform_server.apps.assets.errors import AssetUploadMissing
 from platform_server.apps.assets.models import Asset, AssetModelVariant
 from platform_server.apps.assets.schemas import AssetOut
 from platform_server.apps.assets.services import asset_service
+from platform_server.apps.assets.services.initial_publication import (
+    claim_upload,
+    publish_original,
+)
 
 ASSET_ID = uuid.UUID("0192f0aa-0000-7000-8000-000000000004")
 REQUEST = asset_service.FinalizeRequest(name="pump", actor="tester")
-GLB = b"glTF-ish bytes"
+GLB = glb_bytes("asset finalization")
 
 
+@dataclass
 class FakeSession:
+    info: dict[str, object] = field(default_factory=dict[str, object])
+
     async def flush(self) -> None:
         return None
 
@@ -132,6 +140,50 @@ async def test_finalizing_with_no_bytes_anywhere_is_refused(
         await finalize(FakeObjectStore())
 
 
+async def test_a_missing_claimed_copy_does_not_select_a_new_upload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    FakeTables().install(monkeypatch)
+    store = FakeObjectStore()
+    staging = keys.staging_key("model", ASSET_ID)
+    await store.put_bytes(staging, GLB, content_type="model/gltf-binary")
+    source = await store.stat(staging)
+    assert source is not None
+    claim = await claim_upload(store, ASSET_ID, "model", source)
+    await store.delete(claim.candidate.key)
+    newer = glb_bytes("another legitimate model")
+    await store.put_bytes(staging, newer, content_type="model/gltf-binary")
+
+    with pytest.raises(AssetUploadMissing):
+        await finalize(store)
+    assert await store.stat(keys.model_key(ASSET_ID)) is None
+    assert await store.get_bytes(staging) == newer
+
+
+async def test_two_valid_candidates_reuse_the_same_publication() -> None:
+    store = FakeObjectStore()
+    staging = keys.staging_key("model", ASSET_ID)
+    await store.put_bytes(staging, GLB, content_type="model/gltf-binary")
+    first = await store.stat(staging)
+    assert first is not None
+    winner = await claim_upload(store, ASSET_ID, "model", first)
+
+    newer = glb_bytes("normal uploaded replacement")
+    await store.put_bytes(staging, newer, content_type="model/gltf-binary")
+    latest = await store.stat(staging)
+    assert latest is not None
+    reused = await claim_upload(store, ASSET_ID, "model", latest)
+
+    assert reused == winner
+    assert await store.list_prefix(keys.confirmation_prefix(ASSET_ID)) == [
+        winner.candidate.key
+    ]
+    public = await publish_original(store, ASSET_ID, reused)
+    assert await store.get_bytes(public.key) == GLB
+    assert public.etag == first.etag
+    assert await store.get_bytes(staging) == newer
+
+
 @dataclass
 class LedgerSession(FakeSession):
     """记下 rollback 在什么时候发生。"""
@@ -153,9 +205,23 @@ class LedgerStore(FakeObjectStore):
         self.ledger.append("io")
         return await super().stat(key)
 
-    async def copy(self, source_key: str, target_key: str) -> None:
+    async def read_prefix(
+        self, key: str, *, max_bytes: int, expected_etag: str
+    ) -> bytes:
         self.ledger.append("io")
-        await super().copy(source_key, target_key)
+        return await super().read_prefix(
+            key, max_bytes=max_bytes, expected_etag=expected_etag
+        )
+
+    async def copy(
+        self,
+        source_key: str,
+        target_key: str,
+        *,
+        expected_etag: str | None = None,
+    ) -> None:
+        self.ledger.append("io")
+        await super().copy(source_key, target_key, expected_etag=expected_etag)
 
     async def delete_prefix(self, prefix: str) -> int:
         self.ledger.append("io")

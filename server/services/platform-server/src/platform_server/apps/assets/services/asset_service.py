@@ -10,6 +10,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.db import after_commit
 from lib.objectstore import (
     ObjectStat,
     ObjectStore,
@@ -42,6 +43,16 @@ from platform_server.apps.assets.schemas import (
     AssetOut,
     AssetVariantOut,
     UploadTicketOut,
+)
+from platform_server.apps.assets.services.initial_publication import (
+    PublicationClaim,
+    claim_upload,
+    discard_candidate,
+    publish_original,
+    read_claim,
+)
+from platform_server.apps.assets.services.upload_content import (
+    check_upload_content,
 )
 
 # 凭证有效期：给大文件的表单填写与一次重试留足余量，又不至于长期可重放
@@ -197,12 +208,13 @@ async def finalize_upload(
     # ⚠ 搬字节之前放掉只读事务：GB 级模型的服务端拷贝要几十秒，事务不放就是
     # 一条连接 idle in transaction 那么久（database-standard：禁事务内外部 IO）
     await session.rollback()
-    kind, stat = await _arrived(store, asset_id)
+    claim = await _find_or_claim(store, asset_id)
+    stat = await publish_original(store, asset_id, claim)
     await crud.insert_if_absent(
         session,
         crud.AssetWrite(
             asset_id=asset_id,
-            kind=kind,
+            kind=claim.kind,
             name=finalize.name,
             content_type=stat.content_type,
             size_bytes=stat.size_bytes,
@@ -210,33 +222,33 @@ async def finalize_upload(
             created_by=finalize.actor,
         ),
     )
-    return await _settled(session, asset_id, kind)
+    saved = await _settled(session, asset_id, claim.kind)
+    after_commit(session, lambda: discard_candidate(store, claim.candidate.key))
+    return saved
 
 
-async def _arrived(
+async def _find_or_claim(
     store: ObjectStore, asset_id: uuid.UUID
-) -> tuple[str, ObjectStat]:
-    """让这个 id 的字节进到正式前缀，给回它的类型与元信息。
+) -> PublicationClaim:
+    """为首次确认选定唯一内容。
 
     ⚠ 暂存区没有时还要探一次正式前缀：上一次可能搬完了却没提交成，暂存件已删、
     库里没有行，不认它的话重试只会得到「没有收到文件」，字节成了匿名可读的孤儿。
     最坏情况两边各探三类，共六个 HEAD。
     Args: store, asset_id。
     """
-    staged = await _find_staged(store, asset_id)
-    if staged is None:
-        promoted = await _find_promoted(store, asset_id)
-        if promoted is None:
-            raise AssetUploadMissing("没有收到上传的文件，请重新上传")
-        return promoted
-    kind, key, stat = staged
-    spec = kind_spec_of(kind)
-    if spec is None:  # pragma: no cover - 键由本服务铸造，类型必在目录里
-        raise AssetKindUnknown(f"没有「{kind}」这类素材")
-    if stat.size_bytes > spec.max_bytes:
-        raise _too_large(spec, stat.size_bytes)
-    await _promote(store, key, keys.object_key(kind, asset_id))
-    return kind, stat
+    existing = await read_claim(store, asset_id)
+    if existing is not None:
+        return existing
+    found = await _find_staged(store, asset_id) or await _find_promoted(
+        store, asset_id
+    )
+    if found is None:
+        raise AssetUploadMissing("没有收到上传的文件，请重新上传")
+    kind, stat = found
+    checked_upload_spec(kind, stat.content_type, stat.size_bytes)
+    await check_upload_content(store, stat)
+    return await claim_upload(store, asset_id, kind, stat)
 
 
 async def _settled(
@@ -272,7 +284,7 @@ def needs_compression(asset: AssetOut) -> bool:
 
 async def _find_staged(
     store: ObjectStore, asset_id: uuid.UUID
-) -> tuple[str, str, ObjectStat] | None:
+) -> tuple[str, ObjectStat] | None:
     """在暂存区找这个 id 的字节，顺带把类型读回来。
 
     逐类探而不是让调用方报：素材类型统共三种，暂存区最多三个 HEAD，
@@ -282,7 +294,7 @@ async def _find_staged(
         key = keys.staging_key(kind, asset_id)
         stat = await _stat(store, key)
         if stat is not None:
-            return kind, key, stat
+            return kind, stat
     return None
 
 
@@ -300,20 +312,6 @@ async def _find_promoted(
 async def _stat(store: ObjectStore, key: str) -> ObjectStat | None:
     try:
         return await store.stat(key)
-    except ObjectStoreError as error:
-        raise AssetStoreUnavailable("素材服务暂时不可用") from error
-
-
-async def _promote(store: ObjectStore, staged: str, final: str) -> None:
-    """把字节从暂存搬到正式前缀，再清掉暂存件。
-
-    ⚠ 先复制后删除，且删除失败不影响结果：反过来做的话，复制成功而删除前
-    进程被杀掉会留下一个匿名可读的孤儿；而这个顺序留下的孤儿在 `staging/`，
-    既读不到也会被生命周期规则回收。
-    """
-    try:
-        await store.copy(staged, final)
-        await store.delete(staged)
     except ObjectStoreError as error:
         raise AssetStoreUnavailable("素材服务暂时不可用") from error
 

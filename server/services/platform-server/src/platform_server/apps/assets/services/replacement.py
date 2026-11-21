@@ -7,6 +7,8 @@ from typing import Protocol
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.objectstore import (
+    ObjectChanged,
+    ObjectNotFound,
     ObjectStat,
     ObjectStore,
     ObjectStoreError,
@@ -39,6 +41,9 @@ from platform_server.apps.assets.services.asset_service import (
     checked_upload_spec,
     read_asset,
     request_recompression,
+)
+from platform_server.apps.assets.services.upload_content import (
+    check_upload_content,
 )
 
 
@@ -105,7 +110,10 @@ async def _prepare(
         checked_upload_spec("model", stat.content_type, stat.size_bytes)
         if stat.size_bytes < MIN_UPLOAD_BYTES:
             raise AssetUploadMissing("替换文件为空，请重新上传")
-        await store.copy(key, keys.revision_key(asset_id, revision))
+        await check_upload_content(store, stat)
+        await store.copy(
+            key, keys.revision_key(asset_id, revision), expected_etag=stat.etag
+        )
         copied = await store.stat(keys.revision_key(asset_id, revision))
         if copied is None or copied != ObjectStat(
             key=copied.key,
@@ -115,6 +123,8 @@ async def _prepare(
         ):
             raise AssetUploadMissing("上传内容发生变化，请重新上传")
         return ContentWrite(upload_id=upload_id, revision=revision, stat=copied)
+    except (ObjectChanged, ObjectNotFound) as error:
+        raise AssetUploadMissing("上传内容发生变化，请重新上传") from error
     except ObjectStoreError as error:
         raise AssetStoreUnavailable("素材服务暂时不可用") from error
 
