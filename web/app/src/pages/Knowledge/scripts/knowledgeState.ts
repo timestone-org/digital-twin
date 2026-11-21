@@ -171,7 +171,7 @@ export async function refreshDocuments(
   })
 }
 
-/** 重取文档与服务端库统计，保留选库及新建、删除后的本地清单。 */
+/** 重取文档与库详情，保留选库及新建、删除后的本地清单。 */
 export async function refreshLibrary(
   state: KnowledgeState,
   changedIds: readonly string[] = [],
@@ -179,10 +179,13 @@ export async function refreshLibrary(
   if (state.isDisposed.value) return
   if (state.isLoading.value && changedIds.length === 0) return
   state.error.value = ''
-  await Promise.all([refreshDocuments(state), refreshCounts(state, changedIds)])
+  await Promise.all([
+    refreshDocuments(state),
+    refreshBaseDetails(state, changedIds),
+  ])
 }
 
-async function refreshCounts(
+async function refreshBaseDetails(
   state: KnowledgeState,
   changedIds: readonly string[],
 ): Promise<void> {
@@ -190,13 +193,12 @@ async function refreshCounts(
     (id) => id !== '',
   )
   if (ids.length === 0) return
-  await state.countsRace.run((signal) => readCounts(ids, signal), {
+  await state.countsRace.run((signal) => readBaseDetails(ids, signal), {
     ok: (rows) => {
-      const counts = new Map(rows.map((one) => [one.id, one.documentCount]))
-      state.bases.value = state.bases.value.map((base) => {
-        const count = counts.get(base.id)
-        return count === undefined ? base : { ...base, documentCount: count }
-      })
+      const details = new Map(rows.map((base) => [base.id, base]))
+      state.bases.value = state.bases.value.map(
+        (base) => details.get(base.id) ?? base,
+      )
     },
     fail: (cause) => {
       state.error.value = `文档数未刷新：${messageOf(cause)}`
@@ -205,7 +207,7 @@ async function refreshCounts(
   })
 }
 
-async function readCounts(
+async function readBaseDetails(
   ids: readonly string[],
   signal: AbortSignal,
 ): Promise<KnowledgeBase[]> {

@@ -4,10 +4,15 @@
  * ⚠ 逐字段窄化，不写 `as`：后端与前端各改各的时，断言会让错形状一路流进界面，
  * 最后崩在某个深层组件里，而不是在这里说「形状不对」。
  */
-import type { KnowledgeDocumentStatus, KnowledgeStrategy } from '@dt/contracts'
+import type {
+  KnowledgeDocumentStatus,
+  KnowledgeStrategy,
+  KnowledgeVectorStatus,
+} from '@dt/contracts'
 import {
   KNOWLEDGE_DOCUMENT_STATUSES,
   KNOWLEDGE_STRATEGIES,
+  KNOWLEDGE_VECTOR_STATUSES,
 } from '@dt/contracts'
 
 import { TransportError } from './client'
@@ -25,6 +30,7 @@ export interface KnowledgeBase {
    */
   embeddingModel: string | null
   dimensions: number | null
+  vectorStatus?: KnowledgeVectorStatus | 'unknown'
   documentCount: number
   createdAt: string
 }
@@ -186,6 +192,14 @@ export function toBase(value: unknown): KnowledgeBase {
     strategy: strategyOf(row.retrieval_strategy),
     embeddingModel: nullableText(row.embedding_model),
     dimensions: nullableCount(row.dimensions),
+    ...(row.vector_status === undefined
+      ? {}
+      : {
+          vectorStatus:
+            KNOWLEDGE_VECTOR_STATUSES.find(
+              (one) => one === row.vector_status,
+            ) ?? 'unknown',
+        }),
     documentCount: count(row.document_count),
     createdAt: text(row.created_at),
   }

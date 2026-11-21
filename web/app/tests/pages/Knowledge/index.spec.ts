@@ -154,6 +154,32 @@ async function render(codes: string[] = ALL_CODES) {
   return wrapper
 }
 
+it('普通读者可见向量空间冲突和关键词回退，文档列表仍可读取', async () => {
+  const changed = { ...BASE, vectorStatus: 'space_mismatch' }
+  api.listBases.mockResolvedValue([changed])
+  api.readBase.mockResolvedValue(changed)
+  const wrapper = await render(['knowledge:use'])
+  expect(wrapper.text()).toContain('向量空间已变更')
+  expect(wrapper.text()).toContain('当前使用关键词检索')
+  expect(wrapper.text()).toContain(documentOf({}).title)
+})
+
+it('刷新状态后按已发布的索引更新模型和维数', async () => {
+  api.listBases.mockResolvedValue([{ ...BASE, vectorStatus: 'space_mismatch' }])
+  api.readBase.mockResolvedValue({
+    ...BASE,
+    embeddingModel: '新档案模型',
+    dimensions: 8,
+    vectorStatus: 'ready',
+  })
+  const wrapper = await render(['knowledge:use'])
+  await wrapper.get('button[aria-label="刷新状态"]').trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('新档案模型')
+  expect(wrapper.text()).toContain('向量索引可用')
+  expect(wrapper.text()).not.toContain('向量空间已变更')
+})
+
 function buttonOf(wrapper: VueWrapper, label: string) {
   return wrapper.findAll('button').find((one) => one.text() === label)
 }

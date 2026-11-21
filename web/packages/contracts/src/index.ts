@@ -117,6 +117,17 @@ export type {
   KnowledgeVectorLane,
 } from './knowledge'
 export {
+  KNOWLEDGE_VECTOR_STATUSES,
+  KNOWLEDGE_REEMBEDDING_STATUSES,
+} from './knowledgeEmbedding'
+export type {
+  KnowledgeVectorStatus,
+  KnowledgeReembeddingStatus,
+  KnowledgeReembeddingPreview,
+  KnowledgeReembeddingStart,
+  KnowledgeReembeddingJob,
+} from './knowledgeEmbedding'
+export {
   KNOWLEDGE_CHAT_CONFLICT_CODE,
   KNOWLEDGE_DOCUMENT_STATUSES,
   KNOWLEDGE_KEYWORD_LANES,

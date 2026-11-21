@@ -17,6 +17,22 @@ import {
 } from '@/api/knowledgeWire'
 
 describe('知识库的窄化', () => {
+  it('向量状态来自服务端，保留旧服务缺字段与未知状态的区别', () => {
+    const base = {
+      id: 'b1',
+      name: '规程',
+      retrieval_strategy: 'hybrid',
+      dimensions: 4,
+    }
+    expect(toBase(base).vectorStatus).toBeUndefined()
+    expect(
+      toBase({ ...base, vector_status: 'space_mismatch' }).vectorStatus,
+    ).toBe('space_mismatch')
+    expect(
+      toBase({ ...base, vector_status: 'future_state' }).vectorStatus,
+    ).toBe('unknown')
+  })
+
   it('库的空描述与未建索引分别落成空串与 null', () => {
     // ⚠ null 是「这个库还没建过索引」，空串看起来像「模型名忘了填」
     const made = toBase({
