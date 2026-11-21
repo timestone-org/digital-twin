@@ -120,3 +120,18 @@ def test_named_signature_binds_all_legitimate_account_claims() -> None:
     )
     assert codec.sign_named_context("unit-test", account, username) == before
     assert before != codec.sign_context("unit-test", account)
+
+
+def test_named_claim_verification_accepts_only_its_matching_serialization() -> (
+    None
+):
+    account = context()
+    first = codec.encode_identity("第一名")
+    second = codec.encode_identity("第二名")
+    proof = codec.sign_named_context("local-key", account, first)
+    assert codec.verify_named_context("local-key", account, first, proof)
+    assert not codec.verify_named_context("local-key", account, second, proof)
+    assert not codec.verify_named_context("", account, first, proof)
+    assert not codec.verify_named_context("local-key", account, "", proof)
+    assert not codec.verify_named_context("local-key", account, first, "")
+    assert not codec.verify_named_context("local-key", account, first, "合成")

@@ -11,6 +11,7 @@ from lib.auth import (
     encode_identity,
     encode_permissions,
     sign_context,
+    sign_named_context,
 )
 from lib.auth.edge_headers import (
     REASON_BAD_EXPIRY,
@@ -33,10 +34,11 @@ def build_headers(
     secret: str = SECRET,
     lifetime_s: int = 60,
     role: str = "管理员",
+    has_name_proof: bool = True,
 ) -> dict[str, str]:
     """造一组签名身份头。默认是一组完全合法的头。
 
-    Args: codes, secret, lifetime_s, role。
+    Args: codes, secret, lifetime_s, role, has_name_proof。
     """
     user_id = str(uuid.uuid4())
     encoded_role = encode_identity(role)
@@ -48,14 +50,18 @@ def build_headers(
         permissions_b64=permissions,
         expires_at=expires_at,
     )
-    return {
+    username = encode_identity("测试员")
+    headers = {
         "X-Auth-User-Id": user_id,
-        "X-Auth-Username": encode_identity("测试员"),
+        "X-Auth-Username": username,
         "X-Auth-Role": encoded_role,
         "X-Auth-Permissions": permissions,
         "X-Auth-Exp": str(expires_at),
         "X-Auth-Sig": sign_context(secret, context),
     }
+    if has_name_proof:
+        headers["X-Auth-Sig-V2"] = sign_named_context(secret, context, username)
+    return headers
 
 
 def caller_of(headers: dict[str, str]) -> object:
@@ -74,6 +80,22 @@ def test_valid_headers_yield_the_signed_identity() -> None:
     assert caller.role == "管理员"
     assert caller.username == "测试员"
     assert caller.permissions == frozenset(CODES)
+
+
+def test_legacy_identity_keeps_the_verified_account_id_as_its_display() -> None:
+    headers = build_headers(has_name_proof=False)
+    caller = caller_of(headers)
+    assert caller is not None
+    assert caller.username == headers["X-Auth-User-Id"]
+    assert str(caller.user_id) == headers["X-Auth-User-Id"]
+    assert caller.role == "管理员"
+    assert caller.permissions == frozenset(CODES)
+
+
+def test_an_incomplete_named_proof_is_rejected_by_the_decoder() -> None:
+    headers = build_headers()
+    headers["X-Auth-Sig-V2"] = ""
+    assert caller_of(headers) is None
 
 
 def test_headers_without_any_signature_are_untrusted() -> None:

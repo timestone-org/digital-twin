@@ -1,10 +1,4 @@
-"""边缘注入的签名身份头 → 调用者身份。
-
-⚠ 这几个头由边缘网关在调过认证服务之后注入，而客户端可以伪造同名头，因此
-**必须验签**：签名覆盖「主体 + 角色 + 权限集 + 过期时刻」的拼接，改任一项签名
-即失效。任何一步不过一律判不可信（fail-closed），不做部分信任——「解不出权限
-就当空集放行」正是这类实现最常见的破法。
-"""
+"""从边缘签名头核验权限与操作者。旧格式用已核验的 UUID 表示账号。"""
 
 import uuid
 from collections.abc import Mapping
@@ -17,6 +11,7 @@ from lib.auth.header_codec import (
     decode_identity,
     decode_permissions,
     verify_context,
+    verify_named_context,
 )
 
 HEADER_USER_ID = "X-Auth-User-Id"
@@ -81,10 +76,28 @@ def decode_caller(
         now=int(now.timestamp()),
     ):
         return IdentityOutcome(None, REASON_BAD_SIGNATURE)
+    return _verified_caller(headers, signed, signing_secret)
+
+
+def _verified_caller(
+    headers: Mapping[str, str], signed: SignedContext, secret: str
+) -> IdentityOutcome:
+    """从已验证的基础声明解出操作者。Args: headers, signed, secret。"""
     subject = _as_uuid(signed.user_id)
     if subject is None:
         return IdentityOutcome(None, REASON_BAD_SUBJECT)
-    return IdentityOutcome(_caller(headers, signed, subject), "")
+    username = _account_name(headers, signed, secret, subject)
+    if username is None:
+        return IdentityOutcome(None, REASON_BAD_SIGNATURE)
+    return IdentityOutcome(
+        CallerContext(
+            user_id=subject,
+            username=username,
+            role=decode_identity(signed.role),
+            permissions=decode_permissions(signed.permissions_b64),
+        ),
+        "",
+    )
 
 
 def _signed_context(
@@ -104,15 +117,23 @@ def _signed_context(
     )
 
 
-def _caller(
-    headers: Mapping[str, str], signed: SignedContext, subject: uuid.UUID
-) -> CallerContext:
-    return CallerContext(
-        user_id=subject,
-        username=decode_identity(headers.get(HEADER_USERNAME)),
-        role=decode_identity(signed.role),
-        permissions=decode_permissions(signed.permissions_b64),
-    )
+def _account_name(
+    headers: Mapping[str, str],
+    signed: SignedContext,
+    secret: str,
+    subject: uuid.UUID,
+) -> str | None:
+    """核验名字或使用已认证的账号 UUID。
+
+    Args: headers, signed, secret, subject。
+    """
+    signature = headers.get(HEADER_NAMED_SIGNATURE)
+    if signature is None:
+        return str(subject)
+    encoded = headers.get(HEADER_USERNAME, "")
+    if not verify_named_context(secret, signed, encoded, signature):
+        return None
+    return decode_identity(encoded) or None
 
 
 def _as_int(raw: str | None) -> int | None:

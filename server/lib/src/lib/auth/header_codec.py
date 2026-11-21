@@ -129,8 +129,24 @@ def verify_context(
 
     Args: secret, context, signature, now。
     """
-    if not secret or not signature:
+    if not secret or not signature.isascii():
         return False
     if context.expires_at <= now:
         return False
     return hmac.compare_digest(sign_context(secret, context), signature)
+
+
+def verify_named_context(
+    secret: str,
+    context: SignedContext,
+    encoded_username: str,
+    signature: str,
+) -> bool:
+    """校验带账号名的声明，调用方先检查主签名的有效期。
+
+    Args: secret, context, encoded_username, signature。
+    """
+    if not secret or not encoded_username or not signature.isascii():
+        return False
+    expected = sign_named_context(secret, context, encoded_username)
+    return hmac.compare_digest(expected, signature)
