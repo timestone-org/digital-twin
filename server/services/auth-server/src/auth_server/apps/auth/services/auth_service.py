@@ -1,12 +1,15 @@
 """会话与个人资料自服务：登录、刷新、登出、注册、改自己的资料与密码。"""
 
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_server.apps.auth.crud import role_crud, user_crud
+from auth_server.apps.auth.crud.user import LoginCredentials
 from auth_server.apps.auth.errors import (
     AccountDisabled,
     CurrentPasswordIncorrect,
@@ -45,6 +48,8 @@ from lib.utils.timeutils import Clock
 
 _logger = get_logger("auth.session")
 
+SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
 # 用户不存在时也走一次散列校验，让「账号存在与否」不能由响应耗时推断
 _TIMING_DECOY = (
     "$argon2id$v=19$m=65536,t=3,p=4$"
@@ -66,11 +71,11 @@ class AuthService:
     clock: Clock
 
     async def login(
-        self, session: AsyncSession, *, login: str, password: str
+        self, sessions: SessionFactory, *, login: str, password: str
     ) -> SessionOut:
         """账号口令登录。失败次数按账号限流。
 
-        Args: session, login（用户名或邮箱）, password。
+        Args: sessions, login（用户名或邮箱）, password。
         """
         login_key = login.strip().lower()
         try:
@@ -80,17 +85,27 @@ class AuthService:
             raise TooManyLoginAttempts(
                 error.message, context=error.context
             ) from error
-        user = await user_crud.get_by_login(session, login)
-        if user is None:
+        async with sessions() as session:
+            user = await user_crud.get_by_login(session, login)
+            credentials = LoginCredentials.from_user(user) if user else None
+        if credentials is None:
             await self.hasher.verify(password, _TIMING_DECOY)
             raise InvalidCredentials("用户名或密码错误")
-        if not await self.hasher.verify(password, user.hashed_password):
-            _logger.info("login_failed", "口令不符", user_id=str(user.id))
-            raise InvalidCredentials("用户名或密码错误")
-        if not user.is_active:
-            raise AccountDisabled("账号已停用，请联系管理员")
-        user = await self._on_login_success(session, user, password, login_key)
-        identity = await load_identity(session, user)
+        await self._verify_login_password(credentials, password)
+        upgraded = (
+            await self.hasher.hash(password)
+            if self.hasher.needs_rehash(credentials.hashed_password)
+            else None
+        )
+        identity = await self._confirm_login(sessions, credentials, upgraded)
+        if identity is None:
+            identity = await self._confirm_concurrent_rehash(
+                sessions, credentials, password
+            )
+        user = identity.user
+        for key in {login_key, user.username.lower(), user.email.lower()}:
+            await self.login_limiter.reset(key)
+        _logger.info("login_succeeded", "", user_id=str(user.id))
         return self._session_out(identity)
 
     async def refresh(
@@ -220,38 +235,54 @@ class AuthService:
             raise CurrentPasswordIncorrect("当前密码已变更，请重新登录")
         _logger.info("password_changed", "", user_id=str(user.id))
 
-    async def _on_login_success(
-        self, session: AsyncSession, user: User, password: str, login_key: str
-    ) -> User:
-        for key in {login_key, user.username.lower(), user.email.lower()}:
-            await self.login_limiter.reset(key)
-        generation = user.refresh_generation
-        upgraded = (
-            await self.hasher.hash(password)
-            if self.hasher.needs_rehash(user.hashed_password)
-            else None
-        )
-        confirmed = await user_crud.record_verified_login(
-            session, user, self.clock(), upgraded
-        )
-        if confirmed is None:
-            # 同一口令可能被另一登录按新参数重新散列，重新核对再签发。
-            current = await user_crud.get_with_role(
-                session, user.id, should_refresh=True
+    async def _verify_login_password(
+        self, credentials: LoginCredentials, password: str
+    ) -> None:
+        if not await self.hasher.verify(password, credentials.hashed_password):
+            _logger.info(
+                "login_failed", "口令不符", user_id=str(credentials.user_id)
             )
-            if current is None or current.refresh_generation != generation:
-                raise InvalidCredentials("用户名或密码错误")
-            if not current.is_active:
-                raise AccountDisabled("账号已停用，请联系管理员")
-            if not await self.hasher.verify(password, current.hashed_password):
-                raise InvalidCredentials("用户名或密码错误")
-            confirmed = await user_crud.record_verified_login(
-                session, current, self.clock(), None
+            raise InvalidCredentials("用户名或密码错误")
+        if not credentials.is_active:
+            raise AccountDisabled("账号已停用，请联系管理员")
+
+    async def _confirm_login(
+        self,
+        sessions: SessionFactory,
+        credentials: LoginCredentials,
+        upgraded_hash: str | None,
+    ) -> Identity | None:
+        async with sessions() as session:
+            user = await user_crud.record_verified_login(
+                session, credentials, self.clock(), upgraded_hash
             )
-            if confirmed is None:
-                raise InvalidCredentials("登录期间凭据已更新，请重新登录")
-        _logger.info("login_succeeded", "", user_id=str(confirmed.id))
-        return confirmed
+            if user is None:
+                return None
+            return await load_identity(session, user)
+
+    async def _confirm_concurrent_rehash(
+        self,
+        sessions: SessionFactory,
+        credentials: LoginCredentials,
+        password: str,
+    ) -> Identity:
+        async with sessions() as session:
+            user = await user_crud.get(session, credentials.user_id)
+            current = LoginCredentials.from_user(user) if user else None
+        if (
+            current is None
+            or current.refresh_generation != credentials.refresh_generation
+        ):
+            raise InvalidCredentials("用户名或密码错误")
+        # 同一口令的并发重散列不改变刷新代次，须重新验证散列再确认。
+        if not current.is_active:
+            raise AccountDisabled("账号已停用，请联系管理员")
+        if not await self.hasher.verify(password, current.hashed_password):
+            raise InvalidCredentials("用户名或密码错误")
+        identity = await self._confirm_login(sessions, current, None)
+        if identity is None:
+            raise InvalidCredentials("登录期间凭据已更新，请重新登录")
+        return identity
 
     def _session_out(self, identity: Identity) -> SessionOut:
         pair = self.tokens.issue_pair(

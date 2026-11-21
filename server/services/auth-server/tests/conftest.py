@@ -8,13 +8,13 @@ L2/L3 打真实 Postgres（SQLite 上全绿的迁移可以在生产直接失败�
 import os
 import socket
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from auth_server.app import build_app
-from auth_server.apps.auth.deps import get_session
 from auth_server.container import Container, build_container
 from auth_server.settings import Settings
 from lib.config import load_settings
@@ -88,7 +88,9 @@ async def container(settings: Settings) -> AsyncIterator[Container]:
 
 @pytest.fixture
 async def app_client(
-    settings: Settings, _database_required: None
+    settings: Settings,
+    _database_required: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncIterator[httpx.AsyncClient]:
     """整装应用的客户端。每条用例一个回滚事务，用完不留痕。"""
     application = build_app(settings)
@@ -106,8 +108,8 @@ async def app_client(
         join_transaction_mode="create_savepoint",
     )
 
-    # 每个请求一个会话，与生产同构：失败即回滚到保存点，不会把后续请求一起毒死
-    async def override() -> AsyncIterator[AsyncSession]:
+    @asynccontextmanager
+    async def scoped_session() -> AsyncIterator[AsyncSession]:
         async with maker() as session:
             try:
                 yield session
@@ -118,7 +120,7 @@ async def app_client(
                 await session.commit()
                 await run_after_commit_hooks(session)
 
-    application.dependency_overrides[get_session] = override
+    monkeypatch.setattr(swapped.database, "session", scoped_session)
     transport = httpx.ASGITransport(app=application)
     async with httpx.AsyncClient(
         transport=transport, base_url="http://auth-test", timeout=30

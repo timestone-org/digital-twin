@@ -41,6 +41,26 @@ class EffectivePermissions:
         return self.role_codes | self.direct_codes
 
 
+@dataclass(frozen=True)
+class LoginCredentials:
+    """事务外口令核验所需的账号凭据快照。"""
+
+    user_id: uuid.UUID
+    hashed_password: str
+    refresh_generation: uuid.UUID | None
+    is_active: bool
+
+    @classmethod
+    def from_user(cls, user: User) -> "LoginCredentials":
+        """复制账号当前凭据。Args: user。"""
+        return cls(
+            user.id,
+            user.hashed_password,
+            user.refresh_generation,
+            user.is_active,
+        )
+
+
 class UserCrud(CrudBase[User]):
     """`auth_users` 的数据访问。"""
 
@@ -88,19 +108,22 @@ class UserCrud(CrudBase[User]):
     async def record_verified_login(
         self,
         session: AsyncSession,
-        user: User,
+        credentials: LoginCredentials,
         at: datetime,
         upgraded_hash: str | None,
     ) -> User | None:
-        """登记已核验且仍有效的凭据。Args: session, user, at, upgraded_hash。"""
+        """登记已核验且仍有效的凭据。
+
+        Args: session, credentials, at, upgraded_hash。
+        """
         statement = (
             update(User)
             .where(
-                User.id == user.id,
+                User.id == credentials.user_id,
                 User.is_active.is_(True),
-                User.hashed_password == user.hashed_password,
+                User.hashed_password == credentials.hashed_password,
                 User.refresh_generation.is_not_distinct_from(
-                    user.refresh_generation
+                    credentials.refresh_generation
                 ),
             )
             .values(last_login_at=at)

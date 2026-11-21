@@ -40,15 +40,16 @@ AuthorizationHeader = Annotated[str | None, Header()]
 )
 async def create_session(
     payload: LoginIn,
-    session: SessionDep,
     container: ContainerDep,
 ) -> ApiResponse[SessionOut]:
     """账号口令登录。
 
-    Args: payload, session, container。
+    Args: payload, container。
     """
     result = await container.auth.login(
-        session, login=payload.username, password=payload.password
+        container.database.session,
+        login=payload.username,
+        password=payload.password,
     )
     return ok(result, message="登录成功")
 

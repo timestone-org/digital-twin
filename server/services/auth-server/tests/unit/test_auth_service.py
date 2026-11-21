@@ -5,6 +5,8 @@
 """
 
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import cast
 
@@ -13,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_server.apps.auth.crud import user_crud
+from auth_server.apps.auth.crud.user import LoginCredentials
 from auth_server.apps.auth.errors import (
     InvalidCredentials,
     TooManyLoginAttempts,
@@ -46,11 +49,9 @@ USER = User(
 )
 
 
-class FakeSession:
-    """限流用例的会话替身，凭据读写通过 CRUD 注入。"""
-
-    async def flush(self) -> None:
-        return None
+@asynccontextmanager
+async def session_factory() -> AsyncIterator[AsyncSession]:
+    yield cast("AsyncSession", None)
 
 
 class RacingSession:
@@ -95,11 +96,11 @@ def known_account(monkeypatch: pytest.MonkeyPatch) -> None:
 
     async def record_login(
         _session: AsyncSession,
-        user: User,
+        _credentials: LoginCredentials,
         _at: datetime,
         _upgraded_hash: str | None,
     ) -> User:
-        return user
+        return USER
 
     monkeypatch.setattr(user_crud, "get_by_login", find_user)
     monkeypatch.setattr(user_crud, "record_verified_login", record_login)
@@ -109,7 +110,7 @@ def known_account(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def login(service: AuthService, identifier: str) -> None:
     await service.login(
-        cast("AsyncSession", FakeSession()),
+        session_factory,
         login=identifier,
         password=PASSWORD,
     )
@@ -147,11 +148,10 @@ async def test_username_login_also_clears_the_email_count() -> None:
 
 async def test_failed_logins_still_hit_the_limit() -> None:
     service = build_service(build_limiter(InMemoryCache()))
-    session = cast("AsyncSession", FakeSession())
     for _ in range(LIMIT):
         with pytest.raises(InvalidCredentials):
             await service.login(
-                session, login="alice@example.com", password="wrong"
+                session_factory, login="alice@example.com", password="wrong"
             )
     with pytest.raises(TooManyLoginAttempts) as caught:
         await login(service, "alice@example.com")

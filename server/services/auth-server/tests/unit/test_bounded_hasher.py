@@ -7,6 +7,8 @@
 import asyncio
 import threading
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import cast
 
 import pytest
@@ -153,13 +155,17 @@ async def test_concurrent_logins_share_the_bounded_lane(
     async def find_user(_session: AsyncSession, _login: str) -> User | None:
         return account
 
+    @asynccontextmanager
+    async def sessions() -> AsyncIterator[AsyncSession]:
+        yield cast("AsyncSession", None)
+
     monkeypatch.setattr(user_crud, "get_by_login", find_user)
     spy = SpyHasher()
     service = build_auth(spy)
     outcomes = await asyncio.gather(
         *(
             service.login(
-                cast("AsyncSession", None),
+                sessions,
                 login=f"user-{index}",
                 password="wrong",
             )
