@@ -5,9 +5,9 @@
 """
 
 import uuid
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from platform_server.apps.dashboard.schemas.common import (
     FieldKey,
@@ -28,6 +28,12 @@ from platform_server.apps.dashboard.schemas.node import (
     MAX_DESIGN_EXTENT_PX as MAX_NODE_EXTENT_PX,
 )
 from platform_server.apps.dashboard.source_kinds import SourceKind
+
+# 旧运行时引用按原文与选择对齐，目标使用包中已有的稳定键。
+LegacyNodeRef = Annotated[str, StringConstraints(min_length=1, max_length=128)]
+InteractionNodeMap = Annotated[
+    dict[LegacyNodeRef, StableKey], Field(max_length=MAX_NODES_PER_DASHBOARD)
+]
 
 MAX_DESCRIPTION_LENGTH = 1024
 # 复制出来的屏的缺省名后缀，项目内不去重
@@ -142,6 +148,7 @@ class DashboardImportIn(InputModel):
     payload: DashboardExportIn
     new_name: Label | None = None
     target_dashboard_id: uuid.UUID | None = None
+    interaction_node_map: InteractionNodeMap | None = None
     should_include_point_bindings: bool = Field(
         default=True,
         validation_alias="include_point_bindings",

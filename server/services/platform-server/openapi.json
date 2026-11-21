@@ -10220,6 +10220,28 @@
             "title": "Include Point Bindings",
             "type": "boolean"
           },
+          "interaction_node_map": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "type": "string"
+                },
+                "maxProperties": 2000,
+                "propertyNames": {
+                  "maxLength": 128,
+                  "minLength": 1
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Node Map"
+          },
           "new_name": {
             "anyOf": [
               {
@@ -25601,6 +25623,28 @@
         "additionalProperties": false,
         "description": "把模板实例化成目标项目下的一张新大屏。缺省名是模板名。",
         "properties": {
+          "interaction_node_map": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "type": "string"
+                },
+                "maxProperties": 2000,
+                "propertyNames": {
+                  "maxLength": 128,
+                  "minLength": 1
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Node Map"
+          },
           "name": {
             "anyOf": [
               {

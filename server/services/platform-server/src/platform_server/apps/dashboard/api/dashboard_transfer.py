@@ -71,13 +71,7 @@ def import_action(
 ) -> Callable[[], Awaitable[DashboardImportOut]]:
     """构造导入的幂等动作。Args: session, write, payload。"""
     return lambda: transfer_service.import_dashboard(
-        session,
-        project_id=payload.project_id,
-        payload=payload.payload,
-        context=write.validation,
-        new_name=payload.new_name,
-        target_dashboard_id=payload.target_dashboard_id,
-        should_include_point_bindings=payload.should_include_point_bindings,
+        session, payload, context=write.validation
     )
 
 

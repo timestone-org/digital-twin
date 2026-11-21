@@ -19,6 +19,7 @@ from platform_server.apps.dashboard.schemas.common import (
 from platform_server.apps.dashboard.schemas.transfer import (
     MAX_DESCRIPTION_LENGTH,
     DashboardExportOut,
+    InteractionNodeMap,
 )
 
 # 分类是模板墙上的筛选标签，与名字同一套长度口径
@@ -66,3 +67,4 @@ class TemplateInstantiateIn(InputModel):
 
     target_project_id: uuid.UUID
     name: Label | None = None
+    interaction_node_map: InteractionNodeMap | None = None

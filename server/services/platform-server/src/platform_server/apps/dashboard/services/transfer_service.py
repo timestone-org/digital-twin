@@ -29,6 +29,7 @@ from platform_server.apps.dashboard.schemas.transfer import (
     COPY_NAME_SUFFIX,
     DashboardExportIn,
     DashboardExportOut,
+    DashboardImportIn,
     DashboardImportOut,
     DuplicateDashboardIn,
     ExportBindingIn,
@@ -44,6 +45,14 @@ from platform_server.apps.dashboard.services.dashboard_service import (
 from platform_server.apps.dashboard.services.drafts import (
     BindingDraft,
     NodeDraft,
+)
+from platform_server.apps.dashboard.services.export_nodes import (
+    derived_client_keys,
+    export_node,
+)
+from platform_server.apps.dashboard.services.interaction_transfer import (
+    export_node_references,
+    import_node_references,
 )
 from platform_server.apps.dashboard.services.project_service import (
     require_project,
@@ -63,8 +72,6 @@ _logger = get_logger("platform.dashboard.transfer")
 
 # 与 schemas/common.py 的 `Label` 上限同口径
 MAX_NAME_LENGTH = 64
-# 导出侧补键的前缀
-DERIVED_KEY_PREFIX = "node"
 # 唯一一条「登记但不拦」的校验问题：指向本部署没有的点位的绑定照常入库，
 # 静默丢掉它们会让用户以为导进来的是一张能用的屏
 TOLERATED_ISSUE_CODE = "point_not_found"
@@ -95,12 +102,21 @@ async def export_dashboard(
     *,
     dashboard_id: uuid.UUID,
     options: ExportOptions | None = None,
+    should_export_node_keys: bool = False,
 ) -> DashboardExportOut:
-    """导出大屏文档。Args: session, dashboard_id, options。"""
+    """导出大屏文档。
+
+    Args: session, dashboard_id, options, should_export_node_keys。
+    """
 
     dashboard = await require_dashboard(session, dashboard_id)
     state = await load_state(session, dashboard.id)
     keys = derived_client_keys(state.nodes)
+    chrome = (
+        export_node_references(dashboard.chrome_json, keys)
+        if should_export_node_keys
+        else dashboard.chrome_json
+    )
     document = DashboardExportOut(
         schema_version=dashboard.schema_version,
         name=dashboard.name,
@@ -108,9 +124,9 @@ async def export_dashboard(
         design_width=dashboard.design_width,
         design_height=dashboard.design_height,
         theme_json=dashboard.theme_json,
-        chrome_json=dashboard.chrome_json,
+        chrome_json=chrome,
         nodes=[
-            _to_export_node(
+            export_node(
                 node,
                 client_key=keys[node.id],
                 parent_key=(
@@ -128,43 +144,44 @@ async def export_dashboard(
     return document
 
 
-# ⚠ 形参数超出上限：这个签名被端点契约钉死，模板面（PR3）按它直接调用
-async def import_dashboard(  # noqa: PLR0913
+async def import_dashboard(
     session: AsyncSession,
+    payload: DashboardImportIn,
     *,
-    project_id: uuid.UUID,
-    payload: DashboardExportIn,
     context: ValidationContext,
-    new_name: str | None = None,
-    target_dashboard_id: uuid.UUID | None = None,
-    should_include_point_bindings: bool = True,
 ) -> DashboardImportOut:
-    """把一份文档导入成一张大屏；给了 `target_dashboard_id` 就覆盖它。
-
-    Args: session, project_id, payload, context, new_name,
-    target_dashboard_id, should_include_point_bindings。
-    """
-    project = await require_project(session, project_id)
+    """将一份包导入新屏或覆盖指定屏。Args: session, payload, context。"""
+    project = await require_project(session, payload.project_id)
     target = await _overwrite_target(
-        session, project_id=project.id, target_dashboard_id=target_dashboard_id
+        session,
+        project_id=project.id,
+        target_dashboard_id=payload.target_dashboard_id,
     )
-    document = payload
-    if not should_include_point_bindings:
-        document = payload.model_copy(
+    document = payload.payload
+    if not payload.should_include_point_bindings:
+        document = document.model_copy(
             update={
                 "nodes": without_point_bindings(
-                    payload.nodes, catalog=context.catalog
+                    document.nodes, catalog=context.catalog
                 )
             }
         )
     planned = plan_import(document)
+    node_ids = {node.entry.client_key: node.node_id for node in planned}
+    chrome = import_node_references(
+        document.chrome_json,
+        node_ids,
+        payload.interaction_node_map,
+        should_keep_unmapped=True,
+    )
+    document = document.model_copy(update={"chrome_json": chrome})
     unresolved = await _unresolved_bindings(planned, context=context)
     dashboard = await _prepare_dashboard(
         session,
         project_id=project.id,
-        payload=payload,
+        payload=document,
         target=target,
-        name=new_name,
+        name=payload.new_name,
     )
     await _write(session, dashboard=dashboard, planned=planned)
     _logger.info(
@@ -191,14 +208,18 @@ async def duplicate_dashboard(
     Args: session, dashboard_id, payload, context。
     """
     source = await require_dashboard(session, dashboard_id)
-    document = await export_dashboard(session, dashboard_id=source.id)
+    document = await export_dashboard(
+        session, dashboard_id=source.id, should_export_node_keys=True
+    )
     copied = await import_dashboard(
         session,
-        project_id=payload.target_project_id or source.project_id,
-        payload=document,
+        DashboardImportIn(
+            project_id=payload.target_project_id or source.project_id,
+            payload=document,
+            new_name=payload.new_name or copy_name(source.name),
+            should_include_point_bindings=payload.should_include_point_bindings,
+        ),
         context=context,
-        new_name=payload.new_name or copy_name(source.name),
-        should_include_point_bindings=payload.should_include_point_bindings,
     )
     _logger.info(
         "dashboard_duplicated",
@@ -213,17 +234,6 @@ def copy_name(name: str) -> str:
     """截断源名并拼接副本后缀。Args: name。"""
     room = MAX_NAME_LENGTH - len(COPY_NAME_SUFFIX)
     return f"{name[:room]}{COPY_NAME_SUFFIX}"
-
-
-def derived_client_keys(
-    nodes: Sequence[DashboardNode],
-) -> dict[uuid.UUID, str]:
-    """按确定顺序补齐节点键并避开已有键。Args: nodes。"""
-    taken = {node.client_key for node in nodes if node.client_key is not None}
-    keys: dict[uuid.UUID, str] = {}
-    for index, node in enumerate(nodes):
-        keys[node.id] = node.client_key or _free_key(index, taken)
-    return keys
 
 
 def plan_import(payload: DashboardExportIn) -> list[PlannedNode]:
@@ -314,48 +324,6 @@ def point_key_of(entry: ExportBindingIn) -> str:
         raw = (entry.detail_json or {}).get("node_key")
         return raw if isinstance(raw, str) else ""
     return entry.node_key or ""
-
-
-def _free_key(index: int, taken: set[str]) -> str:
-    candidate = f"{DERIVED_KEY_PREFIX}-{index}"
-    serial = 2
-    while candidate in taken:
-        candidate = f"{DERIVED_KEY_PREFIX}-{index}.{serial}"
-        serial += 1
-    taken.add(candidate)
-    return candidate
-
-
-def _to_export_node(
-    node: DashboardNode,
-    *,
-    client_key: str,
-    parent_key: str | None,
-    bindings: Sequence[DashboardBinding],
-) -> ExportNodeIn:
-    """一个节点在导出包里的形态。
-
-    Args: node, client_key, parent_key, bindings。
-    """
-    return ExportNodeIn(
-        client_key=client_key,
-        parent_key=parent_key,
-        module_type=node.module_type,
-        x_px=node.x_px,
-        y_px=node.y_px,
-        width_px=node.width_px,
-        height_px=node.height_px,
-        z_index=node.z_index,
-        is_visible=node.is_visible,
-        config_json=node.config_json,
-        bindings=[_to_export_binding(item) for item in bindings],
-    )
-
-
-def _to_export_binding(binding: DashboardBinding) -> ExportBindingIn:
-    # ⚠ 走 `model_validate` 而不是逐字段构造：库里 `source_kind` 是 Text 加
-    # CHECK，取值集合由 source_kinds.py 与 `SourceKind` 同口径守着
-    return ExportBindingIn.model_validate(binding, from_attributes=True)
 
 
 def _claim_node_ids(nodes: Sequence[ExportNodeIn]) -> dict[str, uuid.UUID]:
