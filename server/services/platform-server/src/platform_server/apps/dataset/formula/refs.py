@@ -155,17 +155,19 @@ class FormulaDeps:
         return keys
 
     @property
-    def external_table_codes(self) -> set[str]:
-        """引用到的外部台账编码。
+    def external_columns(self) -> set[ExternalRef]:
+        """跨表直接取值、窗口和整列聚合使用的列。"""
+        columns = set(self.external)
+        for aggregate in (*self.window, *self.whole):
+            table_code = aggregate.table_code
+            if table_code is not None:
+                columns.add(ExternalRef(table_code, aggregate.column_key))
+        return columns
 
-        ⚠ 三个入口都要收：直接引用、窗口聚合、整列聚合。漏一个的表现是取数期
-        解析不出 table_id，那一列静默算空。
-        """
-        codes = {item.table_code for item in self.external}
-        for item in (*self.window, *self.whole):
-            if item.table_code is not None:
-                codes.add(item.table_code)
-        return codes
+    @property
+    def external_table_codes(self) -> set[str]:
+        """引用到的外部台账编码。"""
+        return {column.table_code for column in self.external_columns}
 
 
 @dataclass(frozen=True)

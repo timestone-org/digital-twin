@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.errors.base import FieldError
 from lib.logging import get_logger
 from platform_server.apps.collect.services import lock_point_references
-from platform_server.apps.dataset.crud import column_crud
+from platform_server.apps.dataset.crud import column_crud, formula_crud
 from platform_server.apps.dataset.errors import (
     DatasetColumnInUse,
     DatasetColumnKeyTaken,
@@ -106,6 +106,7 @@ async def create_column(
 
     Args: session, table_id, payload。
     """
+    await formula_crud.lock_definitions(session, is_editing_library=False)
     table = await require_table(session, table_id, lock="reference")
     if await column_crud.get_by_key(session, table.id, payload.key) is not None:
         raise DatasetColumnKeyTaken(f"这张台账下已有同名列：{payload.key}")
@@ -149,6 +150,7 @@ async def update_column(
 
     Args: session, table_id, column_id, payload。
     """
+    await formula_crud.lock_definitions(session, is_editing_library=False)
     await require_table(session, table_id, lock="reference")
     column = await require_column(
         session, table_id=table_id, column_id=column_id, should_lock=True
@@ -203,6 +205,7 @@ async def delete_column(
     二次确认里把这句话说出来。
     Args: session, table_id, column_id, is_forced。
     """
+    await formula_crud.lock_definitions(session, is_editing_library=False)
     column = await require_column(
         session, table_id=table_id, column_id=column_id
     )
@@ -238,6 +241,7 @@ async def reorder_columns(
 
     Args: session, table_id, payload。
     """
+    await formula_crud.lock_definitions(session, is_editing_library=False)
     table = await require_table(session, table_id)
     ranks = {
         column_id: rank for rank, column_id in enumerate(payload.column_ids)

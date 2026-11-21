@@ -10,6 +10,7 @@ from lib.logging import get_logger
 from lib.web import Page, PageParams
 from platform_server.apps.dataset.crud import (
     column_crud,
+    formula_crud,
     record_crud,
     table_crud,
 )
@@ -139,6 +140,7 @@ async def delete_table(
 
     Args: session, table_id, is_forced。
     """
+    await formula_crud.lock_definitions(session, is_editing_library=False)
     table = await require_table(session, table_id, lock="delete")
     record_count = await record_crud.count_by_table(session, table.id)
     if not is_forced:

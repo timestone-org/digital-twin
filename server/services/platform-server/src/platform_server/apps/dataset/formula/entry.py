@@ -164,7 +164,7 @@ def _check_no_stray(entry: FxEntry, referenced: list[str]) -> None:
     if stray:
         raise FormulaError(
             f"公式体引用了未声明的形参：{'、'.join(stray)}"
-            "——库公式不能直接写死某张台账的列，请把它声明成形参"
+            "，本表列需声明为形参。跨表取值请填写表编码和列标识"
         )
 
 

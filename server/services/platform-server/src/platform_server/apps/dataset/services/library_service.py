@@ -7,6 +7,7 @@
 """
 
 import uuid
+from dataclasses import replace
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,10 +47,13 @@ from platform_server.apps.dataset.services.formula_library import (
     params_to_json,
 )
 from platform_server.apps.dataset.services.formula_usage import (
-    find_dependents,
+    dependent_codes,
     find_usages,
 )
 from platform_server.apps.dataset.services.integrity import flush_unique
+from platform_server.apps.dataset.services.library_validation import (
+    check_consumers,
+)
 
 _logger = get_logger("platform.dataset.library")
 
@@ -101,6 +105,7 @@ async def create_formula(
 
     Args: session, payload。
     """
+    await formula_crud.lock_definitions(session, is_editing_library=True)
     if await formula_crud.get_by_code(session, payload.code) is not None:
         raise DatasetFormulaCodeTaken(f"公式标识已被占用：{payload.code}")
     entry = _entry_of_payload(payload)
@@ -136,6 +141,7 @@ async def update_formula(
     引用的公式一律 409。
     Args: session, formula_id, payload。
     """
+    await formula_crud.lock_definitions(session, is_editing_library=True)
     row = await require_formula(session, formula_id)
     changes = given_changes(payload)
     entry = _merged_entry(row, changes)
@@ -144,7 +150,22 @@ async def update_formula(
     library = await load_library(session)
     _validate(entry, library)
     usages = await find_usages(session, row.code, library)
-    _check_disable_allowed(row, entry, usages)
+    dependents = dependent_codes(row.code, library)
+    if row.is_enabled and not entry.is_enabled:
+        if usages:
+            raise DatasetFormulaInUse(
+                f"还有 {len(usages)} 个台账列在用这条公式（{_named(usages)}），"
+                "停用会影响它们的数据录入、导入与重算。请先修改这些引用"
+            )
+        if dependents:
+            raise DatasetFormulaInUse(
+                f"库公式「{'、'.join(dependents)}」仍引用此公式，停用前请先修改引用"
+            )
+    if (
+        row.expression != entry.expression
+        or entry_of(row).params != entry.params
+    ):
+        await check_consumers(session, entry, library, usages, dependents)
     _apply(row, entry, changes)
     await session.flush()
     _logger.info(
@@ -165,6 +186,7 @@ async def delete_formula(
     ——绕过去的代价是那些引用方在运行期才崩，而配置这张表的人看不见。
     Args: session, formula_id。
     """
+    await formula_crud.lock_definitions(session, is_editing_library=True)
     row = await require_formula(session, formula_id)
     if row.is_builtin:
         raise DatasetFormulaPresetRule(
@@ -172,7 +194,7 @@ async def delete_formula(
         )
     library = await load_library(session)
     usages = await find_usages(session, row.code, library)
-    dependents = await find_dependents(session, row.code, library)
+    dependents = dependent_codes(row.code, library)
     _check_unreferenced(usages, dependents)
     await session.delete(row)
     await session.flush()
@@ -190,10 +212,20 @@ async def restore_formula(
     悄悄重新打开一个运维刻意关掉的东西（docs/DATASET_DESIGN.md §5.11）。
     Args: session, formula_id。
     """
+    await formula_crud.lock_definitions(session, is_editing_library=True)
     row = await require_formula(session, formula_id)
     preset = builtin_of(row.code)
     if not row.is_builtin or preset is None:
         raise DatasetFormulaPresetRule("这不是预设公式，没有出厂口径可恢复")
+    library = await load_library(session)
+    usages = await find_usages(session, row.code, library)
+    await check_consumers(
+        session,
+        replace(preset, is_enabled=row.is_enabled),
+        library,
+        usages,
+        dependent_codes(row.code, library),
+    )
     row.name = preset.name
     row.category = preset.category
     row.expression = preset.expression
@@ -371,22 +403,6 @@ def _apply(
     row.is_enabled = entry.is_enabled
     if "description" in changes:
         row.description = changes["description"]
-
-
-def _check_disable_allowed(
-    row: DatasetFormula, entry: FxEntry, usages: list[FormulaUsageOut]
-) -> None:
-    """停用一条还被引用着的公式：409。
-
-    Args: row, entry, usages。
-    """
-    if entry.is_enabled or not row.is_enabled or not usages:
-        return
-    raise DatasetFormulaInUse(
-        f"还有 {len(usages)} 个台账列在用这条公式（{_named(usages)}），"
-        "停用会让这些表的数据录入、导入与重算一起报错。"
-        "请先把它们改成别的算法"
-    )
 
 
 def _check_unreferenced(

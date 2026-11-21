@@ -40,6 +40,28 @@ class ColumnCrud(CrudBase[DatasetColumn]):
         )
         return list(rows.scalars().all())
 
+    async def list_by_tables(
+        self, session: AsyncSession, table_ids: set[uuid.UUID]
+    ) -> list[DatasetColumn]:
+        """按表批量取完整的列定义供公式试编译。Args: session, table_ids。"""
+        rows = await session.scalars(
+            select(DatasetColumn)
+            .where(DatasetColumn.table_id.in_(table_ids))
+            .order_by(DatasetColumn.table_id, *DEFAULT_ORDER)
+        )
+        return list(rows)
+
+    async def keys_in_tables(
+        self, session: AsyncSession, table_codes: set[str]
+    ) -> set[tuple[str, str]]:
+        """一次取候选来源表中已有的列标识。Args: session, table_codes。"""
+        rows = await session.execute(
+            select(DatasetTable.code, DatasetColumn.key)
+            .join(DatasetColumn, DatasetColumn.table_id == DatasetTable.id)
+            .where(DatasetTable.code.in_(table_codes))
+        )
+        return set(rows.tuples())
+
     async def count_point_references(
         self, session: AsyncSession, node_keys: Sequence[str]
     ) -> dict[str, int]:
