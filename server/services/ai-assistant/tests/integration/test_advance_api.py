@@ -515,3 +515,33 @@ async def test_context_refusal_keeps_already_completed_tool_receipts(
         step["name"] == "plan.write" and step["state"] == "succeeded"
         for step in steps
     )
+
+
+@pytest.mark.parametrize("is_reported", [False, True])
+async def test_read_window_defaults_match_the_browser_capability(
+    db_stack: DbStack, is_reported: bool
+) -> None:
+    model = ScriptedChat(script=[_asks("dashboard.read_values", "read")])
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+    tools = ["dashboard.read_values"]
+    if is_reported:
+        tools.append("capability.dashboard.read_values.v2")
+    events = await _advance(
+        db_stack.client, session_id, user_text="读取当前值", client_tools=tools
+    )
+    call = next(body for name, body in events if name == "client_tool.request")[
+        "calls"
+    ][0]
+    expected = {"limit": 20} if is_reported else {}
+    assert call["arguments"] == expected
+    detail = (await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")).json()[
+        "data"
+    ]
+    requests = [
+        step
+        for message in detail["messages"]
+        for step in message["steps"]
+        if step["name"] == "dashboard.read_values"
+    ]
+    assert requests[0]["input_json"]["arguments"] == expected

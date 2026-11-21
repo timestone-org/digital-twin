@@ -57,7 +57,8 @@
       "dashboard.remove_config_item",
       "dashboard.set_geometry",
       "dashboard.arrange",
-      "dashboard.write_binding"
+      "dashboard.write_binding",
+      "dashboard.list_nodes"
     ]
   },
   {
@@ -155,7 +156,9 @@
       "report.insert_content",
       "report.set_page",
       "report.validate_draft",
-      "report.preview_draft"
+      "report.preview_draft",
+      "report.read_content",
+      "report.replace_text"
     ]
   },
   {

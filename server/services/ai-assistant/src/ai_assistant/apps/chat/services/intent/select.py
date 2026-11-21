@@ -18,6 +18,7 @@
 
 from collections.abc import Sequence
 
+from ai_assistant.apps.chat.services.intent.client_contract import for_page
 from ai_assistant.apps.chat.services.intent.gates import gates_for
 from ai_assistant.apps.chat.services.intent.registry import narrow_all
 from ai_assistant.apps.chat.services.tools.guides import with_guides
@@ -41,6 +42,9 @@ BUILTIN_CLIENT_TOOLS = ("user.ask",)
 # 新名字就是能力版本；老页面没自报清单时不能靠技能清单猜它已实现
 REPORTED_ONLY_CLIENT_TOOLS = frozenset(
     {
+        "dashboard.list_nodes",
+        "report.read_content",
+        "report.replace_text",
         "twin.list_folders",
         "twin.list_entities",
         "twin.read_entity",
@@ -169,7 +173,8 @@ def specs_for(
     )
     return (
         tuple(
-            with_guides(spec) for spec in specs_named(TOOL_SPECS, allowed.tools)
+            with_guides(for_page(spec, client_tools))
+            for spec in specs_named(TOOL_SPECS, allowed.tools)
         )
         + supported
     )

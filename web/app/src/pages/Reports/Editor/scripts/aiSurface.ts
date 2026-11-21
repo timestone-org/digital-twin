@@ -14,6 +14,8 @@ import { bindingReportQuery } from '@/features/ai/bindingReportQuery'
 import { readReportContent, replaceReportText, reportText } from './aiContent'
 
 export const REPORT_TOOLS = [
+  'report.read_content',
+  'report.replace_text',
   'report.read_draft',
   'report.set_template',
   'report.upsert_metric',
