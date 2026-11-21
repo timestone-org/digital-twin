@@ -11,9 +11,14 @@ from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp
 
-from lib.logging.context import bind_log_context, reset_log_context
+from lib.logging.context import LogContext, use_log_context
 from lib.logging.logger import get_logger
-from lib.logging.trace import new_span_id, new_trace_id, parse_traceparent
+from lib.logging.trace import (
+    compose_traceparent,
+    new_span_id,
+    new_trace_id,
+    parse_traceparent,
+)
 
 TRACEPARENT_HEADER = "traceparent"
 
@@ -52,19 +57,21 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             or new_trace_id()
         )
         span_id = new_span_id()
-        token = bind_log_context(trace_id=trace_id, span_id=span_id)
+        context = LogContext(trace_id=trace_id, span_id=span_id)
+        # 外层的错误处理器也会接到已发响应后的异常。
+        request.state.request_log_context = context
         started = time.perf_counter()
-        try:
-            response = await call_next(request)
-        except Exception:
-            # ⚠ 未处理异常由外层的 ServerErrorMiddleware 落成 500，这里只补
-            # 访问日志；不复位上下文，那边回包里的 trace_id 还要用它
-            self._log_access(request, SERVER_ERROR_STATUS, _since(started))
-            raise
-        response.headers[TRACEPARENT_HEADER] = f"00-{trace_id}-{span_id}-01"
-        self._log_access(request, response.status_code, _since(started))
-        reset_log_context(token)
-        return response
+        with use_log_context(context):
+            try:
+                response = await call_next(request)
+            except Exception:
+                self._log_access(request, SERVER_ERROR_STATUS, _since(started))
+                raise
+            response.headers[TRACEPARENT_HEADER] = compose_traceparent(
+                trace_id, span_id
+            )
+            self._log_access(request, response.status_code, _since(started))
+            return response
 
     def _log_access(
         self, request: Request, status: int, elapsed_ms: float

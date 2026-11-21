@@ -39,7 +39,10 @@ def parse_traceparent(raw: str | None) -> str | None:
     if not raw:
         return None
     matched = _TRACEPARENT_RE.match(raw.strip().lower())
-    return matched.group("trace") if matched else None
+    if matched is None:
+        return None
+    trace, parent = matched.group("trace"), matched.group("span")
+    return trace if trace.strip("0") and parent.strip("0") else None
 
 
 def compose_traceparent(trace_id: str | None, span_id: str | None) -> str:
@@ -74,6 +77,8 @@ def _normalized(raw: str | None, width: int) -> str | None:
     if not raw:
         return None
     cleaned = raw.replace("-", "").lower()[:width]
-    if not cleaned or any(char not in "0123456789abcdef" for char in cleaned):
+    if not cleaned.strip("0") or any(
+        char not in "0123456789abcdef" for char in cleaned
+    ):
         return None
     return cleaned.rjust(width, "0")

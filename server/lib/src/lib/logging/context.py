@@ -1,5 +1,7 @@
 """每请求日志上下文（trace_id / span_id / 调用者），经 contextvars 传播。"""
 
+from collections.abc import Generator
+from contextlib import contextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, replace
 
@@ -54,3 +56,13 @@ def reset_log_context(token: Token[LogContext]) -> None:
     Args: token。
     """
     _context_var.reset(token)
+
+
+@contextmanager
+def use_log_context(context: LogContext) -> Generator[None]:
+    """在当前作用域使用捕获的日志上下文。Args: context。"""
+    token = _context_var.set(context)
+    try:
+        yield
+    finally:
+        reset_log_context(token)

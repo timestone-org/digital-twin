@@ -6,8 +6,10 @@ import logging
 import httpx
 import pytest
 from fastapi import Response
+from starlette.background import BackgroundTask
 
 from lib.logging import configure_logging, get_logger
+from lib.logging.context import bind_log_context, reset_log_context
 from lib.web import create_app
 
 
@@ -97,3 +99,52 @@ async def test_an_unhandled_crash_still_leaves_an_access_line(
     assert access[0]["level"] == "ERROR"
     assert access[0]["route"] == "/boom"
     assert access[0]["trace_id"] == response.json()["trace_id"]
+    failure = next(
+        record for record in records if record["event"] == "unhandled_exception"
+    )
+    assert (failure["trace_id"], failure["span_id"]) == (
+        access[0]["trace_id"],
+        access[0]["span_id"],
+    )
+    assert (
+        response.headers["traceparent"]
+        == f"00-{failure['trace_id']}-{failure['span_id']}-01"
+    )
+
+
+async def test_background_crash_uses_the_sent_span_and_request_identity(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    configure_logging(service="svc", role="api", instance="one", level="DEBUG")
+    app = create_app(title="test", prefix="/api/v1/test")
+
+    async def after_send() -> None:
+        raise RuntimeError("late fixture failure")
+
+    @app.get("/late")
+    async def late() -> Response:
+        return Response("sent", background=BackgroundTask(after_send))
+
+    ambient = bind_log_context(user_id="outer-task", route="outer-job")
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+            base_url="http://test",
+            timeout=10,
+        ) as client:
+            response = await client.get("/late")
+    finally:
+        reset_log_context(ambient)
+    assert response.status_code == 200
+    entries = [
+        json.loads(line) for line in capsys.readouterr().out.splitlines()
+    ]
+    error = next(
+        row for row in entries if row.get("event") == "unhandled_exception"
+    )
+    access = next(row for row in entries if row.get("event") == "http_request")
+    header = response.headers["traceparent"]
+    assert header == f"00-{error['trace_id']}-{error['span_id']}-01"
+    assert header == f"00-{access['trace_id']}-{access['span_id']}-01"
+    assert error.get("user_id") != "outer-task"
+    assert access.get("user_id") != "outer-task"

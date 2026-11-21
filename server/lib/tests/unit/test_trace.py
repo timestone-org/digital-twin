@@ -4,6 +4,8 @@
 现象是链路断了却没有任何报错——所以「永远合法」是这里最重要的断言。
 """
 
+import pytest
+
 from lib.logging import (
     bind_log_context,
     compose_traceparent,
@@ -74,3 +76,17 @@ def test_the_current_context_is_followed_when_there_is_one() -> None:
 
 def test_a_fresh_link_is_minted_without_a_context() -> None:
     assert parse_traceparent(current_traceparent()) is not None
+
+
+@pytest.mark.parametrize(
+    ("trace", "parent"), [("0" * 32, "1" * 16), ("1" * 32, "0" * 16)]
+)
+def test_zero_ids_in_a_traceparent_are_invalid(trace: str, parent: str) -> None:
+    assert parse_traceparent(f"00-{trace}-{parent}-01") is None
+
+
+def test_zero_local_context_is_replaced_when_composing_a_header() -> None:
+    header = compose_traceparent("0" * 32, "0" * 16)
+    _, trace, span, _ = header.split("-")
+    assert trace.strip("0")
+    assert span.strip("0")
