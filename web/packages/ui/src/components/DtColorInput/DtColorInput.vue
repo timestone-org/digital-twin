@@ -30,7 +30,7 @@ const props = withDefaults(
     allowText?: boolean | undefined
   }>(),
   {
-    placeholder: '#00cefc 或 --accent-primary',
+    placeholder: '#RRGGBB / 变量',
     size: DT_CONTROL_DEFAULT_SIZE,
     disabled: false,
     required: false,

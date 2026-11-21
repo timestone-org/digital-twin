@@ -88,6 +88,17 @@ describe('DtColorInput 取值', () => {
     wrapper.unmount()
   })
 
+  it.each([
+    [undefined, '#RRGGBB / 变量'],
+    ['填入页面品牌色', '填入页面品牌色'],
+  ])('占位文本支持页面自定义 %s', (placeholder, expected) => {
+    const wrapper = mountColor({ modelValue: '', placeholder })
+    expect(wrapper.get('.dt-color__text input').attributes('placeholder')).toBe(
+      expected,
+    )
+    wrapper.unmount()
+  })
+
   it('allowText=false 时只剩色块', () => {
     const wrapper = mountColor({ allowText: false })
     expect(wrapper.find('input[type="text"]').exists()).toBe(false)
