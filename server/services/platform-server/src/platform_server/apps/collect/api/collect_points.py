@@ -111,7 +111,7 @@ async def create_points(
         endpoint="create_collect_points",
         model=PointBatchOut,
         action=lambda: point_service.create_points(
-            session, bus=write.bus, payload=payload
+            session, bus=write.bus, payload=payload, actor=write.audit_actor
         ),
     )
     await write.plans.notify(reason=REASON_POINT_CHANGED)
@@ -132,7 +132,7 @@ async def import_points(
         endpoint="import_collect_points",
         model=PointImportOut,
         action=lambda: point_import.import_points(
-            session, bus=write.bus, payload=payload
+            session, bus=write.bus, payload=payload, actor=write.audit_actor
         ),
     )
     await write.plans.notify(reason=REASON_POINT_CHANGED)
@@ -155,7 +155,11 @@ async def update_point(
     Args: point_id, payload, session, write。
     """
     saved = await point_service.update_point(
-        session, bus=write.bus, point_id=point_id, payload=payload
+        session,
+        bus=write.bus,
+        point_id=point_id,
+        payload=payload,
+        actor=write.audit_actor,
     )
     await write.plans.notify(reason=REASON_POINT_CHANGED)
     return ok(saved, message="点位已更新")
@@ -181,6 +185,7 @@ async def delete_point(
         point_id=point_id,
         ledger_references=column_service.count_point_references,
         is_forced=is_forced,
+        actor=write.audit_actor,
     )
     await write.plans.notify(reason=REASON_POINT_CHANGED)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -205,6 +210,7 @@ async def batch_delete_points(
         point_ids=payload.point_ids,
         ledger_references=column_service.count_point_references,
         is_forced=payload.is_forced,
+        actor=write.audit_actor,
     )
     await write.plans.notify(reason=REASON_POINT_CHANGED)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

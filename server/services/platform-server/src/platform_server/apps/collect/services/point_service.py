@@ -32,7 +32,11 @@ from platform_server.apps.collect.schemas import (
     PointSavedOut,
     PointUpdateIn,
 )
-from platform_server.apps.collect.services import binding_guard, source_service
+from platform_server.apps.collect.services import (
+    audit,
+    binding_guard,
+    source_service,
+)
 from platform_server.apps.collect.services.address_check import (
     check_addresses,
     raise_if_rejected,
@@ -83,11 +87,15 @@ async def list_points(
 
 
 async def create_points(
-    session: AsyncSession, *, bus: CommandBus, payload: PointCreateIn
+    session: AsyncSession,
+    *,
+    bus: CommandBus,
+    payload: PointCreateIn,
+    actor: audit.AuditActor,
 ) -> PointBatchOut:
     """批量建点。先校验寻址串，再落库。
 
-    Args: session, bus, payload。
+    Args: session, bus, payload, actor。
     """
     source = await source_service.require_source(session, payload.source_id)
     for position, item in enumerate(payload.items):
@@ -103,6 +111,10 @@ async def create_points(
     )
     raise_if_rejected(checks, field_of=_address_fields(payload))
     created = await _insert_points(session, source_id, payload)
+    for point in created:
+        audit.record_configuration(
+            session, actor, point, audit.ConfigurationChange("created")
+        )
     batch = PointBatchOut(
         items=[to_point_out(item) for item in created], address_checks=checks
     )
@@ -116,10 +128,11 @@ async def update_point(
     bus: CommandBus,
     point_id: uuid.UUID,
     payload: PointUpdateIn,
+    actor: audit.AuditActor,
 ) -> PointSavedOut:
     """改点位。改了寻址串就重新校验一次。
 
-    Args: session, bus, point_id, payload。
+    Args: session, bus, point_id, payload, actor。
     """
     point = await require_point(session, point_id)
     source_id, address = point.source_id, payload.address
@@ -127,8 +140,10 @@ async def update_point(
         source = await source_service.require_source(session, source_id)
         validate_http_address(source.protocol, address, field="address")
     check = await _recheck(session, bus, source_id=source_id, address=address)
-    point = await require_point(session, point_id)
+    point = await require_point(session, point_id, should_lock=True)
+    before = audit.snapshot(point)
     point_crud.apply_changes(point, given_changes(payload))
+    audit.record_update(session, actor, point, before, payload.model_fields_set)
     await session.flush()
     saved = PointSavedOut(point=to_point_out(point), address_check=check)
     await _commit(session)
@@ -141,12 +156,13 @@ async def delete_point(
     *,
     point_id: uuid.UUID,
     ledger_references: binding_guard.LedgerReferences,
+    actor: audit.AuditActor,
     is_forced: bool = False,
 ) -> str:
     """删点位，返回它的 `node_key`。
 
     ⚠ `is_forced` 会跳过引用守卫，强删后大屏和台账将失去该点位的读数。
-    Args: session, point_id, ledger_references, is_forced。
+    Args: session, point_id, ledger_references, actor, is_forced。
     """
     point = await require_point(session, point_id, should_lock=True)
     node_key = compose_node_key(point.source_id, point.code)
@@ -160,6 +176,9 @@ async def delete_point(
         point_id=str(point.id),
         is_forced=is_forced,
     )
+    audit.record_configuration(
+        session, actor, point, audit.ConfigurationChange("deleted")
+    )
     await point_crud.delete(session, point)
     await _commit(session)
     return node_key
@@ -170,12 +189,13 @@ async def delete_points(
     *,
     point_ids: Sequence[uuid.UUID],
     ledger_references: binding_guard.LedgerReferences,
+    actor: audit.AuditActor,
     is_forced: bool = False,
 ) -> int:
     """批量删点，返回删掉几个。
 
     ⚠ 整批全删或全不删：返回被引用的点位；撞见已删除的点位一律 404。
-    Args: session, point_ids, ledger_references, is_forced。
+    Args: session, point_ids, ledger_references, actor, is_forced。
     """
     wanted = list(dict.fromkeys(point_ids))
     points = await point_crud.list_by_ids(session, wanted, should_lock=True)
@@ -192,6 +212,10 @@ async def delete_points(
         point_total=len(points),
         is_forced=is_forced,
     )
+    for point in points:
+        audit.record_configuration(
+            session, actor, point, audit.ConfigurationChange("deleted")
+        )
     await point_crud.delete_many(session, wanted)
     await _commit(session)
     return len(points)

@@ -33,6 +33,7 @@ from platform_server.apps.collect.schemas import (
     SourceOut,
     SourceUpdateIn,
 )
+from platform_server.apps.collect.services import audit
 from platform_server.apps.collect.services.changes import given_changes
 from platform_server.apps.collect.services.credentials import CredentialCipher
 from platform_server.apps.collect.services.http_profile import (
@@ -142,11 +143,15 @@ async def attach_runtime(
 
 
 async def create_source(
-    session: AsyncSession, context: SourceContext, *, payload: SourceCreateIn
+    session: AsyncSession,
+    context: SourceContext,
+    *,
+    payload: SourceCreateIn,
+    actor: audit.AuditActor,
 ) -> SourceOut:
     """建数据源。编码撞了就 409，不静默改名。
 
-    Args: session, context, payload。
+    Args: session, context, payload, actor。
     """
     if await source_crud.get_by_code(session, payload.code) is not None:
         raise SourceCodeTaken(f"数据源编码已被占用：{payload.code}")
@@ -173,6 +178,9 @@ async def create_source(
     validate_http_source(source, context.cipher)
     source_crud.add(session, source)
     await _flush_new_source(session, payload.code)
+    audit.record_configuration(
+        session, actor, source, audit.ConfigurationChange("created")
+    )
     presented = await _present(session, source)
     await _commit(session)
     _logger.info(
@@ -200,12 +208,14 @@ async def update_source(
     *,
     source_id: uuid.UUID,
     payload: SourceUpdateIn,
+    actor: audit.AuditActor,
 ) -> SourceOut:
     """改数据源。缺省的字段不动。
 
-    Args: session, context, source_id, payload。
+    Args: session, context, source_id, payload, actor。
     """
-    source = await require_source(session, source_id)
+    source = await require_source(session, source_id, should_lock=True)
+    before = audit.snapshot(source)
     changes = given_changes(payload)
     credential = changes.pop("credential", None)
     if "credential" in payload.model_fields_set:
@@ -219,6 +229,9 @@ async def update_source(
         source.credential_enc is not None,
     )
     validate_http_source(source, context.cipher)
+    audit.record_update(
+        session, actor, source, before, payload.model_fields_set
+    )
     await session.flush()
     presented = await _present(session, source)
     await _commit(session)
@@ -229,7 +242,11 @@ async def update_source(
 
 
 async def delete_source(
-    session: AsyncSession, *, source_id: uuid.UUID, is_forced: bool = False
+    session: AsyncSession,
+    *,
+    source_id: uuid.UUID,
+    actor: audit.AuditActor,
+    is_forced: bool = False,
 ) -> None:
     """删数据源。下面还有点位时拒绝；`is_forced` 连点位一起删。
 
@@ -237,9 +254,9 @@ async def delete_source(
     本身看起来完全成功。点位要一条条删，每条都过绑定检查。
     ⚠ `is_forced` 是显式跳过这道守卫：点位随外键 CASCADE 一起删，仍绑着它们
     的大屏引用就此失效——界面要在二次确认里把这句话说出来。
-    Args: session, source_id, is_forced。
+    Args: session, source_id, actor, is_forced。
     """
-    source = await require_source(session, source_id)
+    source = await require_source(session, source_id, should_lock=True)
     point_count = await point_crud.count_by_source(session, source.id)
     if point_count > 0 and not is_forced:
         raise SourceNotEmpty("这个数据源下还有点位，请先删除点位")
@@ -250,18 +267,43 @@ async def delete_source(
         point_count=point_count,
         is_forced=is_forced,
     )
+    if point_count:
+        await _audit_cascaded_points(session, actor, source.id)
+    audit.record_configuration(
+        session, actor, source, audit.ConfigurationChange("deleted")
+    )
     await source_crud.delete(session, source)
     await _commit(session)
 
 
+async def _audit_cascaded_points(
+    session: AsyncSession, actor: audit.AuditActor, source_id: uuid.UUID
+) -> None:
+    """按主键分页记录待级联删除的点位。Args: session, actor, source_id。"""
+    after = None
+    while points := await point_crud.lock_source_page(
+        session, source_id, after
+    ):
+        for point in points:
+            audit.record_configuration(
+                session, actor, point, audit.ConfigurationChange("deleted")
+            )
+        await session.flush()
+        after = points[-1].id
+
+
 async def require_source(
-    session: AsyncSession, source_id: uuid.UUID
+    session: AsyncSession, source_id: uuid.UUID, *, should_lock: bool = False
 ) -> CollectSource:
     """取数据源，取不到即 404。
 
-    Args: session, source_id。
+    Args: session, source_id, should_lock。
     """
-    source = await source_crud.get(session, source_id)
+    source = (
+        await source_crud.get_for_update(session, source_id)
+        if should_lock
+        else await source_crud.get(session, source_id)
+    )
     if source is None:
         raise SourceNotFound("数据源不存在")
     return source

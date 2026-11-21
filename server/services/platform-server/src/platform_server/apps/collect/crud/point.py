@@ -279,6 +279,24 @@ class PointCrud(CrudBase[CollectPoint]):
             await rows.close()
         return codes
 
+    async def lock_source_page(
+        self,
+        session: AsyncSession,
+        source_id: uuid.UUID,
+        after: uuid.UUID | None,
+    ) -> list[CollectPoint]:
+        """锁定待级联删除的点位一页。Args: session, source_id, after。"""
+        query = select(CollectPoint).where(CollectPoint.source_id == source_id)
+        if after is not None:
+            query = query.where(CollectPoint.id > after)
+        rows = await session.scalars(
+            query.order_by(CollectPoint.id)
+            .limit(500)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(rows.all())
+
     async def count_by_source(
         self, session: AsyncSession, source_id: uuid.UUID
     ) -> int:

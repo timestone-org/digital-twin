@@ -129,7 +129,7 @@ async def _create_once(
         endpoint="create_collect_source",
         model=SourceOut,
         action=lambda: source_service.create_source(
-            session, context, payload=payload
+            session, context, payload=payload, actor=write.audit_actor
         ),
     )
 
@@ -177,7 +177,11 @@ async def update_source(
     Args: source_id, payload, session, context, write。
     """
     updated = await source_service.update_source(
-        session, context, source_id=source_id, payload=payload
+        session,
+        context,
+        source_id=source_id,
+        payload=payload,
+        actor=write.audit_actor,
     )
     await write.plans.notify(reason=REASON_SOURCE_CHANGED)
     return ok(updated, message="数据源已更新")
@@ -199,7 +203,10 @@ async def delete_source(
     Args: source_id, session, write, is_forced。
     """
     await source_service.delete_source(
-        session, source_id=source_id, is_forced=is_forced
+        session,
+        source_id=source_id,
+        is_forced=is_forced,
+        actor=write.audit_actor,
     )
     await write.plans.notify(reason=REASON_SOURCE_CHANGED)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
