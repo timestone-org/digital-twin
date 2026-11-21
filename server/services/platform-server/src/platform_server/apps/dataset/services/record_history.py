@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.dataset.crud import (
     RecordWindow,
-    WholeStatsRow,
     record_crud,
 )
 from platform_server.apps.dataset.errors import DatasetRecordInvalid
@@ -241,22 +240,8 @@ async def _stats_of(
         keys=[item.column for item in refs],
         exclude_row_id=exclude_row_id,
     )
-    return {item.reference: _to_stats(found.get(item.column)) for item in refs}
-
-
-def _to_stats(row: WholeStatsRow | None) -> WholeStats:
-    """库里的一行底数 → 求值器认得的形态。
-
-    Args: row。
-    """
-    if row is None:
-        return WholeStats()
-    return WholeStats(
-        minimum=row.minimum,
-        maximum=row.maximum,
-        total=row.total,
-        count=row.count,
-    )
+    empty = WholeStats()
+    return {item.reference: found.get(item.column, empty) for item in refs}
 
 
 async def _load_prev(

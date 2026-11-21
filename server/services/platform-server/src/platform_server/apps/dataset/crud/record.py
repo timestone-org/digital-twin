@@ -30,8 +30,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
 from lib.db import CrudBase
+from platform_server.apps.dataset.crud.whole_stats import read_whole_stats
+from platform_server.apps.dataset.formula.context import (
+    WholeStats as WholeStatsRow,
+)
 from platform_server.apps.dataset.models import DatasetRecord
-from platform_server.settings import DB_SCHEMA
 
 # 反扫的排序：最新在前。⚠ 第二键不能省——同一个 ts 上可以有多行（人工补录与
 # 采集各一行），只按 ts 排时两次翻页会重复或漏掉其中一行
@@ -41,44 +44,6 @@ OLDEST_FIRST = (DatasetRecord.ts.asc(), DatasetRecord.row_id.asc())
 # 也算在内：一行带着三列 JSON 能有十几 KB，一条语句整搬一天的行跨网就是好几秒，
 # 而库里执行只要几毫秒——现象是重算与趋势一律「服务暂时不可用」
 SCAN_PAGE_ROWS = 250
-
-# 整列聚合的底数：`*_ALL` 五个函数共用这一次扫描。
-# ⚠ 三层取值（computed → overrides.v → values）就是 SQL 版的 effective 口径，
-# 与 `services/effective.py` 的一致性由单元测试钉住（§4.3a）。
-# ⚠ 公式层用 `-> IS NOT NULL` 判在场而不是让 COALESCE 跳过：算出来是空的公式列
-# 仍以公式为准，COALESCE 会让 `values_json` 里的旧值借尸还魂。
-# ⚠ 列 key 用 `unnest` 横向展开，一条语句算完全部列——每列一条 SQL 就是 N 遍
-# 全表顺序扫描。
-_NUMERIC_TEXT = r"^\s*-?\d+(\.\d+)?([eE][-+]?\d+)?\s*$"
-# 理由：拼进这段 SQL 的只有本模块的两个常量（数字判别正则与 schema 名），
-# 全部外部输入——列 key、台账 id、要排除的行——一律走绑定参数
-_WHOLE_STATS_SELECT = f"""
-SELECT ckey,
-       min(numeric_value) AS min_value,
-       max(numeric_value) AS max_value,
-       sum(numeric_value) AS sum_value,
-       count(numeric_value) AS value_count
-FROM (
-    SELECT ckey,
-           CASE WHEN cell ~ '{_NUMERIC_TEXT}' THEN cell::float8 END
-               AS numeric_value
-    FROM {DB_SCHEMA}.dataset_records AS r
-    CROSS JOIN unnest(CAST(:keys AS text[])) AS ckey
-    CROSS JOIN LATERAL (
-        SELECT CASE
-            WHEN r.computed_json -> ckey IS NOT NULL
-                THEN r.computed_json ->> ckey
-            WHEN r.overrides_json -> ckey -> 'v' IS NOT NULL
-                THEN r.overrides_json -> ckey ->> 'v'
-            ELSE r.values_json ->> ckey
-        END AS cell
-    ) AS picked
-    WHERE r.table_id = CAST(:table_id AS uuid)"""  # noqa: S608
-_WHOLE_STATS_TAIL = """
-) AS cells
-GROUP BY ckey
-"""
-_EXCLUDE_ROW = "\n      AND r.row_id <> CAST(:exclude_row_id AS uuid)"
 
 # 采集写出的行的来源标记，与 `services/buckets.COLLECT_SOURCE` 同值
 COLLECT_SOURCE = "collect"
@@ -95,16 +60,6 @@ class CollectedRow:
     row_id: uuid.UUID
     values: dict[str, Any]
     samples: dict[str, int]
-
-
-@dataclass(frozen=True)
-class WholeStatsRow:
-    """一列在整表上的四个可加底数。五个 `*_ALL` 全由它们导出。"""
-
-    minimum: float | None
-    maximum: float | None
-    total: float | None
-    count: int
 
 
 @dataclass(frozen=True)
@@ -374,28 +329,7 @@ class RecordCrud(CrudBase[DatasetRecord]):
         Args: session, table_id, keys, exclude_row_id（编辑既有行时排除库里
             那份旧值——不排就是拿旧值和新值各算一遍）。
         """
-        if not keys:
-            return {}
-        statement = _WHOLE_STATS_SELECT
-        params: dict[str, object] = {
-            "keys": sorted(keys),
-            "table_id": str(table_id),
-        }
-        if exclude_row_id is not None:
-            statement += _EXCLUDE_ROW
-            params["exclude_row_id"] = str(exclude_row_id)
-        rows = await session.execute(
-            text(statement + _WHOLE_STATS_TAIL), params
-        )
-        return {
-            str(row.ckey): WholeStatsRow(
-                minimum=row.min_value,
-                maximum=row.max_value,
-                total=row.sum_value,
-                count=int(row.value_count or 0),
-            )
-            for row in rows.all()
-        }
+        return await read_whole_stats(session, table_id, keys, exclude_row_id)
 
     async def upsert_collected(
         self,
