@@ -102,12 +102,12 @@ function createBinder(opts: UseEChartOptions, hasLoadError: Ref<boolean>) {
   // 建实例要 await 动态 import；期间容器换了或已卸载，回来的实例必须当场扔掉
   let generation = 0
 
-  /** 刷新一帧；只有全量那一档复查缩放比，值刷新每秒都来、量布局不值当。 */
-  function refresh(full: boolean): void {
+  /** 全量刷新与布局变化复查位图倍率。 */
+  function refresh(full: boolean, shouldPaint = true): void {
     const drifted = full && boundEl && chart && dprDrifted(boundEl, builtDpr)
     const rebuild = failedEl ?? (drifted ? boundEl : null)
     if (rebuild) void attach(rebuild)
-    else if (chart) paint(chart, opts, full)
+    else if (chart && shouldPaint) paint(chart, opts, full)
   }
 
   function release(shouldClearError = true): void {
@@ -174,7 +174,11 @@ export function useEChart(opts: UseEChartOptions): {
     deep: opts.valuesDeep ?? true,
   })
   // 换肤必须整图重算：只换 series 改不掉轴、图例与提示框的颜色。
-  useThemeRedraw(opts.rootRef, () => binder.refresh(true))
+  useThemeRedraw(
+    opts.rootRef,
+    () => binder.refresh(true),
+    () => binder.refresh(true, false),
+  )
   onBeforeUnmount(binder.detach)
 
   return { getChart: binder.get, hasLoadError }

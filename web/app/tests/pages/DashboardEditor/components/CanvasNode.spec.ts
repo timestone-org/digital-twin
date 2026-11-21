@@ -59,8 +59,8 @@ function node(
   }
 }
 
-function configOf(target: DashboardNodePayload): unknown {
-  const wrapper = mount(CanvasNode, {
+function mountNode(target: DashboardNodePayload) {
+  return mount(CanvasNode, {
     props: {
       frame: {
         id: 'n1',
@@ -82,7 +82,10 @@ function configOf(target: DashboardNodePayload): unknown {
     },
     global: { stubs: { ModuleRenderer: true } },
   })
-  return wrapper.getComponent(ModuleRenderer).props('config')
+}
+
+function configOf(target: DashboardNodePayload): unknown {
+  return mountNode(target).getComponent(ModuleRenderer).props('config')
 }
 
 describe('设计态演示配置', () => {
@@ -100,5 +103,21 @@ describe('设计态演示配置', () => {
 
   it('没声明内容键的模块，演示配置照旧整份补', () => {
     expect(configOf(node(BARE.type, {}))).toEqual({ title: '演示标题' })
+  })
+
+  it('平移保持模块配置，内容编辑仍更新模块', async () => {
+    const previous = node(BARE.type, { title: '原有标题' })
+    const wrapper = mountNode(previous)
+    const renderer = wrapper.getComponent(ModuleRenderer)
+    const config = renderer.props('config')
+    const moved = { ...previous, x: 40, y: 20 }
+
+    await wrapper.setProps({ node: moved })
+    expect(renderer.props('config')).toBe(config)
+
+    await wrapper.setProps({
+      node: { ...moved, configJson: { title: '新标题' } },
+    })
+    expect(renderer.props('config')).toEqual({ title: '新标题' })
   })
 })

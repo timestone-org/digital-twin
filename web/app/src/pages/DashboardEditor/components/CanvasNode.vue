@@ -116,22 +116,24 @@ const boxStyle = computed<CSSProperties>(() => ({
   zIndex: props.zIndex,
 }))
 
+const manifest = computed(() => props.getManifest(props.node.moduleType))
+const nodeConfig = computed(() => props.node.configJson)
+
 /**
  * 设计态预览：清单声明的演示配置只铺没配过的键，不落库、不参与保存。
  * ⚠ 声明了内容键的模块只铺内容键：观感键的演示值会盖过 schema 缺省，
  * 画布上与运行态就长成两个样子。
  */
 const config = computed<Record<string, unknown>>(() => {
-  const manifest = props.getManifest(props.node.moduleType)
-  const demo = manifest?.preview?.config ?? {}
-  const content = manifest?.contentKeys
+  const demo = manifest.value?.preview?.config ?? {}
+  const content = manifest.value?.contentKeys
   const shown =
     content === undefined
       ? demo
       : Object.fromEntries(
           Object.entries(demo).filter(([key]) => content.includes(key)),
         )
-  return { ...shown, ...props.node.configJson }
+  return { ...shown, ...nodeConfig.value }
 })
 </script>
 

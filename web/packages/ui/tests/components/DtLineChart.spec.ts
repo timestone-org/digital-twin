@@ -72,6 +72,7 @@ beforeEach(() => {
 
 afterEach(() => {
   document.documentElement.style.removeProperty('--font-family-harmony')
+  document.documentElement.style.removeProperty('--text-secondary')
   vi.unstubAllGlobals()
 })
 
@@ -148,11 +149,11 @@ describe('DtLineChart 实例生命周期', () => {
       attachTo: document.body,
     })
     await flushPromises()
-    document.documentElement.classList.add('theme-light')
+    document.documentElement.style.setProperty('--text-secondary', '#000')
     await flushPromises()
     wrapper.unmount()
     seam.setOption.mockClear()
-    document.documentElement.classList.remove('theme-light')
+    document.documentElement.style.removeProperty('--text-secondary')
     await flushPromises()
 
     expect(cancel).toHaveBeenCalledWith(7)

@@ -46,31 +46,59 @@ function mountChain(): {
 }
 
 describe('observeThemeChange', () => {
+  it('平移、缩放和布局类变化不会重绘配色', async () => {
+    const { stage, host, remove } = mountChain()
+    const onChange = vi.fn()
+    const onLayoutChange = vi.fn()
+    const stop = observeThemeChange(host, onChange, { onLayoutChange })
+    try {
+      stage.style.transform = 'translate(20px, 10px) scale(1.1)'
+      stage.style.width = '600px'
+      stage.classList.add('qa-chart-is-dragging')
+      await vi.waitFor(() => expect(onLayoutChange).toHaveBeenCalledTimes(1))
+      expect(onChange).not.toHaveBeenCalled()
+    } finally {
+      stop()
+      remove()
+    }
+  })
+
   it('祖先改内联变量时回调', async () => {
     const { stage, host, remove } = mountChain()
     const onChange = vi.fn()
-    const stop = observeThemeChange(host, onChange)
-    stage.style.setProperty('--accent-primary', 'red')
-    await vi.waitFor(() => expect(onChange).toHaveBeenCalled())
-    stop()
-    remove()
+    stage.style.setProperty('--accent-primary', 'blue')
+    const stop = observeThemeChange(host, onChange, { themeTarget: stage })
+    try {
+      stage.style.setProperty('--accent-primary', 'red')
+      await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
+    } finally {
+      stop()
+      remove()
+    }
   })
 
-  it('文档根换 class 也算换肤', async () => {
+  it('文档根换类并改变生效的颜色时换肤', async () => {
     const { host, remove } = mountChain()
     const onChange = vi.fn()
+    const stylesheet = document.createElement('style')
+    stylesheet.textContent = ':root.qa-theme-light { color: red; }'
+    document.head.append(stylesheet)
     const stop = observeThemeChange(host, onChange)
-    document.documentElement.classList.add('theme-light')
-    await vi.waitFor(() => expect(onChange).toHaveBeenCalled())
-    stop()
-    document.documentElement.classList.remove('theme-light')
-    remove()
+    try {
+      document.documentElement.classList.add('qa-theme-light')
+      await vi.waitFor(() => expect(onChange).toHaveBeenCalledTimes(1))
+    } finally {
+      stop()
+      document.documentElement.classList.remove('qa-theme-light')
+      stylesheet.remove()
+      remove()
+    }
   })
 
   it('改 host 自己不回调——写变量的是舞台根不是它', async () => {
     const { stage, host, remove } = mountChain()
     const onChange = vi.fn()
-    const stop = observeThemeChange(host, onChange)
+    const stop = observeThemeChange(host, onChange, { themeTarget: stage })
     host.style.setProperty('--accent-primary', 'red')
     stage.style.setProperty('--accent-primary', 'blue')
     await vi.waitFor(() => expect(onChange).toHaveBeenCalled())
@@ -84,8 +112,8 @@ describe('observeThemeChange', () => {
     const { stage, host, remove } = mountChain()
     const stopped = vi.fn()
     const alive = vi.fn()
-    observeThemeChange(host, stopped)()
-    const keep = observeThemeChange(host, alive)
+    observeThemeChange(host, stopped, { themeTarget: stage })()
+    const keep = observeThemeChange(host, alive, { themeTarget: stage })
 
     stage.style.setProperty('--accent-primary', 'red')
     await vi.waitFor(() => expect(alive).toHaveBeenCalled())

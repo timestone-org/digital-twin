@@ -202,11 +202,11 @@ describe('divergingStops', () => {
 })
 
 /** 把 useThemeRedraw 挂进一个真组件，好走完整的挂载与卸载。 */
-function mountRedraw(redraw: () => void) {
+function mountRedraw(redraw: () => void, remeasure = vi.fn()) {
   const Host = defineComponent({
     setup() {
       const root: Ref<HTMLElement | null> = ref(null)
-      useThemeRedraw(root, redraw)
+      useThemeRedraw(root, redraw, remeasure)
       return { root }
     },
     template: '<div ref="root" />',
@@ -219,7 +219,7 @@ describe('useThemeRedraw', () => {
     const redraw = vi.fn()
     const wrapper = mountRedraw(redraw)
 
-    document.body.style.setProperty('--accent-primary', 'red')
+    document.body.style.color = 'red'
     await vi.waitFor(() => expect(redraw).toHaveBeenCalled())
 
     wrapper.unmount()
@@ -229,12 +229,25 @@ describe('useThemeRedraw', () => {
     const redraw = vi.fn()
     const wrapper = mountRedraw(redraw)
 
-    document.body.style.setProperty('--accent-primary', 'red')
-    document.body.style.setProperty('--accent-secondary', 'blue')
+    document.body.style.color = 'red'
+    document.body.style.color = 'blue'
     await vi.waitFor(() => expect(redraw).toHaveBeenCalled())
 
     expect(redraw).toHaveBeenCalledTimes(1)
     wrapper.unmount()
+  })
+
+  it('位置变化只复查位图分辨率', async () => {
+    const redraw = vi.fn()
+    const remeasure = vi.fn()
+    const wrapper = mountRedraw(redraw, remeasure)
+    try {
+      document.body.style.transform = 'translate(20px, 10px)'
+      await vi.waitFor(() => expect(remeasure).toHaveBeenCalledTimes(1))
+      expect(redraw).not.toHaveBeenCalled()
+    } finally {
+      wrapper.unmount()
+    }
   })
 
   // 用「另一个还挂着的组件」当完成信号：它重绘了，说明这批变更已经派发完
@@ -245,7 +258,7 @@ describe('useThemeRedraw', () => {
     const kept = mountRedraw(alive)
 
     unmounted.unmount()
-    document.body.style.setProperty('--accent-primary', 'red')
+    document.body.style.color = 'red'
     await vi.waitFor(() => expect(alive).toHaveBeenCalled())
 
     expect(gone).not.toHaveBeenCalled()

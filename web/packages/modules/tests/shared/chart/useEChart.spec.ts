@@ -50,21 +50,23 @@ function lastHandle() {
  * @param layoutWidth 未变换的布局宽
  * @param visualWidth 累积 transform 之后的视觉宽
  */
-function stubStage(layoutWidth: number, visualWidth: number): void {
+function stubStage(layoutWidth: number, visualWidth: number) {
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(
     layoutWidth,
   )
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-    x: 0,
-    y: 0,
-    width: visualWidth,
-    height: 0,
-    top: 0,
-    right: visualWidth,
-    bottom: 0,
-    left: 0,
-    toJSON: () => ({}),
-  })
+  return vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockReturnValue({
+      x: 0,
+      y: 0,
+      width: visualWidth,
+      height: 0,
+      top: 0,
+      right: visualWidth,
+      bottom: 0,
+      left: 0,
+      toJSON: () => ({}),
+    })
 }
 
 /** 最近一次 setOption 的口径。 */
@@ -333,7 +335,7 @@ describe('刷新口径', () => {
     const handle = lastHandle()
     handle.setOption.mockClear()
 
-    document.body.style.setProperty('--accent-primary', 'red')
+    document.body.style.color = 'red'
     await vi.waitFor(() => expect(handle.setOption).toHaveBeenCalled())
 
     expect(lastUpdate(handle)).toEqual({ notMerge: true })
@@ -470,6 +472,29 @@ describe('尺寸跟随', () => {
 })
 
 describe('舞台缩放下的位图分辨率', () => {
+  it('短距缩放保持现有图，明显缩放重建位图', async () => {
+    stubStage(100, 100)
+    const wrapper = await mountChart()
+    const first = lastHandle()
+    try {
+      const measure = stubStage(100, 110)
+      document.body.style.transform = 'scale(1.1)'
+      await vi.waitFor(() => expect(measure).toHaveBeenCalled())
+      expect(echarts.createChart).toHaveBeenCalledTimes(1)
+      expect(first.setOption).toHaveBeenCalledTimes(1)
+
+      stubStage(100, 140)
+      document.body.style.transform = 'scale(1.4)'
+      await vi.waitFor(() =>
+        expect(echarts.createChart).toHaveBeenCalledTimes(2),
+      )
+      expect(lastHandle().init).toEqual({ devicePixelRatio: 140 / 100 })
+      expect(first.dispose).toHaveBeenCalledTimes(1)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
   it('缩放比折进分辨率——不折的话 2 倍舞台上 canvas 只有一半分辨率', async () => {
     vi.stubGlobal('devicePixelRatio', 1.5)
     stubStage(100, 200)
