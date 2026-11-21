@@ -1,12 +1,12 @@
 """幂等键：按 `(端点, 幂等键, 调用者)` 缓存首次结果。
 
-⚠ 只缓存**成功**结果。失败也缓存的话，一次偶发的下游超时会被幂等键钉死成
-永久失败，而调用方换个键重试才好——那等于要求调用方知道我们的实现细节。
+已确认失败释放占位。执行结果无法确认时保留占位，避免再次执行同一操作。
 
 ⚠ 没给键就照常执行：调用方给不给键是它的自由，端点只负责「支持」，
 **没给键就没有幂等保证**。
 """
 
+import asyncio
 import hashlib
 import json
 from collections.abc import Awaitable, Callable
@@ -17,15 +17,16 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from lib.cache.protocol import CacheLike
-from lib.errors import Conflict, DependencyUnavailable
+from lib.errors import AppError, Conflict, DependencyUnavailable
 from lib.logging import get_logger
+from lib.utils.ids import uuid7
 
 # 重试窗口可能跨越一次发布，故结果至少留 24h
 RESULT_TTL_S = 86_400
 # 「正在处理」的占位比结果短得多：进程崩在中途时，这个键必须自己过期，
 # 否则同一个幂等键会被永久拒绝，而调用方无从得知该等多久。
 CLAIM_TTL_S = 300
-_CLAIM_MARKER = "pending"
+_UNCONFIRMED_MARKER = "outcome_unknown"
 
 _logger = get_logger("lib.idempotency")
 
@@ -40,6 +41,7 @@ class IdempotencyStore:
 
     cache: CacheLike
     namespace: str
+    should_reserve_full_window: bool = False
 
     async def lookup_result[ResultT: BaseModel](
         self,
@@ -73,27 +75,50 @@ class IdempotencyStore:
         """
         if key is None:
             return await action()
-        cached: Any | None = await self.cache.get_json(
-            self._result_key(endpoint, key, caller)
+        cached = await self.lookup_result(
+            endpoint=endpoint, key=key, caller=caller, model=model
         )
         if cached is not None:
-            return model.model_validate(cached)
-        await self._claim(endpoint=endpoint, key=key, caller=caller)
+            return cached
+        claim_key, owner = await self._claim(
+            endpoint=endpoint, key=key, caller=caller
+        )
         try:
             result = await action()
-        except Exception:
-            # 失败要放开占位，否则调用方拿同一个键永远重试不了
-            await self.cache.delete(self._claim_key(endpoint, key, caller))
+        except asyncio.CancelledError:
+            if self.should_reserve_full_window:
+                await self._retain_unconfirmed(claim_key, owner, endpoint)
             raise
+        except Exception as error:
+            if self._should_retain_failure(error):
+                await self._retain_unconfirmed(claim_key, owner, endpoint)
+            else:
+                await self.cache.delete_if_owner(claim_key, owner)
+            raise
+        await self._remember_success(
+            self._result_key(endpoint, key, caller), endpoint, result
+        )
+        return result
+
+    def _should_retain_failure(self, error: Exception) -> bool:
+        """安全窗内仅释放已经确认未执行的操作。Args: error。"""
+        if isinstance(error, AppError):
+            return error.is_outcome_unknown or (
+                self.should_reserve_full_window
+                and not error.is_execution_rejected
+            )
+        return self.should_reserve_full_window
+
+    async def _remember_success(
+        self, result_key: str, endpoint: str, result: BaseModel
+    ) -> None:
+        """缓存已确认的成功回执。Args: result_key, endpoint, result。"""
         try:
             await self.cache.set_json(
-                self._result_key(endpoint, key, caller),
-                # ⚠ 必须 by_alias：出参带别名时，不按别名存回放出来的就是
-                # 另一套字段名，而调用方只在重试那一次看到它
+                result_key,
                 result.model_dump(mode="json", by_alias=True),
                 ttl_s=RESULT_TTL_S,
             )
-        # ⚠ 动作已经做了：此时回 503 会让调用方重试，占位一过期就做第二遍
         except DependencyUnavailable as error:
             _logger.warning(
                 "idempotency_result_store_failed",
@@ -101,20 +126,42 @@ class IdempotencyStore:
                 endpoint=endpoint,
                 error=error,
             )
-        return result
 
-    async def _claim(self, *, endpoint: str, key: str, caller: UUID) -> None:
-        """占坑。占不到说明同键请求正在处理中，直接冲突而不是并发执行两次。
-
-        Args: endpoint, key, caller。
-        """
-        claimed = await self.cache.set_if_absent(
-            self._claim_key(endpoint, key, caller),
-            _CLAIM_MARKER,
-            ttl_s=CLAIM_TTL_S,
+    async def _retain_unconfirmed(
+        self, claim_key: str, owner: str, endpoint: str
+    ) -> None:
+        """保留本次占位并标明结果未知。Args: claim_key, owner, endpoint。"""
+        try:
+            if await self.cache.renew_if_owner(
+                claim_key,
+                owner,
+                ttl_s=RESULT_TTL_S,
+                replacement=_UNCONFIRMED_MARKER,
+            ):
+                return
+        except DependencyUnavailable:
+            # 核验失败时保留仍在 Redis 的原始占位，首个请求仍报告真实结果。
+            pass
+        _logger.warning(
+            "idempotency_outcome_retention_failed",
+            "未能延长结果未知的幂等占位",
+            endpoint=endpoint,
         )
-        if not claimed:
-            raise Conflict("相同幂等键的请求正在处理中，请稍后重试")
+
+    async def _claim(
+        self, *, endpoint: str, key: str, caller: UUID
+    ) -> tuple[str, str]:
+        """占位，返回缓存键和本次持有者。Args: endpoint, key, caller。"""
+        claim_key = self._claim_key(endpoint, key, caller)
+        owner = str(uuid7())
+        ttl_s = RESULT_TTL_S if self.should_reserve_full_window else CLAIM_TTL_S
+        if await self.cache.set_if_absent(claim_key, owner, ttl_s=ttl_s):
+            return claim_key, owner
+        if await self.cache.get(claim_key) == _UNCONFIRMED_MARKER:
+            raise Conflict("同一幂等键的上次操作结果未确认，请先核对操作结果")
+        if self.should_reserve_full_window:
+            raise Conflict("同一幂等键的操作仍在处理或结果未确认，请先核对")
+        raise Conflict("相同幂等键的请求正在处理中，请稍后重试")
 
     def _result_key(self, endpoint: str, key: str, caller: UUID) -> str:
         return f"{self.namespace}:idem:result:{_digest(endpoint, key, caller)}"

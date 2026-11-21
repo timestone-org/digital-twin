@@ -3,14 +3,15 @@
 ⚠ 不给键就没有幂等保证——端点「支持」它，不是要求调用方必须给。
 """
 
+import asyncio
 import uuid
 from typing import Any
 
 import pytest
 from pydantic import BaseModel
 
-from lib.errors import Conflict, DependencyUnavailable
-from lib.idempotency import IdempotencyStore
+from lib.errors import AppError, Conflict, DependencyUnavailable
+from lib.idempotency import CLAIM_TTL_S, RESULT_TTL_S, IdempotencyStore
 from lib.testing import InMemoryCache
 
 CALLER = uuid.UUID("0192f0c0-0000-7000-8000-0000000000aa")
@@ -196,3 +197,150 @@ async def test_a_failed_result_store_still_reports_the_action_succeeded() -> (
     )
     assert got == Result(value=7)
     assert calls == [1]
+
+
+class _OutcomeUnknown(AppError):
+    """测试替代的未确认写入错误。"""
+
+    is_outcome_unknown = True
+
+
+async def test_an_unconfirmed_result_keeps_the_key_for_the_result_ttl() -> None:
+    cache = InMemoryCache()
+    store = IdempotencyStore(cache=cache, namespace=NAMESPACE)
+    requests: list[int] = []
+
+    async def perform() -> Result:
+        requests.append(1)
+        raise _OutcomeUnknown("下游结果未知")
+
+    with pytest.raises(_OutcomeUnknown, match="下游结果未知"):
+        await store.run_once(
+            endpoint="write",
+            key="k1",
+            caller=CALLER,
+            model=Result,
+            action=perform,
+        )
+    with pytest.raises(Conflict, match="未确认"):
+        await store.run_once(
+            endpoint="write",
+            key="k1",
+            caller=CALLER,
+            model=Result,
+            action=perform,
+        )
+    assert requests == [1]
+    assert list(cache.ttl_s.values()) == [RESULT_TTL_S]
+
+
+class _RetentionUnavailable(InMemoryCache):
+    """保留初始占位，无法延长它的有效期。"""
+
+    async def renew_if_owner(
+        self,
+        key: str,
+        value: str,
+        *,
+        ttl_s: int,
+        replacement: str | None = None,
+    ) -> bool:
+        del key, value, ttl_s, replacement
+        raise DependencyUnavailable("缓存暂时不可用")
+
+
+async def test_failed_retention_still_preserves_the_initial_reservation() -> (
+    None
+):
+    cache = _RetentionUnavailable()
+    store = IdempotencyStore(cache=cache, namespace=NAMESPACE)
+    calls: list[bool] = []
+
+    async def perform() -> Result:
+        calls.append(True)
+        raise _OutcomeUnknown("下游结果未知")
+
+    with pytest.raises(_OutcomeUnknown):
+        await store.run_once(
+            endpoint="write",
+            key="k1",
+            caller=CALLER,
+            model=Result,
+            action=perform,
+        )
+    with pytest.raises(Conflict):
+        await store.run_once(
+            endpoint="write",
+            key="k1",
+            caller=CALLER,
+            model=Result,
+            action=perform,
+        )
+    assert calls == [True]
+
+
+@pytest.mark.parametrize(
+    "should_protect", [False, True], ids=["default", "full"]
+)
+async def test_cancellation_keeps_the_reserved_ttl(
+    should_protect: bool,
+) -> None:
+    cache = InMemoryCache()
+    store = IdempotencyStore(
+        cache=cache,
+        namespace=NAMESPACE,
+        should_reserve_full_window=should_protect,
+    )
+    entered = asyncio.Event()
+
+    async def wait_for_result() -> Result:
+        entered.set()
+        await asyncio.Event().wait()
+        raise AssertionError("取消后不会进入成功路径")
+
+    pending = asyncio.create_task(
+        store.run_once(
+            endpoint="write",
+            key="k1",
+            caller=CALLER,
+            model=Result,
+            action=wait_for_result,
+        )
+    )
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        ttl_s = RESULT_TTL_S if should_protect else CLAIM_TTL_S
+        assert list(cache.ttl_s.values()) == [ttl_s]
+    finally:
+        pending.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await pending
+    assert list(cache.ttl_s.values()) == [ttl_s]
+
+
+async def test_full_window_keeps_an_unexpected_failure() -> None:
+    cache = InMemoryCache()
+    store = IdempotencyStore(
+        cache=cache, namespace=NAMESPACE, should_reserve_full_window=True
+    )
+
+    async def action() -> Result:
+        raise RuntimeError("假设备处理中的意外错误")
+
+    with pytest.raises(RuntimeError, match="意外错误"):
+        await store.run_once(
+            endpoint="write",
+            key="k1",
+            caller=CALLER,
+            model=Result,
+            action=action,
+        )
+    with pytest.raises(Conflict, match="结果未确认"):
+        await store.run_once(
+            endpoint="write",
+            key="k1",
+            caller=CALLER,
+            model=Result,
+            action=action,
+        )
+    assert list(cache.ttl_s.values()) == [RESULT_TTL_S]

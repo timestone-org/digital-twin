@@ -51,3 +51,23 @@ async def test_owner_delete_removes_only_matching_owner_keys(
         await owner_cache.delete(key)
         if related is not None:
             await owner_cache.delete(related)
+
+
+async def test_owner_can_replace_and_renew_only_the_matching_reservation(
+    owner_cache: CacheLike,
+) -> None:
+    key = f"owner-replace-test:{uuid.uuid4()}"
+    try:
+        assert await owner_cache.set_if_absent(key, "owner", ttl_s=30)
+        assert not await owner_cache.renew_if_owner(
+            key, "other", ttl_s=60, replacement="outcome_unknown"
+        )
+        assert await owner_cache.get(key) == "owner"
+        assert await owner_cache.renew_if_owner(
+            key, "owner", ttl_s=60, replacement="outcome_unknown"
+        )
+        assert await owner_cache.get(key) == "outcome_unknown"
+        assert not await owner_cache.delete_if_owner(key, "owner")
+        assert await owner_cache.get(key) == "outcome_unknown"
+    finally:
+        await owner_cache.delete(key)
