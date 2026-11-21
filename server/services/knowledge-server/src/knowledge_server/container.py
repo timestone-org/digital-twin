@@ -24,7 +24,10 @@ from knowledge_server.apps.knowledge.services.docx_preview import (
 )
 from knowledge_server.apps.knowledge.services.embedding import (
     Embedder,
-    build_dynamic_embedder,
+)
+from knowledge_server.apps.knowledge.services.embedding.catalog import (
+    CatalogEmbedder,
+    CatalogTransport,
 )
 from knowledge_server.apps.knowledge.services.llm import (
     Answerer,
@@ -43,7 +46,7 @@ from knowledge_server.apps.knowledge.services.sources import (
     build_sources,
 )
 from knowledge_server.llm_adapters import AdapterDeps, CatalogChatAdapter
-from knowledge_server.llm_purposes import PURPOSE_EMBEDDING, PURPOSE_RERANK
+from knowledge_server.llm_purposes import PURPOSE_RERANK
 from knowledge_server.schema import SchemaFacts
 from knowledge_server.settings import ROLE_WORKER, SERVICE_NAME, Settings
 from lib.cache import Cache
@@ -56,9 +59,7 @@ from llmcore import (
     CatalogCache,
     CatalogClient,
     CodexTokenClient,
-    DynamicEmbeddingAdapter,
     DynamicRerankAdapter,
-    EmbeddingEndpoint,
     ModelChoice,
     ModelDisabled,
     RerankEndpoint,
@@ -245,10 +246,9 @@ def _build_embedder(settings: Settings, catalog: CatalogCache) -> Embedder:
 
     Args: settings, catalog。
     """
-    return build_dynamic_embedder(
-        DynamicEmbeddingAdapter(
-            resolve=lambda: _embedding_endpoint(settings, catalog),
-            refresh=catalog.refresh,
+    return CatalogEmbedder(
+        CatalogTransport(
+            catalog, settings.embedding_endpoint, settings.embedding_timeout_s
         ),
         settings.embedding_max_input_tokens,
     )
@@ -302,19 +302,6 @@ def _build_tokens(settings: Settings) -> CodexTokenClient:
         service_key=settings.edge_service_key.get_secret_value(),
         timeout_s=settings.llm_login_timeout_s,
     )
-
-
-def _embedding_endpoint(
-    settings: Settings, catalog: CatalogCache
-) -> EmbeddingEndpoint | None:
-    """嵌入档此刻该打哪：目录优先，否则退环境变量。
-
-    Args: settings, catalog。
-    """
-    from_catalog = catalog.snapshot().embedding_endpoint(
-        PURPOSE_EMBEDDING, timeout_s=settings.embedding_timeout_s
-    )
-    return from_catalog or settings.embedding_endpoint()
 
 
 def _rerank_endpoint(

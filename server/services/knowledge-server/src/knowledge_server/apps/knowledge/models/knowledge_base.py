@@ -5,7 +5,16 @@
 报错。换嵌入档因此等于整库重嵌，界面上要明说这件事（ADR-0034 决策六）。
 """
 
-from sqlalchemy import CheckConstraint, Integer, String, Text
+import uuid
+
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from knowledge_server.orm import Base
@@ -36,6 +45,16 @@ class KnowledgeBase(UuidPrimaryKeyMixin, TimestampMixin, Base):
         String(EMBEDDING_MODEL_MAX_LENGTH), nullable=True
     )
     dimensions: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    embedding_space_id: Mapped[str | None] = mapped_column(String(64))
+    active_embedding_generation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey(
+            "knowledge.kb_reembeddings.id",
+            name="fk_kb_bases_active_generation",
+            ondelete="SET NULL",
+            use_alter=True,
+        )
+    )
+    content_revision: Mapped[int | None] = mapped_column(BigInteger)
     # 这个库默认走哪个检索策略
     retrieval_strategy: Mapped[str] = mapped_column(
         String(STRATEGY_MAX_LENGTH), nullable=False, server_default="hybrid"

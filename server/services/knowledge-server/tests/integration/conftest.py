@@ -15,6 +15,7 @@ from dataclasses import dataclass, replace
 import httpx
 import pytest
 from fastapi import FastAPI
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncConnection,
     AsyncSession,
@@ -292,12 +293,14 @@ def db_sessions(
 
 
 @pytest.fixture
-def db_dimensions(db_settings: Settings) -> int:
-    """这套库上向量列的维数。
-
-    ⚠ 假向量必须**真的**是这个宽度：列是 `vector(N)`，宽度对不上时 Postgres
-    回一条「expected N dimensions」，而那条错读起来像是嵌入档配错了。
-
-    Args: db_settings。
-    """
-    return db_settings.embedding_dimensions
+async def db_dimensions(db_stack: DbStack) -> int:
+    """读取当前测试库 pgvector 列的实际宽度。Args: db_stack。"""
+    async with db_stack.sessions() as session:
+        width = await session.scalar(text("""
+            SELECT atttypmod FROM pg_attribute
+            WHERE attrelid = 'knowledge.kb_chunk_embeddings'::regclass
+              AND attname = 'embedding' AND NOT attisdropped
+        """))
+    assert isinstance(width, int)
+    assert width > 0
+    return width

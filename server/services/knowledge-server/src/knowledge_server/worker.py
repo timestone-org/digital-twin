@@ -13,6 +13,9 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from knowledge_server.apps.knowledge.services.assembly import index_pair
+from knowledge_server.apps.knowledge.services.embedding.catalog import (
+    close_embedding,
+)
 from knowledge_server.apps.knowledge.services.ingest_pipeline import (
     IngestDeps,
 )
@@ -162,6 +165,7 @@ async def _shutdown(
         # ⚠ 不等在跑的那一个：drain 已经等过一轮了，再等下去只会让编排器的
         # 强杀先到
         runtime.pool.close()
+    await close_embedding(runtime.container.embedder)
     await runtime.container.stream.close()
     await runtime.container.cache.close()
     await runtime.container.database.dispose()
