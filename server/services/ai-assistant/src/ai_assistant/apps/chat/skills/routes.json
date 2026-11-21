@@ -65,7 +65,8 @@
         "/collect/**"
       ],
       "skills": [
-        "knowledge-qa"
+        "knowledge-qa",
+        "collect-inspect"
       ]
     }
   ]

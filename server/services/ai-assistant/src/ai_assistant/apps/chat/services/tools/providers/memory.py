@@ -141,7 +141,7 @@ class MemoryTools:
             "id": found.id,
             "is_searchable": ranked,
             "note": (
-                "记下了，以后每次对话都查得到。"
+                "已保存，可在当前模型的记忆检索中使用。"
                 if ranked
                 else "文本已保存，但当前模型的向量尚未就绪，暂时检索不到；"
                 "嵌入恢复后会在检索时补算。"
