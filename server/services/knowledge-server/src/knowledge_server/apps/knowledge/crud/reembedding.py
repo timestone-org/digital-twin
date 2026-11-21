@@ -37,6 +37,7 @@ _COUNTS = text("""
         SELECT document_id, count(*) AS n FROM knowledge.kb_chunks
         WHERE base_id = :base GROUP BY document_id
     ) rows ON rows.document_id = d.id WHERE d.base_id = :base
+      AND d.source_revision_state IS DISTINCT FROM 'historical'
 """)
 
 
@@ -220,7 +221,10 @@ async def remaining(
     result = await session.execute(
         text("""
         SELECT c.id, c.text FROM knowledge.kb_chunks c
-        WHERE c.base_id=:base AND NOT EXISTS (
+        JOIN knowledge.kb_documents d ON d.id=c.document_id
+        WHERE c.base_id=:base
+          AND d.source_revision_state IS DISTINCT FROM 'historical'
+        AND NOT EXISTS (
           SELECT 1 FROM knowledge.kb_generation_embeddings e
           WHERE e.generation_id=:job AND e.chunk_id=c.id
         ) ORDER BY c.id LIMIT :limit
@@ -317,6 +321,7 @@ async def complete_deferred_documents(
         SET status='ready', embedding_deferred=false, failure_reason='',
             ready_at=now(), updated_at=now()
         WHERE base_id=:base AND status='failed' AND embedding_deferred IS TRUE
+          AND source_revision_state IS DISTINCT FROM 'historical'
     """),
         {"base": base_id},
     )
@@ -331,6 +336,7 @@ async def deferred_are_writable(
         WITH wanted AS MATERIALIZED (
           SELECT id FROM knowledge.kb_documents
           WHERE base_id=:base AND status='failed' AND embedding_deferred IS TRUE
+          AND source_revision_state IS DISTINCT FROM 'historical'
         ), locked AS MATERIALIZED (
           SELECT d.id FROM knowledge.kb_documents d JOIN wanted w ON w.id=d.id
           ORDER BY d.id FOR NO KEY UPDATE OF d SKIP LOCKED

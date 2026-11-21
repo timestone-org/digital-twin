@@ -46,14 +46,18 @@ async def has_legacy_vectors(session: AsyncSession, base: uuid.UUID) -> bool:
     return bool(
         await session.scalar(
             text("""SELECT EXISTS(
-        SELECT FROM knowledge.kb_chunk_embeddings WHERE base_id=:base
+        SELECT FROM knowledge.kb_chunk_embeddings e
+        JOIN knowledge.kb_chunks c ON c.id=e.chunk_id
+        JOIN knowledge.kb_documents d ON d.id=c.document_id
+        WHERE e.base_id=:base
+          AND d.source_revision_state IS DISTINCT FROM 'historical'
     )"""),
             {"base": base},
         )
     )
 
 
-async def write_staged_vectors(
+async def publish(
     session: AsyncSession,
     base: uuid.UUID,
     document: uuid.UUID,

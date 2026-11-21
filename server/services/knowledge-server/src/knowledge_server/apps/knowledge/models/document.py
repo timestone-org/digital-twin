@@ -21,7 +21,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -125,13 +124,4 @@ class KnowledgeDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
         ),
         Index("ix_kb_documents_base_status", "base_id", "status"),
         Index("ix_kb_documents_source", "source_id"),
-        Index(
-            "ix_kb_documents_source_recovery",
-            "updated_at",
-            "id",
-            postgresql_where=text(
-                "status='pending' "
-                "AND source_revision_state IN ('pending','current')"
-            ),
-        ),
     )

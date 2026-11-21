@@ -204,3 +204,10 @@ class SourceIdentityInUse(AppError):
 
     code = 42337
     http_status = 409
+
+
+class HistoricalSourceDocument(AppError):
+    """保留引用的历史原文不能重新解析。"""
+
+    code = 42338
+    http_status = 409

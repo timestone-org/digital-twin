@@ -124,7 +124,7 @@ async def verified(
             )
 
 
-async def publish_document(
+async def publish(
     session: AsyncSession,
     batch: Batch,
     embedder: Embedder,
@@ -147,12 +147,13 @@ async def publish_document(
         doc is None
         or doc.ingest_generation != source.generation
         or doc.status != "embedding"
+        or doc.source_revision_state == "historical"
     ):
         raise EmbeddingUnavailable("文档已删除或已由新的摄取任务接管")
     if actual.space != batch.expected:
         raise EmbeddingUnavailable(space.MISMATCH)
     await _replace_source(session, source, chunks, figures)
-    count = await vectors.write_staged_vectors(
+    count = await vectors.publish(
         session,
         source.base,
         source.document,
@@ -193,6 +194,7 @@ async def defer(
         doc is None
         or doc.ingest_generation != source.generation
         or doc.status != "embedding"
+        or doc.source_revision_state == "historical"
     ):
         return
     count = await session.scalar(

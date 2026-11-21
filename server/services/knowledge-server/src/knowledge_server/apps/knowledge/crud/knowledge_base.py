@@ -177,8 +177,13 @@ async def unverified_vectors(
     rows = await session.scalars(
         text("""
         SELECT ids.base FROM unnest(CAST(:bases AS uuid[])) ids(base)
-        WHERE EXISTS (SELECT FROM knowledge.kb_chunk_embeddings e
-                      WHERE e.base_id=ids.base)
+        WHERE EXISTS (
+            SELECT FROM knowledge.kb_chunk_embeddings e
+            JOIN knowledge.kb_chunks c ON c.id=e.chunk_id
+            JOIN knowledge.kb_documents d ON d.id=c.document_id
+            WHERE e.base_id=ids.base
+              AND coalesce(d.source_revision_state, 'current')='current'
+        )
     """),
         {"bases": bases},
     )

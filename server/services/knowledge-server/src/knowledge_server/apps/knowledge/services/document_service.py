@@ -23,6 +23,7 @@ from knowledge_server.apps.knowledge.errors import (
     DocumentNotFound,
     DuplicateDocument,
     FigureBytesGone,
+    HistoricalSourceDocument,
     ObjectStoreDown,
     RawBytesGone,
     RawItemAbsent,
@@ -391,6 +392,8 @@ async def requeue_document(
     Args: session, stream, group, document_id, is_generation_enabled。
     """
     row = await read_document(session, document_id)
+    if row.source_revision_state == "historical":
+        raise HistoricalSourceDocument("历史原文保留供引用，请重新解析当前版本")
     if not is_generation_enabled and row.ingest_generation is not None:
         # ⚠ 第二次滚动时旧配置副本不能复投新期次；否则会造两个同 generation
         # 的 entry，而 entry 级 owner 保护不了同一文档的两条消息。

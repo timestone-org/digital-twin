@@ -74,7 +74,9 @@ def _filtered(
     base_id: uuid.UUID, status: str
 ) -> Select[tuple[KnowledgeDocument]]:
     query = select(KnowledgeDocument).where(
-        KnowledgeDocument.base_id == base_id
+        KnowledgeDocument.base_id == base_id,
+        func.coalesce(KnowledgeDocument.source_revision_state, "current")
+        == "current",
     )
     return (
         query if not status else query.where(KnowledgeDocument.status == status)
@@ -98,7 +100,11 @@ async def counts_by_base(
         return {}
     rows = await session.execute(
         select(KnowledgeDocument.base_id, func.count())
-        .where(KnowledgeDocument.base_id.in_(base_ids))
+        .where(
+            KnowledgeDocument.base_id.in_(base_ids),
+            func.coalesce(KnowledgeDocument.source_revision_state, "current")
+            == "current",
+        )
         .group_by(KnowledgeDocument.base_id)
     )
     return {base_id: int(count) for base_id, count in rows.all()}
@@ -143,7 +149,17 @@ async def mark_status(
     await content_lock.document(session, document_id)
     done = await session.execute(
         update(KnowledgeDocument)
-        .where(KnowledgeDocument.id == document_id)
+        .where(
+            KnowledgeDocument.id == document_id,
+            KnowledgeDocument.source_revision_state.is_distinct_from(
+                "historical"
+            ),
+        )
+        .where(
+            KnowledgeDocument.source_revision_state.is_distinct_from(
+                "historical"
+            )
+        )
         .values(status=status, failure_reason=reason)
     )
     # cast 的理由 —— DML 的 execute 运行期返回 CursorResult，而 AsyncSession
@@ -166,6 +182,9 @@ async def claim_ingest(
         .where(
             KnowledgeDocument.id == document_id,
             KnowledgeDocument.status.not_in(("ready", "failed")),
+            KnowledgeDocument.source_revision_state.is_distinct_from(
+                "historical"
+            ),
         )
         .values(status="parsing", failure_reason="")
         .returning(KnowledgeDocument)

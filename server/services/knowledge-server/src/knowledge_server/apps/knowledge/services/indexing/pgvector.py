@@ -58,8 +58,11 @@ _SEARCH = text(
     # 理由：同上——schema 名与表名是常量，探测向量与库 id 走绑定参数
     "SELECT chunk_id, "  # noqa: S608
     f'1 - (embedding <=> CAST(:probe AS "{DB_SCHEMA}".vector)) AS score '
-    f'FROM "{DB_SCHEMA}"."{VECTOR_TABLE}" '
-    "WHERE base_id = :base_id "
+    f'FROM "{DB_SCHEMA}"."{VECTOR_TABLE}" e '
+    f"JOIN {DB_SCHEMA}.kb_chunks c ON c.id=e.chunk_id "
+    f"JOIN {DB_SCHEMA}.kb_documents d ON d.id=c.document_id "
+    "WHERE e.base_id = :base_id "
+    "AND coalesce(d.source_revision_state, 'current') = 'current' "
     "AND embedding_model=:tag "
     f'ORDER BY embedding <=> CAST(:probe AS "{DB_SCHEMA}".vector) '
     "LIMIT :limit"
@@ -71,7 +74,9 @@ _GENERATION_SEARCH = text("""
            1 - (e.embedding <=> CAST(:probe AS knowledge.vector)) AS score
     FROM knowledge.kb_generation_embeddings e
     JOIN knowledge.kb_chunks c ON c.id=e.chunk_id
+    JOIN knowledge.kb_documents d ON d.id=c.document_id
     WHERE e.generation_id=:generation AND c.base_id=:base_id
+      AND coalesce(d.source_revision_state, 'current') = 'current'
     ORDER BY e.embedding <=> CAST(:probe AS knowledge.vector)
     LIMIT :limit
 """)
