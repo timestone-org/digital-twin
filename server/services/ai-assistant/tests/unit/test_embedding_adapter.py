@@ -45,6 +45,7 @@ def _settings(**overrides: object) -> Settings:
 @dataclass
 class FakeData:
     embedding: list[float]
+    index: int = 0
 
 
 @dataclass

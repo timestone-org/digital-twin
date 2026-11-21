@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from openai import AsyncOpenAI, OpenAIError
 
+from llmcore.embedding_snapshot import EmbeddingBatch, embedding_identity
 from llmcore.endpoints import EmbeddingEndpoint
 from llmcore.errors import classified
 
@@ -28,6 +29,10 @@ class EmbeddingShapeChanged(RuntimeError):
     """
 
 
+class EmbeddingBatchMismatch(EmbeddingShapeChanged, ValueError):
+    """返回项无法与输入文本一一对应。"""
+
+
 @dataclass(frozen=True)
 class OpenAiCompatEmbeddingAdapter:
     """按配置把文本转成向量的那一路。"""
@@ -38,6 +43,19 @@ class OpenAiCompatEmbeddingAdapter:
     id: str = EMBEDDING_SOURCE
     # 端点定死的这一路造出来就能用；动态那一路才会在运行期变成假
     is_ready: bool = True
+
+    @property
+    def identity(self) -> str:
+        """此静态客户端使用的向量空间。"""
+        return embedding_identity(
+            str(self.client.base_url), self.model, self.dimensions, self.id
+        )
+
+    async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch:
+        """按当次端点返回带标记的结果。Args: texts。"""
+        return EmbeddingBatch(
+            self.identity, self.model, await self.embed(texts)
+        )
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """把一批文本转成向量，顺序与入参一一对应。
@@ -53,15 +71,26 @@ class OpenAiCompatEmbeddingAdapter:
             )
         except OpenAIError as error:
             raise classified(error) from error
-        made = [list(one.embedding) for one in answer.data]
-        wrong = next(
-            (len(one) for one in made if len(one) != self.dimensions), None
-        )
-        if wrong is not None:
-            raise EmbeddingShapeChanged(
-                f"{self.model} 回了 {wrong} 维，配置写的是 {self.dimensions} 维"
-            )
-        return made
+        if len(answer.data) != len(texts):
+            raise EmbeddingBatchMismatch("嵌入结果数量与输入条数不一致")
+        ordered: dict[int, list[float]] = {}
+        for row in answer.data:
+            index = getattr(row, "index", None)
+            if (
+                type(index) is not int
+                or not 0 <= index < len(texts)
+                or index in ordered
+            ):
+                raise EmbeddingBatchMismatch(
+                    "嵌入返回索引缺失、重复或超出输入范围"
+                )
+            if len(row.embedding) != self.dimensions:
+                raise EmbeddingShapeChanged(
+                    f"{self.model} 回了 {len(row.embedding)} 维，"
+                    f"配置写的是 {self.dimensions} 维"
+                )
+            ordered[index] = list(row.embedding)
+        return [ordered[index] for index in range(len(texts))]
 
 
 def build_openai_embedding(

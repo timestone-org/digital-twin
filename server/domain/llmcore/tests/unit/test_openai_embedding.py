@@ -20,6 +20,7 @@ from llmcore.openai_embedding import (
 
 @dataclass(frozen=True)
 class _Row:
+    index: int
     embedding: list[float]
 
 
@@ -35,7 +36,12 @@ class _Embeddings:
 
     async def create(self, *, model: str, input: list[str]) -> _Answer:
         self.seen.append((model, input))
-        return _Answer(data=[_Row(embedding=one) for one in self._rows])
+        return _Answer(
+            data=[
+                _Row(index=index, embedding=one)
+                for index, one in enumerate(self._rows)
+            ]
+        )
 
 
 class _Client:
@@ -143,3 +149,12 @@ async def test_bad_credentials_read_as_rejected() -> None:
     )
     with pytest.raises(ModelRejected):
         await _failing(error).embed(["甲"])
+
+
+@pytest.mark.parametrize("count", [0, 2], ids=["missing", "extra"])
+async def test_batch_cardinality_must_match_the_requested_texts(
+    count: int,
+) -> None:
+    adapter, _ = _adapter([[1.0, 2.0, 3.0]] * count)
+    with pytest.raises(EmbeddingShapeChanged, match="条数"):
+        await adapter.embed(["甲"])
