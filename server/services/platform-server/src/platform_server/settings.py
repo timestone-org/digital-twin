@@ -12,7 +12,7 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from lib.config import (
-    AppSettings,
+    HttpAppSettings,
     PostgresSettings,
     RedisSettings,
     SqlServerSettings,
@@ -53,7 +53,7 @@ MAX_TCP_PORT = 65535
 
 
 class Settings(
-    AppSettings,
+    HttpAppSettings,
     PostgresSettings,
     RedisSettings,
     SqlServerSettings,
