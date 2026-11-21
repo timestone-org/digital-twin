@@ -48,9 +48,11 @@ def fit_columns(
     Args: frame, configured, split_plan。
     """
     if configured:
-        for key in configured:
-            frame.position_of(key)
-        return tuple(configured)
+        return tuple(
+            key
+            for key in configured
+            if frame.column_of(key).role != ROLE_TARGET
+        )
     return non_target_numeric_keys(frame, split_plan)
 
 

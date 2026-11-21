@@ -5,6 +5,7 @@
 """
 
 from collections import defaultdict, deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -242,10 +243,12 @@ def _reachable(edges: dict[str, list[str]], start: str) -> set[str]:
     return seen
 
 
-def topological_order(graph: PipelineGraph) -> list[str]:
+def topological_order(
+    graph: PipelineGraph, *, precedes: Mapping[str, str] | None = None
+) -> list[str]:
     """拓扑序的节点 id。有环时只回环外的那些。
 
-    Args: graph。
+    Args: graph, precedes（另外需要先执行的节点，按消费节点索引）。
     """
     indegree = {node.id: 0 for node in graph.nodes}
     outgoing: dict[str, list[str]] = {node.id: [] for node in graph.nodes}
@@ -253,6 +256,9 @@ def topological_order(graph: PipelineGraph) -> list[str]:
         if edge.from_node in outgoing and edge.to_node in indegree:
             outgoing[edge.from_node].append(edge.to_node)
             indegree[edge.to_node] += 1
+    for node_id, source in (precedes or {}).items():
+        outgoing[source].append(node_id)
+        indegree[node_id] += 1
     queue = deque(sorted(key for key, value in indegree.items() if value == 0))
     order: list[str] = []
     while queue:

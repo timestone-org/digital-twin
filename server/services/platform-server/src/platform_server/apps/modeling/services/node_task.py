@@ -37,6 +37,8 @@ class NodePayload:
     tz_offset_minutes: int
     split_plan: dict[str, Any] | None
     model_artifact: SealedArtifact | None = None
+    #: 测试分支由训练节点回灌的参数。空字典仍代表已拟合。
+    fitted: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -86,6 +88,8 @@ def run_node_payload(payload: NodePayload) -> NodeResult:
                 runtime=sealed.runtime,
             )
         )
+    if payload.fitted is not None:
+        operator.load_fitted(payload.fitted)
     outputs = operator.run(payload.inputs)
     estimator = operator.trained_estimator()
     return NodeResult(
