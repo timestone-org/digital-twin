@@ -336,6 +336,31 @@ describe('字段就地校验', () => {
     expect(wrapper.emitted('create')).toBeUndefined()
   })
 
+  it('编辑实例时可更新名称并清空描述，命名空间保留原值', async () => {
+    const wrapper = await dialog(pool(), instance({ description: '原描述' }))
+    expect(textInputs()[0]?.value).toBe('plant')
+    type(0, ' plant-new ')
+    type(1, '')
+    await flushPromises()
+    bodyButton('保存')?.click()
+    await flushPromises()
+    expect(wrapper.emitted('update')?.[0]?.[0]).toMatchObject({
+      name: 'plant-new',
+      description: '',
+      namespace_uri: 'urn:dt',
+    })
+  })
+
+  it('编辑实例时拦住不合规的名称', async () => {
+    const wrapper = await dialog(pool(), instance())
+    type(0, '4plant')
+    await flushPromises()
+    bodyButton('保存')?.click()
+    await flushPromises()
+    expect(bodyText()).toContain('名称须以字母开头')
+    expect(wrapper.emitted('update')).toBeUndefined()
+  })
+
   it('点创建时把空着的必填项逐个标出来，端点路径也算', async () => {
     const wrapper = await dialog()
     type(2, '')

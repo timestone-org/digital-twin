@@ -122,15 +122,18 @@ describe('树与详情栏的对外面', () => {
     ])
   })
 
-  it('详情栏收 instanceId / node / parentName', () => {
+  it('详情栏接收节点、实例状态与配置操作状态', () => {
     expect(propNames(NodeDetailPanel).sort()).toEqual([
+      'configBusy',
+      'hasPendingRestart',
       'instanceId',
+      'isRunning',
       'node',
       'parentName',
     ])
   })
 
-  it('⚠ 删除只上报，确认与请求都在页面那一层——两处各弹一次确认会重复', () => {
-    expect(emitNames(NodeDetailPanel)).toEqual(['remove'])
+  it('详情栏把编辑与删除交由地址空间处理', () => {
+    expect(emitNames(NodeDetailPanel).sort()).toEqual(['edit', 'remove'])
   })
 })

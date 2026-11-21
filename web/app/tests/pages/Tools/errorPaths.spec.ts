@@ -322,7 +322,7 @@ describe('地址空间的成功路径', () => {
       pending_fields: [],
     })
     const wrapper = mount(NodeExplorer, {
-      props: { instance: instance() },
+      props: { instance: instance({ is_running: true }) },
       attachTo: document.body,
     })
     await flushPromises()

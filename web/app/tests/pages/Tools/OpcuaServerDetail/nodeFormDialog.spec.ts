@@ -6,6 +6,7 @@ import type {
   OpcuaDataType,
   OpcuaNode,
   OpcuaNodeCreateInput,
+  OpcuaNodeUpdateInput,
 } from '@dt/contracts'
 import { DtField, DtInput, DtSelect } from '@dt/ui'
 
@@ -187,5 +188,65 @@ describe('节点初值', () => {
         .find((one) => one.props('label') === '初值')
         ?.props('error'),
     ).toBeUndefined()
+  })
+})
+
+describe('编辑节点配置', () => {
+  const existing: OpcuaNode = {
+    id: 'variable-1',
+    instance_id: 'instance-1',
+    parent_id: 'object-1',
+    node_class: 'variable',
+    identifier: 'Artificial.Temperature',
+    identifier_kind: 'string',
+    node_id: 'ns=2;s=Artificial.Temperature',
+    browse_name: '温度',
+    data_type: 'double',
+    value_rank: -1,
+    array_dimensions: null,
+    access_level: 5,
+    initial_value: 1,
+    description: '传感器',
+    created_at: '2026-10-04T00:00:00Z',
+    updated_at: '2026-10-04T00:00:00Z',
+  }
+
+  it('数据类型、初值、描述、可写位可更新，保留其它权限位与 NodeId', async () => {
+    const wrapper = mount(NodeFormDialog, {
+      props: { modelValue: true, nodes: [], editNode: existing },
+      global: { stubs: { Teleport: true } },
+    })
+    const inputs = wrapper.findAll('input')
+    expect(
+      inputs.some(
+        (input) =>
+          input.element.readOnly && input.element.value === existing.node_id,
+      ),
+    ).toBe(true)
+    expect(wrapper.text()).not.toContain('父节点')
+
+    const fields = wrapper.findAllComponents(DtField)
+    fields
+      .find((one) => one.props('label') === '数据类型')
+      ?.getComponent(DtSelect)
+      .vm.$emit('update:modelValue', 'int32')
+    fields
+      .find((one) => one.props('label') === '访问权限')
+      ?.getComponent(DtSelect)
+      .vm.$emit('update:modelValue', 'writable')
+    await fill(wrapper, '描述', '')
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text() === '保存')
+      ?.trigger('click')
+
+    expect(
+      wrapper.emitted<[OpcuaNode, OpcuaNodeUpdateInput]>('update')?.[0]?.[1],
+    ).toEqual({
+      data_type: 'int32',
+      initial_value: 1,
+      access_level: 7,
+      description: '',
+    })
   })
 })

@@ -20,7 +20,7 @@ export interface InstanceFieldErrors {
   policies?: string
 }
 
-/** 新建时名称的不合规原因；合规给 undefined。@param value 名称 */
+/** 名称的不合规原因。@param value 实例名称 */
 function nameProblem(value: string): string | undefined {
   const name = value.trim()
   if (name === '') return '请填写名称'
@@ -49,14 +49,12 @@ function namespaceProblem(value: string): string | undefined {
 /**
  * 逐个字段给出不合规原因；全合规给空对象。
  * @param fields 表单取值
- * @param isEdit 编辑态不校验名称（名称不可改）
  */
 export function instanceFieldErrors(
   fields: InstanceFormFields,
-  isEdit: boolean,
 ): InstanceFieldErrors {
   const errors: InstanceFieldErrors = {}
-  const name = isEdit ? undefined : nameProblem(fields.name)
+  const name = nameProblem(fields.name)
   const endpointPath = pathProblem(fields.endpointPath)
   const namespaceUri = namespaceProblem(fields.namespaceUri)
   if (name !== undefined) errors.name = name

@@ -10,7 +10,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
-import type { OpcuaNode } from '@dt/contracts'
+import type { OpcuaNode, OpcuaNodeValue } from '@dt/contracts'
 
 import { BizError } from '@/api/client'
 import * as opcuaApi from '@/api/opcua'
@@ -80,17 +80,20 @@ function node(over: Partial<OpcuaNode> = {}): OpcuaNode {
 
 async function panel(
   over: Partial<OpcuaNode> = {},
-  live: Partial<{ value: unknown; is_live: boolean }> = {},
+  live: Partial<OpcuaNodeValue> = {},
+  parentName: string | null = null,
 ) {
+  const currentNode = node(over)
   vi.spyOn(opcuaApi, 'readNodeValue').mockResolvedValue({
     node_id: 'ns=2;s=T1',
     identifier: 'T1',
-    data_type: 'double',
-    value: live.value ?? 21.5,
-    is_live: live.is_live ?? true,
+    data_type: currentNode.data_type,
+    value: 21.5,
+    is_live: true,
+    ...live,
   })
   const wrapper = mount(NodeDetailPanel, {
-    props: { instanceId: 'i1', node: node(over), parentName: null },
+    props: { instanceId: 'i1', node: currentNode, parentName },
   })
   await flushPromises()
   return wrapper
@@ -326,6 +329,35 @@ describe('写值', () => {
     expect(write).toHaveBeenCalledWith('i1', 'n1', true)
   })
 
+  it('新类型待重启生效时，写值按当前运行类型解析', async () => {
+    const write = vi.spyOn(opcuaApi, 'writeNodeValue').mockResolvedValue({
+      node_id: 'ns=2;s=T1',
+      identifier: 'T1',
+      value: 3.5,
+    })
+    const wrapper = await panel(
+      { data_type: 'boolean' },
+      { data_type: 'double' },
+    )
+    await wrapper.find('input[aria-label="要写入的值"]').setValue('3.5')
+    await button(wrapper, '写入')?.trigger('click')
+    await flushPromises()
+    expect(write).toHaveBeenCalledWith('i1', 'n1', 3.5)
+  })
+
+  it('写值确认期间换节点时不下发', async () => {
+    let approve: (value: boolean) => void = () => {}
+    confirmSpy.mockReturnValue(new Promise((resolve) => (approve = resolve)))
+    const write = vi.spyOn(opcuaApi, 'writeNodeValue')
+    const wrapper = await panel()
+    await wrapper.find('input[aria-label="要写入的值"]').setValue('3.5')
+    await button(wrapper, '写入')?.trigger('click')
+    await wrapper.setProps({ node: node({ id: 'n2' }) })
+    approve(true)
+    await flushPromises()
+    expect(write).not.toHaveBeenCalled()
+  })
+
   it('写值失败时把后端的话原样报出来', async () => {
     vi.spyOn(opcuaApi, 'writeNodeValue').mockRejectedValue(
       new BizError(42111, '该节点不可写', 409, 'trace-2'),
@@ -350,10 +382,7 @@ describe('元数据', () => {
   })
 
   it('有父节点时显示父的 BrowseName', async () => {
-    const wrapper = mount(NodeDetailPanel, {
-      props: { instanceId: 'i1', node: node(), parentName: 'Line1' },
-    })
-    await flushPromises()
+    const wrapper = await panel({}, {}, 'Line1')
     expect(wrapper.text()).toContain('Line1')
   })
 

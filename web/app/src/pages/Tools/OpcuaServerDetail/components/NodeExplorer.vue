@@ -1,17 +1,15 @@
 <script setup lang="ts">
 /**
- * @fileoverview 地址空间：左树右详情。
- *
- * 这一屏要让「找到某个点 → 看它现在多少 → 改一个值」这条路尽量短，所以
- * 搜索框、树、详情同屏，选中不跳页；搜索时整棵树临时全展开——搜出来却
- * 藏在折叠的分支里等于没搜。
- *
- * ⚠ 加/删节点是热生效的（实例在跑时立即对上位机可见），改 BrowseName、
- * 数据类型这些要重启——两者的回执分别处理，不能都说「已保存」。
+ * @fileoverview 浏览实例的地址空间，管理节点与配置。
  */
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 
-import type { OpcuaInstance, OpcuaNode } from '@dt/contracts'
+import type {
+  OpcuaInstance,
+  OpcuaNode,
+  OpcuaNodeCreateInput,
+  OpcuaNodeUpdateInput,
+} from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import {
   DtButton,
@@ -19,7 +17,7 @@ import {
   DtEmpty,
   DtIcon,
   DtInput,
-  DtNotice,
+  DtPageState,
   DtResizableLayout,
   DtSpinner,
   useConfirm,
@@ -44,12 +42,12 @@ import NodeFormDialog from './NodeFormDialog.vue'
 import NodeTree from './NodeTree.vue'
 
 const props = defineProps<{ instance: OpcuaInstance }>()
+const emit = defineEmits<{ 'configuration-changed': [] }>()
 
 const toast = useToast()
 const confirm = useConfirm()
 const raced = useRacedFetch()
 
-/** 一次拉多少节点。⚠ 超出这个数的实例，树是不完整的，见下方提示。 */
 const NODE_PAGE_SIZE = 200
 
 const nodes = ref<OpcuaNode[]>([])
@@ -57,8 +55,11 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 const selectedId = ref<string | null>(null)
 const formOpen = ref(false)
+const editing = ref<OpcuaNode | null>(null)
+const mutating = ref(false)
 const keyword = ref('')
 const expanded = ref<ReadonlySet<string>>(new Set())
+let active = true
 
 const instanceId = computed(() => props.instance.id)
 const roots = computed(() => buildNodeTree(nodes.value))
@@ -111,72 +112,158 @@ watch(selectedId, (id) => {
   expanded.value = next
 })
 
-async function loadNodes(): Promise<void> {
-  loading.value = true
-  error.value = null
-  await raced.run(
-    () => opcua.listNodes(instanceId.value, { size: NODE_PAGE_SIZE }),
-    {
-      ok: (page) => {
-        nodes.value = page.items
-        // 默认全展开：地址空间是拿来找东西的，进来先看见全貌
-        expanded.value = new Set(expandableIds(buildNodeTree(page.items)))
-        if (selectedId.value === null && page.items.length > 0) {
-          selectedId.value = page.items[0]?.id ?? null
-        }
-      },
-      fail: (caught) => {
-        error.value = describeError(caught)
-        nodes.value = []
-      },
-      settled: () => (loading.value = false),
-    },
+class AddressSpaceReadError extends Error {}
+
+const CHANGED_TREE_MESSAGE = '节点列表在读取期间发生变化，请刷新后重试。'
+
+/** 逐页读取节点，保持树与父节点选择覆盖完整地址空间。 */
+async function listAddressSpace(
+  id: string,
+  signal: AbortSignal,
+): Promise<OpcuaNode[]> {
+  const first = await opcua.listNodes(
+    id,
+    { page: 1, size: NODE_PAGE_SIZE },
+    signal,
   )
+  const all = new Map(first.items.map((node) => [node.id, node]))
+  const lastPage = Math.ceil(first.total / first.size)
+  if (lastPage > 1 && !first.revision) {
+    throw new AddressSpaceReadError(
+      '服务端需支持同版本分页才能读取完整地址空间。',
+    )
+  }
+  for (let page = 2; page <= lastPage; page += 1) {
+    signal.throwIfAborted()
+    const next = await opcua.listNodes(
+      id,
+      { page, size: NODE_PAGE_SIZE },
+      signal,
+    )
+    if (
+      next.revision !== first.revision ||
+      next.total !== first.total ||
+      next.page !== page ||
+      next.size !== first.size
+    ) {
+      throw new AddressSpaceReadError(CHANGED_TREE_MESSAGE)
+    }
+    for (const node of next.items) all.set(node.id, node)
+  }
+  if (all.size !== first.total)
+    throw new AddressSpaceReadError(CHANGED_TREE_MESSAGE)
+  return [...all.values()]
 }
 
-async function createNode(
-  input: Parameters<typeof opcua.createNode>[1],
+async function loadNodes(preferredId?: string): Promise<void> {
+  loading.value = true
+  error.value = null
+  const id = instanceId.value
+  await raced.run((signal) => listAddressSpace(id, signal), {
+    ok: (items) => {
+      nodes.value = items
+      expanded.value = new Set(expandableIds(buildNodeTree(items)))
+      const wanted = preferredId ?? selectedId.value
+      selectedId.value =
+        items.find((node) => node.id === wanted)?.id ?? items[0]?.id ?? null
+    },
+    fail: (caught) => {
+      error.value =
+        caught instanceof AddressSpaceReadError
+          ? caught.message
+          : describeError(caught)
+      nodes.value = []
+    },
+    settled: () => (loading.value = false),
+  })
+}
+
+/** 保证确认和配置请求在同一时间只执行一次。@param change 节点操作 */
+async function changeConfiguration(
+  change: (id: string) => Promise<void>,
 ): Promise<void> {
+  if (mutating.value) return
+  mutating.value = true
   try {
-    const result = await opcua.createNode(instanceId.value, input)
-    formOpen.value = false
-    // 加节点是热生效的；真有未生效字段时照实说，不许一律报「已创建」
-    toast.success(
-      result.pending_fields.length > 0
-        ? pendingSummary(result.pending_fields)
-        : '节点已创建，上位机当前即可浏览到',
-    )
-    await loadNodes()
-    selectedId.value = result.node.id
+    await change(instanceId.value)
   } catch (caught) {
-    // ⚠ 标识冲突只报错，绝不「帮用户改个名重试」——上位系统的组态
-    // 硬编码着 NodeId，服务端替它换一个，现场所有组态一起废
     toast.error(describeError(caught))
+  } finally {
+    mutating.value = false
   }
+}
+
+function openForm(node: OpcuaNode | null): void {
+  editing.value = node
+  formOpen.value = true
+}
+
+function showSuccess(fields: readonly string[], message: string): void {
+  toast.success(fields.length > 0 ? pendingSummary(fields) : message)
+  emit('configuration-changed')
+}
+
+async function createNode(input: OpcuaNodeCreateInput): Promise<void> {
+  await changeConfiguration(async (id) => {
+    const result = await opcua.createNode(id, input)
+    if (!active || id !== instanceId.value) return
+    formOpen.value = false
+    showSuccess(
+      result.pending_fields,
+      props.instance.is_running
+        ? '节点已创建，上位机当前即可浏览到'
+        : '节点已创建',
+    )
+    await loadNodes(result.node.id)
+  })
+}
+
+async function updateNode(
+  node: OpcuaNode,
+  input: OpcuaNodeUpdateInput,
+): Promise<void> {
+  await changeConfiguration(async (id) => {
+    const result = await opcua.updateNode(id, node.id, input)
+    if (!active || id !== instanceId.value) return
+    formOpen.value = false
+    nodes.value = nodes.value.map((item) =>
+      item.id === node.id ? result.node : item,
+    )
+    showSuccess(result.pending_fields, '节点配置已保存')
+  })
 }
 
 async function removeNode(node: OpcuaNode): Promise<void> {
-  const ok = await confirm.ask({
-    title: '删除节点',
-    message:
-      `删除「${node.browse_name}」会连同它的子节点一起从地址空间移除，` +
-      '正在读它的上位机会立刻读不到。',
-    confirmText: '删除',
-    danger: true,
-  })
-  if (!ok) return
-  try {
-    await opcua.deleteNode(instanceId.value, node.id)
-    if (selectedId.value === node.id) selectedId.value = null
-    toast.success('节点已删除')
+  await changeConfiguration(async (id) => {
+    const ok = await confirm.ask({
+      title: '删除节点',
+      message: `删除「${node.browse_name}」会一并移除它的子节点。删除后，上位机将无法浏览或读取这些节点。`,
+      confirmText: '删除',
+      danger: true,
+    })
+    if (!ok || !active || id !== instanceId.value) return
+    await opcua.deleteNode(id, node.id)
+    if (!active || id !== instanceId.value) return
+    if (selectedId.value === node.id) selectedId.value = node.parent_id
+    showSuccess([], '节点已删除')
     await loadNodes()
-  } catch (caught) {
-    toast.error(describeError(caught))
-  }
+  })
 }
 
-onMounted(() => {
-  void loadNodes()
+watch(
+  instanceId,
+  () => {
+    formOpen.value = false
+    selectedId.value = null
+    nodes.value = []
+    void loadNodes()
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  active = false
+  raced.cancel()
 })
 </script>
 
@@ -202,7 +289,8 @@ onMounted(() => {
                 intent="primary"
                 icon="plus"
                 label="新建节点"
-                @click="formOpen = true"
+                :disabled="mutating || loading"
+                @click="openForm(null)"
               />
             </PermGuard>
           </div>
@@ -236,9 +324,12 @@ onMounted(() => {
           </div>
 
           <DtSpinner v-if="loading" />
-          <DtNotice v-else-if="error" intent="danger" icon="alert-triangle">
-            {{ error }}
-          </DtNotice>
+          <DtPageState
+            v-else-if="error"
+            :error="error"
+            :empty="false"
+            @retry="loadNodes()"
+          />
           <DtEmpty
             v-else-if="nodes.length === 0"
             title="还没有节点"
@@ -260,22 +351,15 @@ onMounted(() => {
             @collapse="setExpanded($event, false)"
           />
 
-          <p class="m-0 mt-2 text-2xs text-text-disabled">
+          <p
+            v-if="!loading && !error"
+            class="m-0 mt-2 text-2xs text-text-disabled"
+          >
             <span v-if="searching"
               >命中 {{ matchCount }} / {{ nodes.length }} 个节点</span
             >
             <span v-else>共 {{ nodes.length }} 个节点</span>
           </p>
-
-          <!-- ⚠ 超出一页的节点其父子关系会被截断，如实说出来，不要让人以为
-           地址空间本来就长这样 -->
-          <DtNotice
-            v-if="nodes.length >= NODE_PAGE_SIZE"
-            intent="warning"
-            icon="alert-triangle"
-          >
-            只加载了前 {{ NODE_PAGE_SIZE }} 个节点，更深的层级可能显示不全。
-          </DtNotice>
         </DtCard>
       </template>
       <template #detail>
@@ -288,13 +372,24 @@ onMounted(() => {
           <NodeDetailPanel
             v-else
             :instance-id="instance.id"
+            :is-running="instance.is_running"
+            :has-pending-restart="instance.has_pending_restart"
             :node="selected"
             :parent-name="parentName"
+            :config-busy="mutating || loading"
+            @edit="openForm"
             @remove="removeNode"
           />
         </DtCard>
       </template>
     </DtResizableLayout>
-    <NodeFormDialog v-model="formOpen" :nodes="nodes" @create="createNode" />
+    <NodeFormDialog
+      v-model="formOpen"
+      :nodes="nodes"
+      :edit-node="editing"
+      :busy="mutating"
+      @create="createNode"
+      @update="updateNode"
+    />
   </div>
 </template>

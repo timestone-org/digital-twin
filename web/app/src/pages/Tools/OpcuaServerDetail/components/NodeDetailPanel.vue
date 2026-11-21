@@ -8,7 +8,7 @@
  * ⚠ 写值改的是**上位系统读到的现场数据**，不是本地草稿，所以要二次确认。
  * 取值来源封在 `useNodeValue`，组件不感知传输方式。
  */
-import { computed, ref, toRef, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, toRef, watch } from 'vue'
 
 import type { OpcuaNode } from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
@@ -40,15 +40,25 @@ import { useNodeValue } from '../scripts/useNodeValue'
 
 const props = defineProps<{
   instanceId: string
+  isRunning?: boolean
+  hasPendingRestart?: boolean
   node: OpcuaNode
   /** 父节点的 BrowseName，根节点为 null。仅用于展示。 */
   parentName: string | null
+  configBusy?: boolean
 }>()
-const emit = defineEmits<{ remove: [node: OpcuaNode] }>()
+const emit = defineEmits<{
+  edit: [node: OpcuaNode]
+  remove: [node: OpcuaNode]
+}>()
 
 const toast = useToast()
 const confirm = useConfirm()
 const draft = ref('')
+let active = true
+onBeforeUnmount(() => {
+  active = false
+})
 
 const live = useNodeValue(
   toRef(props, 'instanceId'),
@@ -62,9 +72,25 @@ watch(
   () => (draft.value = ''),
 )
 
+watch(
+  [
+    () => props.node.id,
+    () => props.node.data_type,
+    () => props.node.initial_value,
+    () => props.isRunning,
+    () => props.hasPendingRestart,
+  ],
+  ([nodeId], [previousId]) => {
+    if (nodeId === previousId) void live.refresh()
+  },
+)
+
 const isVariableLike = computed(() => props.node.node_class !== 'object')
 const canWrite = computed(
   () => isVariableLike.value && isWritable(props.node.access_level),
+)
+const runningType = computed(() =>
+  live.value.value?.is_live === true ? live.value.value.data_type : null,
 )
 
 /** 按原样送出的数据类型：转成数字会改变上位机拿到的类型。 */
@@ -82,7 +108,10 @@ const TEXTUAL_TYPES = new Set<string>([
  * 现场拿到的是与本意相反的值。
  */
 const parsedDraft = computed<ParsedInitialValue>(() => {
-  const type = props.node.data_type
+  const type =
+    live.value.value === null
+      ? props.node.data_type
+      : live.value.value.data_type
   if (type === null || TEXTUAL_TYPES.has(type))
     return { value: draft.value, error: null }
   return parseInitialValue(draft.value, type)
@@ -94,7 +123,10 @@ const parsedDraft = computed<ParsedInitialValue>(() => {
  */
 const canSubmitDraft = computed(
   () =>
+    canWrite.value &&
     draft.value !== '' &&
+    !live.loading.value &&
+    live.value.value?.is_live === true &&
     parsedDraft.value.error === null &&
     parsedDraft.value.value !== undefined,
 )
@@ -108,23 +140,38 @@ async function copyNodeId(): Promise<void> {
   else toast.error('复制不了，请手动选中这段 NodeId')
 }
 
-/** ⚠ 写值有真实副作用，先确认再写。 */
+function isCurrentTarget(instanceId: string, nodeId: string): boolean {
+  return active && props.instanceId === instanceId && props.node.id === nodeId
+}
+
+/** ⚠ 确认期间节点或运行类型变动时作废原操作。 */
 async function write(): Promise<void> {
   if (!canSubmitDraft.value) return
+  const instanceId = props.instanceId
+  const node = props.node
+  const type = runningType.value
   const value = parsedDraft.value.value
   const ok = await confirm.ask({
     title: '写入节点值',
     message:
-      `「${props.node.browse_name}」的值会立刻变成 ${displayValue(value)}，` +
+      `「${node.browse_name}」的值会立刻变成 ${displayValue(value)}，` +
       '正在读它的上位机下一次采样就会拿到新值。',
     confirmText: '写入',
     danger: true,
   })
-  if (!ok) return
+  if (!ok || !isCurrentTarget(instanceId, node.id)) return
+  if (
+    !canSubmitDraft.value ||
+    runningType.value !== type ||
+    parsedDraft.value.value !== value
+  ) {
+    toast.error('节点状态已改变，请重新确认写入')
+    return
+  }
   try {
-    await opcua.writeNodeValue(props.instanceId, props.node.id, value)
+    await opcua.writeNodeValue(instanceId, node.id, value)
     toast.success('值已写入')
-    await live.refresh()
+    if (isCurrentTarget(instanceId, node.id)) await live.refresh()
   } catch (caught) {
     toast.error(describeError(caught))
   }
@@ -134,12 +181,35 @@ async function write(): Promise<void> {
 <template>
   <div class="flex h-full min-h-0 flex-col gap-4 overflow-auto">
     <header class="flex flex-col gap-1.5">
-      <div class="flex flex-wrap items-center gap-2">
-        <h3 class="m-0 text-base font-medium">{{ node.browse_name }}</h3>
-        <DtTag size="sm">{{ classLabel(node.node_class) }}</DtTag>
-        <DtTag v-if="node.data_type" mono size="sm">
-          {{ node.data_type }}
-        </DtTag>
+      <div class="flex flex-wrap items-start justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+          <h3 class="m-0 text-base font-medium">{{ node.browse_name }}</h3>
+          <DtTag size="sm">{{ classLabel(node.node_class) }}</DtTag>
+          <DtTag v-if="node.data_type" mono size="sm">
+            {{ node.data_type }}
+          </DtTag>
+        </div>
+        <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
+          <div class="flex flex-wrap items-center gap-2">
+            <DtButton
+              size="sm"
+              variant="outline"
+              :disabled="configBusy"
+              @click="emit('edit', node)"
+            >
+              编辑配置
+            </DtButton>
+            <DtButton
+              size="sm"
+              variant="ghost"
+              intent="danger"
+              :disabled="configBusy"
+              @click="emit('remove', node)"
+            >
+              删除节点
+            </DtButton>
+          </div>
+        </PermGuard>
       </div>
       <div class="flex items-center gap-1">
         <code class="font-mono text-2xs text-text-disabled">
@@ -164,7 +234,16 @@ async function write(): Promise<void> {
       class="flex flex-col gap-2 rounded-md border border-border-subtle p-3"
     >
       <div class="flex items-center justify-between gap-2">
-        <span class="text-xs text-text-disabled">当前值</span>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-text-disabled">当前值</span>
+          <DtTag
+            v-if="runningType && runningType !== node.data_type"
+            mono
+            size="sm"
+          >
+            {{ runningType }}
+          </DtTag>
+        </div>
         <DtButton
           size="sm"
           variant="ghost"
@@ -253,18 +332,5 @@ async function write(): Promise<void> {
         </div>
       </template>
     </dl>
-
-    <PermGuard :codes="[PERMISSION_CODES.opcuaManage]">
-      <div class="mt-auto pt-2">
-        <DtButton
-          size="sm"
-          variant="ghost"
-          intent="danger"
-          @click="emit('remove', node)"
-        >
-          删除节点
-        </DtButton>
-      </div>
-    </PermGuard>
   </div>
 </template>
