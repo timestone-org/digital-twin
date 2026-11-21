@@ -5,6 +5,7 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig, loadEnv } from 'vite'
 import { parseAiEnabled } from './src/config/aiFeatures'
 import { parseLiveCardLimit } from './src/config/liveCardLimit'
+import { fontAssets } from './vite-plugins/fontAssets'
 import { umoAssets } from './vite-plugins/umoAssets'
 
 /**
@@ -31,7 +32,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: '/ai/',
     worker: { format: 'es' },
-    plugins: [vue(), tailwind(), umoAssets()],
+    plugins: [vue(), tailwind(), umoAssets(), fontAssets()],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

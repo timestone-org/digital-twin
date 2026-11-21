@@ -254,12 +254,13 @@ node --version    # v22.x
 
 ```powershell
 cd C:\DigitalTwin\tools\nginx
-.\nginx.exe -V 2>&1 | Select-String auth_request
-# 期望能匹配到 --with-http_auth_request_module
+.\nginx.exe -V 2>&1 | Select-String -Pattern 'http_(auth_request|gzip_static)_module' -AllMatches |
+  ForEach-Object { $_.Matches.Value }
+# 应显示 http_auth_request_module 和 http_gzip_static_module
 ```
 
 ⚠ **匹配不到就换一个构建。** 全站的闸 1（`auth_request /_auth`）就挂在这个模块上，
-它不在的话 nginx 起不来，报 `unknown directive "auth_request"`。
+字体的预压缩传输由 `gzip_static` 提供。缺少任一模块会使相应的站点指令无法加载。
 
 nginx/Windows 的三条限制，配置里已经据此调过（§8）：
 

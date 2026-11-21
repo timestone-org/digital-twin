@@ -136,6 +136,10 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
     0 "";
     1 "no-store";
   }
+  map "$dt_embed_mode:$status" $dt_font_cache_control {
+    default $dt_embed_cache_control;
+    "~^0:(200|206|304)$" "public, max-age=31536000, immutable";
+  }
   map $dt_embed_mode $dt_embed_referrer_policy {
     0 "";
     1 "no-referrer";
@@ -663,6 +667,20 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
     location = /ai { absolute_redirect off; return 302 /ai/$is_args$args; }
 
     location / { absolute_redirect off; return 302 /ai$request_uri; }
+
+    # 字体名来自 Vite 的内容散列，旧构建缺少 gzip 副本时仍可读取原件。
+    location ~ "^/ai/assets/[^/]+-[A-Za-z0-9_-]{8,64}[.][Tt][Tt][Ff]$" {
+      rewrite ^/ai/(.*)$ /$1 break;
+      root /usr/share/nginx/html;
+      types { }
+      default_type font/ttf;
+      gzip_static on;
+      gzip_vary on;
+      add_header Cache-Control $dt_font_cache_control always;
+      add_header Content-Security-Policy $dt_embed_frame_policy always;
+      add_header Referrer-Policy $dt_embed_referrer_policy always;
+      try_files $uri =404;
+    }
 
     location /ai/ {
       rewrite ^/ai/(.*)$ /$1 break;

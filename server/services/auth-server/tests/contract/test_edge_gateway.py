@@ -26,6 +26,11 @@ AUTH_HEADERS = (
 # 引号串整体跳过：串里的 `#` 与花括号不是注释也不是块边界
 _LEXEME = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"|#[^\n]*|[{}]")
 
+# 正则 location 的引号内可有重复次数 {8,64}。
+_LOCATION = re.compile(
+    r"""\blocation\s+((?:"(?:\\.|[^"\\])*"|'[^']*'|[^{}"'])+?)\s*\{"""
+)
+
 
 @dataclass(frozen=True)
 class Block:
@@ -72,7 +77,7 @@ def load(filename: str) -> tuple[str, list[Block]]:
     blocks: list[Block] = []
     outside: list[str] = []
     cursor = 1
-    for found in re.finditer(r"\blocation\s+([^{]+?)\s*\{", server):
+    for found in _LOCATION.finditer(server):
         if found.start() < cursor:
             continue
         end = _close_of(server, found.end() - 1)
@@ -183,3 +188,39 @@ def test_asset_bytes_have_an_explicit_short_cache_lifetime(
     )
     assert lifetime is not None
     assert int(lifetime.group(1)) <= 3600
+
+
+@pytest.mark.parametrize("filename", CONFIGS)
+def test_immutable_font_responses_are_limited_to_hashed_build_artifacts(
+    filename: str,
+) -> None:
+    """两种部署的一致缓存和协商范围。Args: filename。"""
+    _, blocks = load(filename)
+    fonts = [block for block in blocks if "gzip_static on;" in block.body]
+    assert len(fonts) == 1
+    font = fonts[0]
+    expression = re.fullmatch(r'~\s+"([^"]+)"', font.match)
+    assert expression is not None
+    route = re.compile(expression[1])
+    assert route.fullmatch("/ai/assets/HarmonyOS_Sans_SC_Regular-BuIQe7DE.ttf")
+    assert route.fullmatch("/ai/assets/DS-DIGI-dG6DdXEc.TTF")
+    for path in (
+        "/ai/assets/System.ttf",
+        "/ai/assets",
+        "/ai/login",
+        "/oss/logo.ttf",
+    ):
+        assert not route.fullmatch(path)
+    assert "try_files $uri =404;" in font.body
+    assert "gzip_vary on;" in font.body
+    assert "default_type font/ttf;" in font.body
+    assert (
+        "add_header Cache-Control $dt_font_cache_control always;" in font.body
+    )
+    text = (ROOT / "docker" / "nginx" / filename).read_text(encoding="utf-8")
+    assert re.search(
+        r'map\s+"\$dt_embed_mode:\$status"\s+\$dt_font_cache_control\s*\{\s*'
+        r"default\s+\$dt_embed_cache_control;\s*"
+        r'"~\^0:\(200\|206\|304\)\$"\s+"public, max-age=31536000, immutable";',
+        text,
+    )
