@@ -13,6 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from collectwire import READ_MODE_POLL
+from lib.db import commit_before_receipt
 from lib.logging import get_logger
 from lib.web import Page, PageParams
 from platform_server.apps.collect.crud import (
@@ -296,7 +297,7 @@ async def _commit(session: AsyncSession) -> None:
     时重拉到的还是旧配置，而它不会再拉第二次。
     Args: session。
     """
-    await session.commit()
+    await commit_before_receipt(session)
 
 
 def _encrypted(cipher: CredentialCipher, credential: object) -> str | None:

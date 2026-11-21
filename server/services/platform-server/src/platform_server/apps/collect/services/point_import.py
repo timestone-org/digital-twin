@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.db import commit_before_receipt
 from lib.errors.base import FieldError
 from lib.logging import get_logger
 from platform_server.apps.collect.crud import point_crud
@@ -67,7 +68,7 @@ async def import_points(
     )
     raise_if_rejected(checks, field_of=addresses)
     result = await _save_import(session, payload, checks)
-    await session.commit()
+    await commit_before_receipt(session)
     _logger.info(
         "collect_points_imported",
         "点位已导入",

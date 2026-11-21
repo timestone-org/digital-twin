@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.logging import bind_log_context
@@ -118,12 +119,16 @@ async def get_manage_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(COLLECT_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteContext:
     """增删改数据源与点位用的写上下文。
 
-    Args: container, caller, idempotency_key。
+    Args: container, caller, idempotency_key, session。
     """
-    return _write_context(container, caller, idempotency_key)
+    return replace(
+        _write_context(container, caller, idempotency_key),
+        receipt_session=session,
+    )
 
 
 async def get_operate_context(

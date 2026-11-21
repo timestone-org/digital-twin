@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from platform_server.apps.dashboard.catalog import (
@@ -62,15 +63,17 @@ def get_edit_context(
     validation: Annotated[ValidationContext, Depends(get_validation_context)],
     caller: Annotated[CallerContext, Depends(require(DASHBOARD_EDIT))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteContext:
     """改大屏内容用的写上下文。
 
-    Args: container, validation, caller, idempotency_key。
+    Args: container, validation, caller, idempotency_key, session。
     """
     return WriteContext(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+        receipt_session=session,
         validation=validation,
     )
 
@@ -80,14 +83,16 @@ def get_manage_context(
     validation: Annotated[ValidationContext, Depends(get_validation_context)],
     caller: Annotated[CallerContext, Depends(require(DASHBOARD_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteContext:
     """建删项目与大屏用的写上下文。
 
-    Args: container, validation, caller, idempotency_key。
+    Args: container, validation, caller, idempotency_key, session。
     """
     return WriteContext(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+        receipt_session=session,
         validation=validation,
     )

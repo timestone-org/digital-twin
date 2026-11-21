@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.db import commit_before_receipt
 from lib.errors.base import FieldError
 from lib.logging import get_logger
 from lib.web import Page, PageParams
@@ -240,7 +241,7 @@ async def _commit(session: AsyncSession) -> None:
     时重拉到的还是旧配置，而它不会再拉第二次。
     Args: session。
     """
-    await session.commit()
+    await commit_before_receipt(session)
 
 
 async def _recheck(

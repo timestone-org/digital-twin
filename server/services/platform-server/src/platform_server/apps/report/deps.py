@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.objectstore import ObjectStore
@@ -20,6 +21,7 @@ from platform_server.deps import (
     get_container,
     get_idempotency_key,
     get_object_store,
+    get_session,
     get_stream,
     require,
 )
@@ -55,9 +57,13 @@ def schedule_gate(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(REPORT_SCHEDULE))],
     key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteGate:
     return WriteGate(
-        idempotency=container.idempotency, idempotency_key=key, caller=caller
+        idempotency=container.idempotency,
+        idempotency_key=key,
+        caller=caller,
+        receipt_session=session,
     )
 
 

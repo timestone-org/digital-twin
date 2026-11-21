@@ -53,10 +53,8 @@ __all__ = [
 class Dispatcher:
     """把分片任务交出去的那只手。
 
-    ⚠ **后台任务并不跑在事务提交之后**：FastAPI 把「发响应」放在 yield 依赖的
-    退出栈里面，而 `Response.__call__` 发完响应就地 await 后台任务——于是投递
-    排在 `get_session` 提交之前。批次行因此必须由
-    `ac_startup_service.request_rebuild` 自己提交，本类不承担落盘时机。
+    请求事务在发送响应前完成，后台投递用独立会话读取已提交的批次。
+    `ac_startup_service.request_rebuild` 管理自身的重建事务。
     """
 
     stream: StreamLike

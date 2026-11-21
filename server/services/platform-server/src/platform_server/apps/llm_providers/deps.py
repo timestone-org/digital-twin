@@ -87,15 +87,17 @@ def get_manage_gate(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(LLM_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteGate:
     """写上下文：要 `llm:manage`，带幂等键。
 
-    Args: container, caller, idempotency_key。
+    Args: container, caller, idempotency_key, session。
     """
     return WriteGate(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+        receipt_session=session,
     )
 
 

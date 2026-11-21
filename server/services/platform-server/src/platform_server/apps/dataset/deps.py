@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.utils.timeutils import to_utc
@@ -56,17 +57,19 @@ def get_manage_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(DATASET_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteGate:
     """增删改台账与列用的写上下文。
 
     ⚠ 直接用 `WriteGate` 而不另立子类：台账面不碰现场设备、也不广播采集计划，
     没有第三个协作者要带，空子类只是一层没有内容的间接。
-    Args: container, caller, idempotency_key。
+    Args: container, caller, idempotency_key, session。
     """
     return WriteGate(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+        receipt_session=session,
     )
 
 
@@ -74,17 +77,19 @@ def get_formula_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(FORMULA_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteGate:
     """建改删库公式用的写上下文。
 
     ⚠ 与台账的 `manage` 分成两个码：改一条库公式会同时改掉**所有**引用它的
     台账列，爆炸半径比改单张表的一列大一个量级（§9）。
-    Args: container, caller, idempotency_key。
+    Args: container, caller, idempotency_key, session。
     """
     return WriteGate(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+        receipt_session=session,
     )
 
 
