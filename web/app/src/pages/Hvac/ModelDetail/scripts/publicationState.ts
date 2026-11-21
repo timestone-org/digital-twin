@@ -32,8 +32,9 @@ export function createPublicationState() {
     isSaving: ref(false),
     isPublishing: ref(false),
     error: ref<string | null>(null),
+    readError: ref<string | null>(null),
     publishResult: shallowRef<ModelPublishResult | null>(null),
-    /** 上一次读成功的是哪个模型；同一模型下有未保存改动时不再重读。 */
+    /** 当前确认过发布配置的模型。 */
     loadedFor: ref<string | null>(null),
   }
 }
@@ -45,6 +46,7 @@ export interface PublicationDerived {
   servingKeys: ComputedRef<readonly string[]>
   isDirty: ComputedRef<boolean>
   isFullyBound: ComputedRef<boolean>
+  isPublicationConfirmed: ComputedRef<boolean>
   /** 有没有训练成功过的产物；没有时下发写进去的是「无预测」占位值。 */
   hasArtifact: ComputedRef<boolean>
 }
@@ -53,16 +55,19 @@ export interface PublicationDerived {
  * 从状态与当前模型算出那三个派生量。
  * @param state 页签状态
  * @param model 当前模型；服务组合从它来
+ * @param modelId 当前模型 id
  */
 export function derive(
   state: PublicationState,
   model: () => AcModel | null,
+  modelId: () => string,
 ): PublicationDerived {
   const servingKeys = computed(() =>
     (model()?.serving_sets ?? []).map(formatSet),
   )
   return {
     servingKeys,
+    isPublicationConfirmed: computed(() => state.loadedFor.value === modelId()),
     isDirty: computed(() =>
       isDraftDirty(state.draft.value, state.saved.value, servingKeys.value),
     ),

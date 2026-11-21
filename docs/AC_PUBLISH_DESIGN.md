@@ -313,6 +313,9 @@ POST /internal/v1/opcua/nodes:write
 
 ## 9. 页面
 
+页面收到发布配置，或由服务通过 HTTP 404 和业务码 41625 确认尚未配置后，才启用绑定保存。
+读取失败时保留已显示的绑定，提供重读入口。
+
 模型详情页 `/hvac/models/:id` 新增**「点位绑定」页签**（`AC_MODEL_UI_DESIGN.md` §4
 的形态纪律照用）。
 

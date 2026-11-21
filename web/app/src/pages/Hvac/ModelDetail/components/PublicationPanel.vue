@@ -133,6 +133,19 @@ async function publishNow(): Promise<void> {
     <DtNotice v-if="!state.hasArtifact.value" intent="warning">
       这个模型还没有训练成功过：下发只会写入「无预测」占位值，训练成功前不要打开自动下发。
     </DtNotice>
+    <DtNotice
+      v-if="!state.isPublicationConfirmed.value && !state.isLoading.value"
+      intent="danger"
+    >
+      <div class="flex flex-wrap items-center gap-2">
+        <span>{{
+          state.readError.value ?? '读取发布配置后才能保存绑定。'
+        }}</span>
+        <DtButton size="sm" variant="outline" @click="state.load()">
+          重新读取绑定
+        </DtButton>
+      </div>
+    </DtNotice>
     <DtNotice v-if="state.error.value" intent="danger">
       {{ state.error.value }}
     </DtNotice>
@@ -258,6 +271,7 @@ async function publishNow(): Promise<void> {
       <DtButton
         size="sm"
         :disabled="
+          !state.isPublicationConfirmed.value ||
           !state.isDirty.value ||
           state.isSaving.value ||
           state.draft.value.instanceId === ''
@@ -270,6 +284,7 @@ async function publishNow(): Promise<void> {
         size="sm"
         variant="outline"
         :disabled="
+          !state.isPublicationConfirmed.value ||
           state.saved.value === null ||
           !state.saved.value.is_fully_bound ||
           !state.hasArtifact.value ||
@@ -285,7 +300,11 @@ async function publishNow(): Promise<void> {
         size="sm"
         variant="ghost"
         intent="danger"
-        :disabled="state.saved.value === null || state.isSaving.value"
+        :disabled="
+          !state.isPublicationConfirmed.value ||
+          state.saved.value === null ||
+          state.isSaving.value
+        "
         @click="unbind"
       >
         解绑
