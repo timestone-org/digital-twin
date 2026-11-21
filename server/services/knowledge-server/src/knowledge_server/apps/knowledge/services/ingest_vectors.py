@@ -136,6 +136,7 @@ async def publish_document(
     Args: session, batch, embedder, chunks, figures。
     """
     source = batch.source
+    base, actual = await _authorized(session, source, embedder)
     doc = await session.get(
         KnowledgeDocument,
         source.document,
@@ -148,7 +149,6 @@ async def publish_document(
         or doc.status != "embedding"
     ):
         raise EmbeddingUnavailable("文档已删除或已由新的摄取任务接管")
-    base, actual = await _authorized(session, source, embedder)
     if actual.space != batch.expected:
         raise EmbeddingUnavailable(space.MISMATCH)
     await _replace_source(session, source, chunks, figures)
@@ -182,6 +182,7 @@ async def defer(
     """保留上次可读块，首次解析的原文可用于后续整库重嵌。
 
     Args: session, source, chunks, figures, reason。"""
+    await jobs.lock_base(session, source.base)
     doc = await session.get(
         KnowledgeDocument,
         source.document,

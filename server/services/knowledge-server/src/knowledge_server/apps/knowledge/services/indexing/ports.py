@@ -49,6 +49,8 @@ class VectorQuery:
     base_id: uuid.UUID
     vector: list[float]
     limit: int
+    model_tag: str
+    generation_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)

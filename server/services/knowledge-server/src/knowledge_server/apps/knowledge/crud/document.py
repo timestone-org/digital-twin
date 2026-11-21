@@ -10,6 +10,7 @@ from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.crud import content_lock
 from knowledge_server.apps.knowledge.models import KnowledgeDocument
 
 
@@ -38,6 +39,7 @@ async def insert_document(session: AsyncSession, write: DocumentWrite) -> None:
 
     Args: session, write。
     """
+    await content_lock.base(session, write.base_id)
     session.add(
         KnowledgeDocument(
             id=write.document_id,
@@ -138,6 +140,7 @@ async def mark_status(
 
     Args: session, document_id, status, reason（失败原因，成功时空串）。
     """
+    await content_lock.document(session, document_id)
     done = await session.execute(
         update(KnowledgeDocument)
         .where(KnowledgeDocument.id == document_id)
@@ -157,6 +160,7 @@ async def claim_ingest(
 
     Args: session, document_id, generation（None 只兼容存量 v1 消息）。
     """
+    await content_lock.document(session, document_id)
     statement = (
         update(KnowledgeDocument)
         .where(
@@ -191,6 +195,7 @@ async def mark_deferred(
 
     Args: session, document_id, generation, reason（给人看的一句）。
     """
+    await content_lock.document(session, document_id)
     statement = (
         update(KnowledgeDocument)
         .where(
@@ -217,6 +222,7 @@ async def mark_requeued(
 
     Args: session, document_id, generation。
     """
+    await content_lock.document(session, document_id)
     done = await session.execute(
         update(KnowledgeDocument)
         .where(
@@ -243,6 +249,7 @@ async def mark_ready(
 
     Args: session, document_id, chunk_count, ready_at。
     """
+    await content_lock.document(session, document_id)
     done = await session.execute(
         update(KnowledgeDocument)
         .where(KnowledgeDocument.id == document_id)
@@ -264,6 +271,7 @@ async def delete_document(session: AsyncSession, document_id: uuid.UUID) -> int:
 
     Args: session, document_id。
     """
+    await content_lock.document(session, document_id)
     done = await session.execute(
         delete(KnowledgeDocument).where(KnowledgeDocument.id == document_id)
     )

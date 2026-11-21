@@ -22,7 +22,6 @@ from knowledge_server.apps.knowledge.services.embedding import Embedder
 from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
     KeywordQuery,
-    VectorQuery,
 )
 from knowledge_server.apps.knowledge.services.released import released
 from knowledge_server.apps.knowledge.services.reranking import (
@@ -39,11 +38,15 @@ from knowledge_server.apps.knowledge.services.retrieval.ports import (
     Fused,
     RetrievalRequest,
     RetrievalResult,
+    RetrievalUnavailable,
     fused,
 )
 from knowledge_server.apps.knowledge.services.retrieval.reranked import (
     candidate_width,
     reranked,
+)
+from knowledge_server.apps.knowledge.services.retrieval.vector_search import (
+    retrieve_vectors,
 )
 from lib.logging import get_logger
 from llmcore.errors import ModelRejected, ModelUnavailable
@@ -94,6 +97,7 @@ class Hybrid:
         return RetrievalResult(
             hits=hits,
             strategy=self.name,
+            is_complete=not note,
             note="；".join(one for one in (note, rerank_note) if one),
         )
 
@@ -106,14 +110,25 @@ class Hybrid:
         """
         width = request.limit * LANE_WIDTH
         lanes: dict[str, list[tuple[uuid.UUID, str]]] = {}
-        await released(session)
-        probe, note = await self._probe(request.query)
-        if probe is not None:
-            found = await self.indexes.vector.search(
-                session,
-                VectorQuery(base_id=request.base_id, vector=probe, limit=width),
+        note = ""
+        try:
+            found = await retrieve_vectors(
+                session, request, self.embedder, self.indexes, width
             )
             lanes["vector"] = [(one.chunk_id, one.why) for one in found]
+        except RetrievalUnavailable as error:
+            note = (
+                NO_EMBEDDING_NOTE
+                if not self.embedder.can_embed
+                else error.reason + "，本次仅作关键词检索"
+            )
+        except (ModelUnavailable, ModelRejected) as error:
+            _logger.warning(
+                "knowledge_embedding_skipped",
+                "嵌入未完成，本次仅作关键词检索",
+                code=error.code,
+            )
+            note = EMBEDDING_FAILED_NOTE
         words = await self.indexes.keyword.search(
             session,
             KeywordQuery(
@@ -122,20 +137,3 @@ class Hybrid:
         )
         lanes["keyword"] = [(one.chunk_id, one.why) for one in words]
         return (fused(lanes), note)
-
-    async def _probe(self, query: str) -> tuple[list[float] | None, str]:
-        """把问题嵌一次；嵌不成就回 `None` 与一句「这次少走了向量那一路」。
-
-        Args: query。
-        """
-        if not self.embedder.can_embed:
-            return (None, NO_EMBEDDING_NOTE)
-        try:
-            return ((await self.embedder.embed([query]))[0], "")
-        except (ModelUnavailable, ModelRejected) as error:
-            _logger.warning(
-                "knowledge_embedding_skipped",
-                "嵌入没算成，本次只走关键词那一路",
-                code=error.code,
-            )
-            return (None, EMBEDDING_FAILED_NOTE)

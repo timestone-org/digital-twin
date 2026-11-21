@@ -14,6 +14,7 @@ import pytest
 from integration.embedding_support import CertifiedTestEmbedder
 
 from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.services.embedding.space import tag
 from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
     PgVectorIndex,
@@ -383,9 +384,14 @@ async def test_the_indexed_chunk_comes_back_from_pgvector(
         document_id,
     )
     probe = (await embedder.embed(["出口温度不得高于 65 ℃"]))[0]
+    assert embedder.space is not None
+    model_tag = tag(embedder.space.identity)
     async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
         found = await PgVectorIndex(dimensions=db_dimensions).search(
-            session, VectorQuery(base_id=base_id, vector=probe, limit=5)
+            session,
+            VectorQuery(
+                model_tag=model_tag, base_id=base_id, vector=probe, limit=5
+            ),
         )
     assert found
     assert all(one.score > 0 for one in found)
@@ -413,9 +419,14 @@ async def test_a_reingest_replaces_the_old_vectors(
         document_id,
     )
     probe = (await embedder.embed(["出口温度不得高于 65 ℃"]))[0]
+    assert embedder.space is not None
+    model_tag = tag(embedder.space.identity)
     async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
         found = await PgVectorIndex(dimensions=db_dimensions).search(
-            session, VectorQuery(base_id=base_id, vector=probe, limit=10)
+            session,
+            VectorQuery(
+                model_tag=model_tag, base_id=base_id, vector=probe, limit=10
+            ),
         )
     assert len(found) == await _chunks(db_sessions, base_id)
 

@@ -9,6 +9,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.crud import content_lock
 from knowledge_server.apps.knowledge.models import KnowledgeBase
 
 
@@ -137,6 +138,7 @@ async def delete_base(session: AsyncSession, base_id: uuid.UUID) -> int:
 
     Args: session, base_id。
     """
+    await content_lock.base(session, base_id)
     done = await session.execute(
         delete(KnowledgeBase).where(KnowledgeBase.id == base_id)
     )

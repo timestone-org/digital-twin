@@ -8,6 +8,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.crud import content_lock
 from knowledge_server.apps.knowledge.models import KnowledgeSource
 
 
@@ -37,6 +38,8 @@ async def get_source(
 
     Args: session, source_id。
     """
+    if is_locked:
+        await content_lock.source(session, source_id)
     query = select(KnowledgeSource).where(KnowledgeSource.id == source_id)
     found = await session.execute(
         query.with_for_update() if is_locked else query
@@ -86,6 +89,7 @@ async def delete_source(session: AsyncSession, source_id: uuid.UUID) -> int:
 
     Args: session, source_id。
     """
+    await content_lock.source(session, source_id)
     done = await session.execute(
         delete(KnowledgeSource).where(KnowledgeSource.id == source_id)
     )

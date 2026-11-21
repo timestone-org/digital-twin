@@ -11,9 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.knowledge.services.embedding import Embedder
 from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
-    VectorQuery,
 )
-from knowledge_server.apps.knowledge.services.released import released
 from knowledge_server.apps.knowledge.services.retrieval.hydrate import (
     hydrated,
 )
@@ -21,7 +19,9 @@ from knowledge_server.apps.knowledge.services.retrieval.ports import (
     Fused,
     RetrievalRequest,
     RetrievalResult,
-    RetrievalUnavailable,
+)
+from knowledge_server.apps.knowledge.services.retrieval.vector_search import (
+    retrieve_vectors,
 )
 
 NAIVE = "naive"
@@ -52,17 +52,12 @@ class NaiveVector:
 
         Args: session, request。
         """
-        if not self.embedder.can_embed:
-            raise RetrievalUnavailable("这个库还没建索引：这套部署没接嵌入档")
-        await released(session)
-        probe = (await self.embedder.embed([request.query]))[0]
-        scored = await self.indexes.vector.search(
+        scored = await retrieve_vectors(
             session,
-            VectorQuery(
-                base_id=request.base_id,
-                vector=probe,
-                limit=request.limit * LANE_WIDTH,
-            ),
+            request,
+            self.embedder,
+            self.indexes,
+            request.limit * LANE_WIDTH,
         )
         ranked = [
             Fused(chunk_id=one.chunk_id, score=one.score, reasons=(one.why,))

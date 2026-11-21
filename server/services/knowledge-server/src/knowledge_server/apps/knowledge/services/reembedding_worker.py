@@ -23,6 +23,7 @@ BATCH_TIMEOUT_S = 60.0
 LEASE_SECONDS = 90
 POLL_SECONDS = 1.0
 MOVED = "库内容在重嵌期间发生了变化，请重新预览"
+CONTENDED = "原文行正在被占用或已改变，本次未切换，请重新预览"
 SWITCHED = "目标嵌入空间已改变，请重新预览"
 FAILED_BATCH = "目标模型未能返回本批全部向量，已保留当前索引"
 
@@ -166,6 +167,9 @@ class ReembeddingSteps:
             ):
                 _finish(session, job, MOVED)
             else:
+                if not await jobs.deferred_are_writable(session, base.id):
+                    _finish(session, job, CONTENDED)
+                    return []
                 await jobs.complete_deferred_documents(session, base.id)
                 prior = (
                     base.embedding_space_id,
@@ -204,6 +208,11 @@ class ReembeddingSteps:
                 (item[0], vector)
                 for item, vector in zip(batch, answer.vectors, strict=True)
             ]
+            if not await jobs.chunks_are_referenceable(
+                session, work.base, [chunk for chunk, _ in rows]
+            ):
+                _finish(session, job, CONTENDED)
+                return
             await jobs.put_vectors(session, job.id, rows)
             job.completed_chunks += len(rows)
             job.lease_token = None

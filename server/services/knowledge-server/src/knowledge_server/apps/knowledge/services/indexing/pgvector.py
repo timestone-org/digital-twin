@@ -12,6 +12,9 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.crud.vector_format import (
+    literal,
+)
 from knowledge_server.apps.knowledge.services.indexing.ports import (
     Scored,
     VectorQuery,
@@ -57,20 +60,21 @@ _SEARCH = text(
     f'1 - (embedding <=> CAST(:probe AS "{DB_SCHEMA}".vector)) AS score '
     f'FROM "{DB_SCHEMA}"."{VECTOR_TABLE}" '
     "WHERE base_id = :base_id "
+    "AND embedding_model=:tag "
     f'ORDER BY embedding <=> CAST(:probe AS "{DB_SCHEMA}".vector) '
     "LIMIT :limit"
 )
 
 
-def literal(vector: list[float]) -> str:
-    """一条向量摊成 pgvector 认的字面量。
-
-    ⚠ 不用参数绑定直接传列表：asyncpg 不认识 `vector` 这个类型，绑过去是一条
-    「could not determine data type」。摊成字符串再 CAST 是官方的走法。
-
-    Args: vector。
-    """
-    return f"[{','.join(repr(float(one)) for one in vector)}]"
+_GENERATION_SEARCH = text("""
+    SELECT e.chunk_id,
+           1 - (e.embedding <=> CAST(:probe AS knowledge.vector)) AS score
+    FROM knowledge.kb_generation_embeddings e
+    JOIN knowledge.kb_chunks c ON c.id=e.chunk_id
+    WHERE e.generation_id=:generation AND c.base_id=:base_id
+    ORDER BY e.embedding <=> CAST(:probe AS knowledge.vector)
+    LIMIT :limit
+""")
 
 
 @dataclass(frozen=True)
@@ -113,11 +117,13 @@ class PgVectorIndex:
         if len(query.vector) != self.dimensions:
             raise VectorDimensionMismatch(self._mismatch(len(query.vector)))
         found = await session.execute(
-            _SEARCH,
+            _GENERATION_SEARCH if query.generation_id is not None else _SEARCH,
             {
                 "probe": literal(query.vector),
                 "base_id": query.base_id,
                 "limit": query.limit,
+                "tag": query.model_tag,
+                "generation": query.generation_id,
             },
         )
         scored = [

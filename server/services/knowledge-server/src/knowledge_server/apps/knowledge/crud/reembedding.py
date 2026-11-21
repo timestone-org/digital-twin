@@ -72,7 +72,7 @@ async def lock_base(
     return await session.scalar(
         select(KnowledgeBase)
         .where(KnowledgeBase.id == base_id)
-        .with_for_update()
+        .with_for_update(key_share=True)
         .execution_options(populate_existing=True)
     )
 
@@ -320,3 +320,40 @@ async def complete_deferred_documents(
     """),
         {"base": base_id},
     )
+
+
+async def deferred_are_writable(
+    session: AsyncSession, base_id: uuid.UUID
+) -> bool:
+    """已拿库锁时不等待其他写者占用的文档。Args: session, base_id。"""
+    result = await session.scalar(
+        text("""
+        WITH wanted AS MATERIALIZED (
+          SELECT id FROM knowledge.kb_documents
+          WHERE base_id=:base AND status='failed' AND embedding_deferred IS TRUE
+        ), locked AS MATERIALIZED (
+          SELECT d.id FROM knowledge.kb_documents d JOIN wanted w ON w.id=d.id
+          ORDER BY d.id FOR NO KEY UPDATE OF d SKIP LOCKED
+        )
+        SELECT (SELECT count(*) FROM locked)=(SELECT count(*) FROM wanted)
+    """),
+        {"base": base_id},
+    )
+    return bool(result)
+
+
+async def chunks_are_referenceable(
+    session: AsyncSession, base_id: uuid.UUID, ids: Sequence[uuid.UUID]
+) -> bool:
+    """在插入向量外键前非阻塞核对本批所有块。Args: session, base_id, ids。"""
+    result = await session.scalar(
+        text("""
+        SELECT count(*) FROM (
+          SELECT id FROM knowledge.kb_chunks
+          WHERE base_id=:base AND id=ANY(CAST(:ids AS uuid[]))
+          ORDER BY id FOR KEY SHARE SKIP LOCKED
+        ) locked
+    """),
+        {"base": base_id, "ids": list(ids)},
+    )
+    return result == len(ids)
