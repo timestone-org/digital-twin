@@ -70,6 +70,7 @@ def get_source_context(
     return SourceContext(
         states=SourceStateSource(history=container.history),
         cipher=container.credential_cipher,
+        realtime=container.realtime,
     )
 
 

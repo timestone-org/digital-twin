@@ -16,6 +16,7 @@ from integration.collect_helpers import (
     payload,
     source_body,
 )
+from platform_server.realtime import RealtimeClient
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -229,6 +230,19 @@ async def test_a_page_size_over_the_cap_is_refused(
     assert response.status_code == 400
 
 
+async def test_created_source_topic_is_available_before_201(
+    app_client: httpx.AsyncClient, collect_fakes: CollectFakes
+) -> None:
+    created = await create_source(app_client)
+    assert collect_fakes.topics == [
+        {
+            "topic": f"collect:{created['id']}",
+            "required_code": "collect:view",
+            "publisher": "platform-collect",
+        }
+    ]
+
+
 async def test_creating_a_source_broadcasts_a_plan_change(
     app_client: httpx.AsyncClient, collect_fakes: CollectFakes
 ) -> None:
@@ -320,3 +334,22 @@ async def test_force_delete_takes_the_points_with_the_source(
     assert forced.status_code == 204
     listed = await app_client.get(POINTS, params={"source_id": source["id"]})
     assert payload(listed)["items"] == []
+
+
+async def test_topic_registration_failure_keeps_source_creation_successful(
+    app_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def blocked(
+        _hub: RealtimeClient, *, topic: str, required_code: str, publisher: str
+    ) -> bool:
+        assert topic.startswith("collect:")
+        assert required_code == "collect:view"
+        assert publisher == "platform-collect"
+        return False
+
+    monkeypatch.setattr(RealtimeClient, "declare", blocked)
+    response = await app_client.post(SOURCES, json=source_body())
+    assert response.status_code == 201
+    assert (
+        await app_client.get(response.headers["Location"])
+    ).status_code == 200

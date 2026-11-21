@@ -10,6 +10,7 @@
 import uuid
 
 from platform_server.apps.collect.catalog import COLLECT_VIEW
+from platform_server.realtime import TopicRegistrar
 
 TOPIC_PREFIX = "collect"
 TOPIC_SEPARATOR = ":"
@@ -27,6 +28,17 @@ def topic_of(source_id: uuid.UUID) -> str:
     Args: source_id。
     """
     return f"{TOPIC_PREFIX}{TOPIC_SEPARATOR}{source_id}"
+
+
+async def declare_source(
+    realtime: TopicRegistrar, source_id: uuid.UUID
+) -> bool:
+    """登记已提交数据源的主题。Args: realtime, source_id。"""
+    return await realtime.declare(
+        topic=topic_of(source_id),
+        required_code=TOPIC_REQUIRED_CODE,
+        publisher=PUBLISHER_NAME,
+    )
 
 
 def source_id_of(topic: str) -> uuid.UUID | None:
