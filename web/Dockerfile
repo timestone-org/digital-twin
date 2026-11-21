@@ -4,6 +4,7 @@ FROM node:24.18.0-bookworm-slim AS builder
 WORKDIR /src
 RUN npm install --global pnpm@11.21.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY patches/ patches/
 COPY app/package.json app/package.json
 COPY packages/ packages/
 RUN pnpm install --frozen-lockfile

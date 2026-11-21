@@ -36,3 +36,6 @@ allowBuilds:
   '@parcel/watcher': false
   # Umo 间接依赖 core-js；它的安装脚本只打印兼容性/赞助信息，运行时不依赖该脚本。
   core-js: false
+
+patchedDependencies:
+  '@tiptap/extension-bubble-menu@3.31.3': patches/@tiptap__extension-bubble-menu@3.31.3.patch

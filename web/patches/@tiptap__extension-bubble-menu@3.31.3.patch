@@ -1,0 +1,86 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 000b220b5d0c3a2d6b7f5a6d49f9b91186b08642..b5ce95c12eaf262d2d5bb57a8cec893763478229 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -67,6 +67,7 @@ var BubbleMenuView = class {
+ 		var _options$scrollTarget;
+ 		this.preventHide = false;
+ 		this.isVisible = false;
++		this.isDestroyed = false;
+ 		this.scrollTarget = window;
+ 		this.floatingUIOptions = {
+ 			strategy: "absolute",
+@@ -105,7 +106,9 @@ var BubbleMenuView = class {
+ 			}, this.resizeDelay);
+ 		};
+ 		this.focusHandler = () => {
+-			setTimeout(() => this.update(this.editor.view));
++			if (this.isDestroyed) return;
++			clearTimeout(this.focusTimer);
++			this.focusTimer = window.setTimeout(() => this.update(this.editor.view));
+ 		};
+ 		this.blurHandler = ({ event }) => {
+ 			var _this$element$parentN;
+@@ -231,7 +234,7 @@ var BubbleMenuView = class {
+ 	}
+ 	show() {
+ 		var _ref;
+-		if (this.isVisible) return;
++		if (this.isVisible || this.isDestroyed) return;
+ 		this.element.style.visibility = "visible";
+ 		this.element.style.opacity = "1";
+ 		const appendToElement = typeof this.appendTo === "function" ? this.appendTo() : this.appendTo;
+@@ -270,6 +273,10 @@ var BubbleMenuView = class {
+ 		}
+ 	}
+ 	destroy() {
++		this.isDestroyed = true;
++		clearTimeout(this.focusTimer);
++		clearTimeout(this.updateDebounceTimer);
++		clearTimeout(this.resizeDebounceTimer);
+ 		this.hide();
+ 		this.element.removeEventListener("mousedown", this.mousedownHandler, { capture: true });
+ 		this.view.dom.removeEventListener("dragstart", this.dragstartHandler);
+diff --git a/dist/index.js b/dist/index.js
+index bd044b2e335817b552693e2ed033900684232cb3..4573bc6f45a7b9b3e51bd595125914e6e02d8c89 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -63,6 +63,7 @@ var BubbleMenuView = class {
+ 		var _options$scrollTarget;
+ 		this.preventHide = false;
+ 		this.isVisible = false;
++		this.isDestroyed = false;
+ 		this.scrollTarget = window;
+ 		this.floatingUIOptions = {
+ 			strategy: "absolute",
+@@ -101,7 +102,9 @@ var BubbleMenuView = class {
+ 			}, this.resizeDelay);
+ 		};
+ 		this.focusHandler = () => {
+-			setTimeout(() => this.update(this.editor.view));
++			if (this.isDestroyed) return;
++			clearTimeout(this.focusTimer);
++			this.focusTimer = window.setTimeout(() => this.update(this.editor.view));
+ 		};
+ 		this.blurHandler = ({ event }) => {
+ 			var _this$element$parentN;
+@@ -227,7 +230,7 @@ var BubbleMenuView = class {
+ 	}
+ 	show() {
+ 		var _ref;
+-		if (this.isVisible) return;
++		if (this.isVisible || this.isDestroyed) return;
+ 		this.element.style.visibility = "visible";
+ 		this.element.style.opacity = "1";
+ 		const appendToElement = typeof this.appendTo === "function" ? this.appendTo() : this.appendTo;
+@@ -266,6 +269,10 @@ var BubbleMenuView = class {
+ 		}
+ 	}
+ 	destroy() {
++		this.isDestroyed = true;
++		clearTimeout(this.focusTimer);
++		clearTimeout(this.updateDebounceTimer);
++		clearTimeout(this.resizeDebounceTimer);
+ 		this.hide();
+ 		this.element.removeEventListener("mousedown", this.mousedownHandler, { capture: true });
+ 		this.view.dom.removeEventListener("dragstart", this.dragstartHandler);
