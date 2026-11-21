@@ -45,7 +45,7 @@ platform 与 collector 之间有四条真实的缝。它们不能靠 import 彼�
 |---|---|
 | `plan` | `CollectPlan` / `PlanSource` / `PlanPoint`、采样周期下限、两种读模式 |
 | `commands` | 请求与应答键、`reply_key`、动作与状态字面量、采集侧回的稳定 `reason` |
-| `snapshot` | 快照键前缀、`snapshot_key`、哈希值里的三个字段名 |
+| `snapshot` | 租约键、快照键、快照属主键、哈希值里的三个字段名 |
 | `state` | 运行态表名与列名、三档状态、三档错误分类 |
 | `http` | HTTP 非秘密配置形状、端点与 JSON Pointer 静态校验（平台与采集两侧共用） |
 
@@ -58,3 +58,8 @@ platform 与 collector 之间有四条真实的缝。它们不能靠 import 彼�
 ```bash
 uv run --package collectwire pytest -q --cov=collectwire --cov-branch
 ```
+
+快照仍按点位编码保存三字段读数。每个数据源的快照属主哈希按点位编码记录写入时
+的租约令牌与原始 UTF-8 读数的 SHA-256，与快照一起更新或删除。读侧用当前租约与
+收到的原始读数核对属主。缺令牌或核对失败时，保留读数并标记陈旧。每次成功取得租约
+都使用不同的令牌。
