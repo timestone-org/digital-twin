@@ -201,15 +201,21 @@ function describeStatus(): string {
 
 const status = computed(describeStatus)
 
-// ⚠ 被拒绝时去问一句「这张屏还公开吗」：撤回之后 hub 会断掉已经连着的匿名
-// 连接，而页面若只闷头重连，看的人会以为只是网断了。重取一次快照，撤回了就
-// 落到错误态说出来
+const RECHECK_AFTER_ABNORMAL_CLOSES = 3
+
+// 连续异常关闭也可能是预握手拒绝。由匿名读面确认，临时故障保留旧画面。
 watch(
-  () => channel.isRejected.value,
-  (isRejected) => {
-    if (isRejected) void doc.load(publicToken())
+  [channel.isRejected, channel.publicAbnormalCloses],
+  ([isRejected, abnormalCloses]) => {
+    if (isRejected || abnormalCloses >= RECHECK_AFTER_ABNORMAL_CLOSES)
+      void recheckPublication(publicToken())
   },
 )
+
+async function recheckPublication(token: string): Promise<void> {
+  if ((await doc.recheck(token)) && token === publicToken())
+    closeRealtimeChannel()
+}
 
 onMounted(() => {
   observer = new ResizeObserver((entries) => {
