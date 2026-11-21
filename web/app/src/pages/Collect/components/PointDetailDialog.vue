@@ -27,7 +27,7 @@ const numeric = computed(
     props.point !== null && ['float', 'int'].includes(props.point.data_type),
 )
 const sampleTime = computed(() =>
-  props.sample?.state === 'ok'
+  props.sample !== undefined && props.sample.state !== 'error'
     ? formatTimestampMs(props.sample.timestampMs)
     : '—',
 )

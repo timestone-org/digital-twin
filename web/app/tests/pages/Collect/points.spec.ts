@@ -273,6 +273,29 @@ describe('当前值的四种情形', () => {
     expect(wrapper.text()).not.toContain('未上报')
   })
 
+  it('实时首帧恢复后解除来源列表里的旧离线状态', async () => {
+    const wrapper = await render([point()], {
+      runtime: { ...source().runtime, state: 'offline' },
+    })
+    await push({
+      nodeKey: 's1:outlet_temp',
+      state: 'stale',
+      value: 37.25,
+      timestampMs: 1000,
+      quality: 'uncertain',
+    })
+    expect(wrapper.find('tbody').text()).toContain('陈旧 · 质量存疑')
+    await push({
+      nodeKey: 's1:outlet_temp',
+      state: 'ok',
+      value: 38.5,
+      timestampMs: 2000,
+      quality: 'good',
+    })
+    expect(wrapper.find('tbody').text()).toContain('38.50 ℃')
+    expect(wrapper.find('tbody').text()).not.toContain('陈旧')
+  })
+
   it('很久没变的值照显示，不因为时刻旧就标出来', async () => {
     const wrapper = await render()
     await push({
@@ -989,7 +1012,15 @@ describe('紧凑点位卡片', () => {
     expect(wrapper.find('.point-card__error').text()).toBe('点位读取失败')
     isConnected.value = false
     await flushPromises()
-    expect(wrapper.find('.point-card__status').text()).toBe('陈旧')
+    expect(wrapper.find('.point-card__status').text()).toBe('取不到')
+    await push({
+      nodeKey: 's1:outlet_temp',
+      state: 'ok',
+      value: 37.25,
+      timestampMs: 1000,
+      quality: 'bad',
+    })
+    expect(wrapper.find('.point-card__status').text()).toBe('陈旧 · 质量不可用')
   })
 
   it('勾选与历史开关转发到原有操作', async () => {

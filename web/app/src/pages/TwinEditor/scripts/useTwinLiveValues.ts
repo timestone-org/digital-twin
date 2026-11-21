@@ -109,11 +109,10 @@ function guardEditorReading(
     if (binding.sourceKind === 'opcua' && disconnected)
       return { state: 'error', message: '实时连接已断开，数据可能过期' }
     const slot = read(binding, siblings)
-    if (
-      binding.sourceKind === 'dataset' &&
-      slot.state === 'ok' &&
-      slot.isStale === true
-    )
+    if (slot.state !== 'ok' || slot.isStale !== true) return slot
+    if (binding.sourceKind === 'opcua')
+      return { state: 'error', message: '点位读数陈旧或质量存疑' }
+    if (binding.sourceKind === 'dataset')
       return { state: 'error', message: '台账数据已过期，请检查台账采集与重算' }
     return slot
   }

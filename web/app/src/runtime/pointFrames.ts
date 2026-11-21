@@ -8,7 +8,11 @@
  * ⚠ 认不出来的条目直接丢，但**丢也要丢得干净**——绝不退化成一个 value 为
  * undefined 的 `ok`，那与「现场报了空值」长得一模一样。
  */
-import type { PointQuality, PointSample } from '@dt/contracts'
+import type {
+  PointQuality,
+  PointReadingSample,
+  PointSample,
+} from '@dt/contracts'
 import { POINT_QUALITIES } from '@dt/contracts'
 
 /** 解出来的一条：点位身份 + 读数。 */
@@ -25,6 +29,26 @@ function toQuality(raw: unknown): PointQuality {
   // ⚠ 认不出的质量位按 uncertain：按 good 处理等于替现场担保，按 bad 又会把
   // 一批本来可用的读数全打成不可用
   return POINT_QUALITIES.find((quality) => quality === raw) ?? 'uncertain'
+}
+
+/** 解码带最后值或当前值的读数。 */
+function decodeReading(
+  item: Record<string, unknown>,
+  state: PointReadingSample['state'],
+): PointReadingSample | null {
+  const timestampMs = item.timestampMs
+  if (typeof timestampMs !== 'number' || !Number.isFinite(timestampMs)) {
+    return null
+  }
+  return {
+    state,
+    value: item.value,
+    timestampMs,
+    quality: toQuality(item.quality),
+    ...(state === 'stale' && typeof item.errorMessage === 'string'
+      ? { errorMessage: item.errorMessage }
+      : {}),
+  }
 }
 
 /**
@@ -46,22 +70,9 @@ export function decodePointItem(item: unknown): DecodedPoint | null {
       },
     }
   }
-  // ⚠ 'stale' 也按有值收下：推送方仍可能带着这一档（旧标签页、回滚窗口），
-  // 而整条丢掉会让那个点位在屏上凭空消失，比原样显示它的值糟得多
   if (state !== 'ok' && state !== 'stale') return null
-  const timestampMs = item.timestampMs
-  if (typeof timestampMs !== 'number' || !Number.isFinite(timestampMs)) {
-    return null
-  }
-  return {
-    nodeKey,
-    sample: {
-      state: 'ok',
-      value: item.value,
-      timestampMs,
-      quality: toQuality(item.quality),
-    },
-  }
+  const sample = decodeReading(item, state)
+  return sample === null ? null : { nodeKey, sample }
 }
 
 /**

@@ -8,6 +8,7 @@ import type { BindingPayload, BindingSpec, PointSample } from '@dt/contracts'
 import { computeModuleStatus, computeModuleValues } from '@dt/runtime'
 
 import { createBindingReader } from '@/runtime/bindingReader'
+import { decodePointItem } from '@/runtime/pointFrames'
 
 function binding(over: Partial<BindingPayload> = {}): BindingPayload {
   return {
@@ -46,6 +47,9 @@ function statusOf(
   return computeModuleStatus({
     unboundRequiredCount: 0,
     tally: evaluated.tally,
+    hasStaleData: Object.values(evaluated.slots).some(
+      (slot) => slot.isStale === true,
+    ),
   })
 }
 
@@ -176,6 +180,31 @@ describe('序列类来源', () => {
 
 describe('通到模块状态', () => {
   const realtime = [binding({ sourceKind: 'opcua', nodeKey: 's:1' })]
+
+  it('WebSocket 标为陈旧的读数会让大屏模块显示陈旧', () => {
+    const decoded = decodePointItem({
+      nodeKey: 's:1',
+      state: 'stale',
+      value: 5,
+      timestampMs: 99,
+      quality: 'good',
+    })
+    expect(decoded).not.toBeNull()
+    if (decoded === null) return
+
+    expect(statusOf(realtime, { 's:1': decoded.sample })).toBe('stale')
+  })
+
+  it.each([
+    ['bad', 'error'],
+    ['uncertain', 'stale'],
+  ] as const)('质量为 %s 的读数不显示成正常', (quality, status) => {
+    expect(
+      statusOf(realtime, {
+        's:1': { state: 'ok', value: 5, timestampMs: 99, quality },
+      }),
+    ).toBe(status)
+  })
 
   it('很久没变的快照照样让模块显示成 connected', () => {
     expect(

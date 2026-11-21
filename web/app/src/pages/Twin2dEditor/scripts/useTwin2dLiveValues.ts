@@ -30,13 +30,12 @@ import { createPointSubscribe } from '@/runtime/pointStream'
 /**
  * 实时读数当下的处境。
  *
- * ⚠ 四档必须各说各的，不许合并成「有值 / 没值」：都画成一块空白时，「这张图压根没绑
- * 实时点位」与「绑了但一帧都没来」看着一模一样，而后者几乎总是绑定还没保存或推送方
- * 没在推——把没数据说成没配置，人就永远查不到那一步。
+ * 区分尚未订阅、等待首帧，以及收到读数后的状态。
  */
-export type Twin2dLiveState = 'unwired' | 'idle' | 'waiting' | 'live'
+export type Twin2dLiveState =
+  'unwired' | 'idle' | 'waiting' | 'live' | 'degraded'
 
-/** 四档各自在画中画上说的那一句。 */
+/** 画中画的点位状态提示。 */
 export const TWIN_2D_LIVE_STATE_TEXT: Readonly<
   Record<Twin2dLiveState, string>
 > = {
@@ -44,6 +43,7 @@ export const TWIN_2D_LIVE_STATE_TEXT: Readonly<
   idle: '这张图没有绑实时点位',
   waiting: '已绑点位，还没收到读数：未保存的绑定不会有推送',
   live: '实时读数在推',
+  degraded: '部分点位读数陈旧或不可用',
 }
 
 /** 绑上的实时点位数，与其中已经收到过读数的个数。 */
@@ -120,7 +120,15 @@ export function useTwin2dLiveValues(
     if (dashboardId() === '') return 'unwired'
     const { bound, received } = tally.value
     if (bound === 0) return 'idle'
-    return received === 0 ? 'waiting' : 'live'
+    if (received === 0) return 'waiting'
+    const hasDegradedSample = keys.value.some((key) => {
+      const sample = samples.read(key)
+      return (
+        sample !== undefined &&
+        (sample.state !== 'ok' || sample.quality !== 'good')
+      )
+    })
+    return hasDegradedSample ? 'degraded' : 'live'
   })
 
   return {

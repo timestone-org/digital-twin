@@ -1,9 +1,10 @@
 /**
  * @fileoverview 实时读数在表格里怎么显示。
  *
- * ⚠ 三档必须分得开，合并任意两档都会造出一条假读数：
+ * 读数保留未上报、取不到、陈旧和正常状态：
  * - **没收到过**：采集侧还没上报过它。空着，不写 0、不写「—」以外的任何值。
  * - **取不到**（`error`）：连原因一起摆出来。
+ * - **陈旧**（`stale`）：保留最后读数及其采样时刻，显示陈旧徽标。
  * - **有值**（`ok`）：值与它的**采样时刻**一起摆出来。时刻不许用当前墙钟
  *   顶替——顶替之后每个点位都显示「刚刚」，而那一列正是判断现场还动不动的
  *   唯一依据（runtime-resilience §9）。
@@ -90,11 +91,13 @@ function timeOf(timestampMs: number, nowMs: number): string {
  * @param sample 收到的读数；没收到过就是 undefined
  * @param unit 点位单位
  * @param nowMs 现在，判断采样是不是今天的
+ * @param isStreamStale 实时通道断开或该点缺少心跳
  */
 export function formatSample(
   sample: PointSample | undefined,
   unit: string | null | undefined,
   nowMs: number = Date.now(),
+  isStreamStale = false,
 ): SampleLook {
   if (sample === undefined) return MISSING
   if (sample.state === 'error') {
@@ -107,11 +110,13 @@ export function formatSample(
     }
   }
   const quality = QUALITY_LABELS[sample.quality]
+  const isStale = isStreamStale || sample.state === 'stale'
+  const badge = [isStale ? '陈旧' : '', quality].filter(Boolean).join(' · ')
   return {
     text: textOf(sample.value, unit),
-    badge: quality === '' ? null : quality,
-    intent: quality === '' ? 'success' : 'warning',
+    badge: badge || null,
+    intent: badge ? 'warning' : 'success',
     at: timeOf(sample.timestampMs, nowMs),
-    reason: null,
+    reason: sample.errorMessage ?? null,
   }
 }
