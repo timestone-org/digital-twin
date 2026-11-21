@@ -63,6 +63,7 @@ from platform_server.apps.dataset.services.record_compute import (
 )
 from platform_server.apps.dataset.services.record_history import ComputeScope
 from platform_server.apps.dataset.services.sessions import Sessions
+from platform_server.apps.dataset.services.table_service import require_table
 
 _logger = get_logger("platform.dataset.backfill")
 
@@ -224,6 +225,7 @@ async def _write_batch(
         if not rows:
             return 0
         async with context.sessions.session() as session:
+            await require_table(session, scope.table_id, lock="reference")
             await record_crud.upsert_collected(
                 session,
                 table_id=scope.table_id,

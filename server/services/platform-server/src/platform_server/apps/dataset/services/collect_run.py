@@ -120,6 +120,8 @@ async def collect_table(
     written = await _write_window(
         session, context, table, (columns, points, window)
     )
+    if written is None:
+        return None
     table.last_collected_ts = window.starts[-1]
     return RunOutcome(
         table_code=table.code,
@@ -135,8 +137,8 @@ async def _write_window(
     context: RunContext,
     table: DatasetTable,
     scope: tuple[list[DatasetColumn], list[PointColumn], BucketWindow],
-) -> int:
-    """折算这段桶序列并落库，回写出的行数。
+) -> int | None:
+    """折算这一段已关闭的桶，删除先完成时结束本轮。
 
     ⚠ 打包传 `scope` 不是为了好看：形参上限是 5，而这一步天然要会话、协作者、
     表、列定义、点位列与桶序列六件。
@@ -146,6 +148,11 @@ async def _write_window(
     cells = await aggregate_cells(
         context.history, columns=points, window=window
     )
+    if (
+        await table_crud.get_locked(session, table.id, is_deleting=False)
+        is None
+    ):
+        return None
     rows = collected_rows(table.id, cells, manual_defaults(columns))
     if not rows:
         return 0

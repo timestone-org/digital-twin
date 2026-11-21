@@ -214,6 +214,7 @@ async def _insert(
             table_id=slot.table_id, ts=slot.ts, current_values=values.effective
         ),
     )
+    await require_table(session, slot.table_id, lock="reference")
     record = _new_record(slot, values, actor)
     record.computed_json = computed
     record.compute_error = errors or None
@@ -405,6 +406,7 @@ async def _persist(
             current_values=apply_overrides(draft.values, draft.overrides),
         ),
     )
+    await require_table(session, record.table_id, lock="reference")
     if draft.ts == record.ts:
         record.values_json = draft.values
         record.overrides_json = draft.overrides or None
