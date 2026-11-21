@@ -2,8 +2,8 @@
 
 ⚠ 分档不是分类学练习，是这一层最要紧的判断：
 - 超时、连不上、限流、5xx = 「下游此刻不行」→ 该短路，能省下白等的时间。
-- 401 / 403 / 400 = 「我们自己配错了或发错了」→ **绝不短路**：断路器一开，
-  真正的原因就被盖成「暂时不可用」，而那会让人去查网络。
+- 400 / 401 / 403 / 404 / 422 = 「我们自己配错了或发错了」→ **绝不短路**。
+  断路器一开，真正的原因就被盖成「暂时不可用」，而那会让人去查网络。
 
 ⚠ `message` 面向最终用户，**不带端点地址、不带模型名之外的上游细节、更不带
 密钥**。排查靠日志里的同一个 `trace_id`（api-contract §4.2）。
@@ -19,14 +19,22 @@ from openai import (
     APIStatusError,
     AuthenticationError,
     BadRequestError,
+    NotFoundError,
     OpenAIError,
     PermissionDeniedError,
+    UnprocessableEntityError,
 )
 
 from lib.errors import AppError
 
 # 这几档说明「是我们发错了」，重试与短路都没有意义
-OUR_FAULT = (AuthenticationError, PermissionDeniedError, BadRequestError)
+OUR_FAULT = (
+    AuthenticationError,
+    PermissionDeniedError,
+    BadRequestError,
+    NotFoundError,
+    UnprocessableEntityError,
+)
 
 
 class ModelDisabled(AppError):
@@ -142,7 +150,11 @@ def reason_of(error: OpenAIError) -> str:
             else "模型端点认为请求不合法"
         )
     if isinstance(error, APIStatusError):
-        return f"模型端点回了 {error.status_code}"
+        return (
+            reason_of_status(error.status_code)
+            if isinstance(error, (NotFoundError, UnprocessableEntityError))
+            else f"模型端点回了 {error.status_code}"
+        )
     return "模型端点未响应"
 
 

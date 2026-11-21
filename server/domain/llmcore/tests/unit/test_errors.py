@@ -11,9 +11,11 @@ from openai import (
     APIStatusError,
     AuthenticationError,
     BadRequestError,
+    NotFoundError,
     OpenAIError,
     PermissionDeniedError,
     RateLimitError,
+    UnprocessableEntityError,
 )
 
 import llmcore
@@ -104,14 +106,29 @@ def test_the_reason_is_specific_enough_to_act_on(
     assert expected in reason_of(error)
 
 
-@pytest.mark.parametrize("status", [400, 401, 403, 404, 422])
+@pytest.mark.parametrize(
+    ("status", "error"),
+    [
+        (400, _bad_request()),
+        (401, _auth()),
+        (403, _forbidden()),
+        (404, NotFoundError("", response=_status(404), body=None)),
+        (422, UnprocessableEntityError("", response=_status(422), body=None)),
+    ],
+)
 def test_the_status_bucket_agrees_with_the_exception_bucket(
-    status: int,
+    status: int, error: OpenAIError
 ) -> None:
-    """⚠ 按状态码分档与按异常类型分档必须给同一个答案：漂开的表现是同一个
-    401 在一条链路上短路、在另一条上不短路。"""
-    assert is_our_fault_status(status) is True
-    assert isinstance(classified_status(status), ModelRejected)
+    assert is_our_fault_status(status)
+    assert is_our_fault(error)
+    sdk = classified(error)
+    http = classified_status(status)
+    assert isinstance(sdk, ModelRejected)
+    assert (sdk.code, sdk.is_retryable, sdk.message) == (
+        http.code,
+        http.is_retryable,
+        http.message,
+    )
 
 
 @pytest.mark.parametrize("status", [429, 500, 502, 503])

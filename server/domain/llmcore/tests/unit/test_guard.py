@@ -14,7 +14,14 @@ import httpx
 import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from openai import APIConnectionError, AuthenticationError, BadRequestError
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    AuthenticationError,
+    BadRequestError,
+    NotFoundError,
+    UnprocessableEntityError,
+)
 
 from lib.resilience import CircuitBreaker
 from lib.testing.clock import FrozenClock
@@ -55,9 +62,30 @@ async def test_a_plain_reply_comes_back_as_one_ai_message() -> None:
     assert got.content == "好"
 
 
-async def test_our_own_fault_never_opens_the_breaker() -> None:
-    """⚠ 401 一开断路器，密钥配错就被盖成「暂时不可用」，人会去查网络。"""
-    guarded, breaker = _guarded(ScriptedChat(error=_auth_error()))
+@pytest.mark.parametrize(
+    "error",
+    [
+        _auth_error(),
+        NotFoundError(
+            "",
+            response=httpx.Response(
+                404, request=httpx.Request("POST", "http://x")
+            ),
+            body=None,
+        ),
+        UnprocessableEntityError(
+            "",
+            response=httpx.Response(
+                422, request=httpx.Request("POST", "http://x")
+            ),
+            body=None,
+        ),
+    ],
+)
+async def test_our_own_fault_never_opens_the_breaker(
+    error: APIStatusError,
+) -> None:
+    guarded, breaker = _guarded(ScriptedChat(error=error))
 
     with pytest.raises(ModelRejected):
         await guarded.respond(choice=ModelChoice(), messages=[], tools=())
