@@ -10,6 +10,7 @@
 （ADR-0017）——跨 schema 仍然不共享 ORM 模型，共享的只是名字。
 """
 
+import asyncio
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ from collectwire import (
     SOURCE_COLUMN,
     STATE_COLUMN,
     STATE_COLUMNS,
+    STATE_ONLINE,
     STATE_TABLE_NAME,
     STATE_UNKNOWN,
     STATES,
@@ -34,6 +36,7 @@ from platform_server.apps.collect.errors import HistoryUnavailable
 from timeseries import HISTORY_SCHEMA
 
 _logger = get_logger("platform.collect.state")
+LIVE_STATUS_TIMEOUT_S = 1.0
 
 # schema 前缀在这一侧补：共享口径只给表名，schema 是各服务自己的配置
 STATE_TABLE = f"{HISTORY_SCHEMA}.{STATE_TABLE_NAME}"
@@ -100,6 +103,27 @@ class SourceStateSource:
             )
             return {}
         return decode_rows(rows)
+
+    async def online_ids(
+        self, source_ids: Sequence[uuid.UUID]
+    ) -> frozenset[uuid.UUID]:
+        """为实时发布读一批已确认在线的数据源。Args: source_ids。"""
+        try:
+            async with asyncio.timeout(LIVE_STATUS_TIMEOUT_S):
+                states = await self.read(source_ids, is_strict=True)
+        except (HistoryUnavailable, OSError) as error:
+            _logger.warning(
+                "collect_live_state_unavailable",
+                "读取采集运行态失败，本批快照按陈旧推送",
+                sources=len(source_ids),
+                error_type=type(error).__name__,
+            )
+            return frozenset()
+        return frozenset(
+            source_id
+            for source_id, runtime in states.items()
+            if runtime.state == STATE_ONLINE
+        )
 
 
 def decode_rows(

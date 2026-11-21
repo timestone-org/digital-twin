@@ -36,6 +36,7 @@ from platform_server.apps.collect.services.point_frames import (
 from platform_server.apps.collect.services.snapshot_source import (
     SnapshotSource,
 )
+from platform_server.apps.collect.services.state_source import SourceStateSource
 from platform_server.apps.collect.services.topics import topic_of
 from platform_server.apps.collect.services.watchers import SubscriptionWatchers
 from platform_server.realtime import FramePublisher
@@ -87,6 +88,7 @@ class SourceLivePublisher:
     snapshots: SnapshotSource
     realtime: FramePublisher
     options: LiveOptions
+    states: SourceStateSource
     ticker: Ticker = time.monotonic
     _watched: dict[uuid.UUID, frozenset[uuid.UUID]] = field(
         default_factory=dict[uuid.UUID, frozenset[uuid.UUID]], init=False
@@ -103,6 +105,7 @@ class SourceLivePublisher:
         """
         watched = await self.watchers.active()
         self._forget_gone(watched)
+        online_sources = await self.states.online_ids(tuple(watched))
         total = 0
         for source_id, subscriptions in watched.items():
             # ⚠ 差集按订阅行 id 算：同一条连接退订又重订（SPA 切页面）也是
@@ -110,7 +113,11 @@ class SourceLivePublisher:
             is_new = bool(
                 subscriptions - self._watched.get(source_id, frozenset())
             )
-            total += await self._publish_one(source_id, is_new=is_new)
+            total += await self._publish_one(
+                source_id,
+                online_sources.intersection((source_id,)),
+                is_new=is_new,
+            )
             self._watched[source_id] = subscriptions
         return LiveReport(sources=len(watched), items=total)
 
@@ -119,10 +126,16 @@ class SourceLivePublisher:
         self._watched.clear()
         self._cache.clear()
 
-    async def _publish_one(self, source_id: uuid.UUID, *, is_new: bool) -> int:
+    async def _publish_one(
+        self,
+        source_id: uuid.UUID,
+        online_sources: frozenset[uuid.UUID],
+        *,
+        is_new: bool,
+    ) -> int:
         """推一个数据源，返回真正推出去的条目数。
 
-        Args: source_id, is_new。
+        Args: source_id, online_sources, is_new。
         """
         entry, is_changed = await self._plan_of(source_id)
         if entry is None or not entry.plan.node_keys:
@@ -133,7 +146,7 @@ class SourceLivePublisher:
             or is_changed
             or self.ticker() - entry.last_full_at_s >= LIVE_HEARTBEAT_S
         )
-        items = await self._items_of(source_id, node_keys)
+        items = await self._items_of(source_id, node_keys, online_sources)
         fresh = changed_items(items, entry.sent)
         warn_non_finite(fresh, topic=topic_of(source_id))
         outgoing = items if is_full else fresh
@@ -148,28 +161,34 @@ class SourceLivePublisher:
         return sent
 
     async def _items_of(
-        self, source_id: uuid.UUID, node_keys: tuple[str, ...]
+        self,
+        source_id: uuid.UUID,
+        node_keys: tuple[str, ...],
+        online_sources: frozenset[uuid.UUID],
     ) -> list[Item]:
         """分批读取全部点位，读取失败只标记对应批次。
 
-        Args: source_id, node_keys。
+        Args: source_id, node_keys, online_sources。
         """
         items: list[Item] = []
         size = self.options.batch_points
         for start in range(0, len(node_keys), size):
             items.extend(
                 await self._read_items(
-                    source_id, node_keys[start : start + size]
+                    source_id, node_keys[start : start + size], online_sources
                 )
             )
         return items
 
     async def _read_items(
-        self, source_id: uuid.UUID, node_keys: tuple[str, ...]
+        self,
+        source_id: uuid.UUID,
+        node_keys: tuple[str, ...],
+        online_sources: frozenset[uuid.UUID],
     ) -> list[Item]:
         """读取一批快照并组装条目，读不到时整批标为取不到。
 
-        Args: source_id, node_keys。
+        Args: source_id, node_keys, online_sources。
         """
         try:
             readings = await self.snapshots.read(node_keys)
@@ -181,7 +200,7 @@ class SourceLivePublisher:
                 points=len(node_keys),
             )
             return error_items(node_keys, reason=UNAVAILABLE_REASON)
-        return build_items(node_keys, readings)
+        return build_items(node_keys, readings, online_sources)
 
     async def _send(
         self, source_id: uuid.UUID, entry: _Cached, outgoing: list[Item]

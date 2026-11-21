@@ -6,8 +6,8 @@
    空值或零值冒充读数。
 2. **值的新旧不由这里判**：`timestampMs` 照实是**采样时刻**，不用当前墙钟
    顶替，客户端要多新自己看。⚠ 不许按「时刻比现在旧多久」判陈旧：订阅只在
-   值变化时回调，一个一天变一次的点位每天有 23 小时会被这种判法误标，而它
-   的值一直是对的。采集停了则快照键跟着到期，落进第 1 条。
+   值变化时回调，一个一天变一次的点位每天有 23 小时会被这种判法误标。未确认
+   数据源在线时，有值则按陈旧推送，快照到期后落进第 1 条。
 3. **条目自描述、按键合并**：全量帧与增量帧是同一种形状，客户端不必区分——
    前者只是恰好带上了整份点位清单。
 
@@ -17,6 +17,7 @@
 """
 
 import math
+import uuid
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, cast
 
@@ -29,7 +30,12 @@ _logger = get_logger("platform.collect.frames")
 # 没有任何提示（api-contract §4.2）
 POINT_STATE_OK = "ok"
 POINT_STATE_ERROR = "error"
-POINT_STATES: tuple[str, ...] = (POINT_STATE_ERROR, POINT_STATE_OK)
+POINT_STATE_STALE = "stale"
+POINT_STATES: tuple[str, ...] = (
+    POINT_STATE_ERROR,
+    POINT_STATE_OK,
+    POINT_STATE_STALE,
+)
 
 # 键名与前端 `@dt/contracts` 的 `PointSample` 同口径（camelCase）
 KEY_NODE = "nodeKey"
@@ -44,19 +50,29 @@ KEY_ERROR = "errorMessage"
 MISSING_REASON = "点位暂无快照值，采集侧还没上报过它"
 UNAVAILABLE_REASON = "点位快照暂时读不到"
 NON_FINITE_REASON = "点位读数不是有限数，无法展示"
+STALE_REASON = "采集数据源未确认在线，显示最后读数"
+PREVIOUS_OWNER_REASON = "当前采集副本尚未上报，显示最后读数"
 
 Item = dict[str, Any]
 
 
 def build_items(
-    node_keys: Sequence[str], readings: Mapping[str, PointReading]
+    node_keys: Sequence[str],
+    readings: Mapping[str, PointReading],
+    online_sources: frozenset[uuid.UUID],
 ) -> list[Item]:
     """按点位清单组装一批条目，顺序沿用清单。
 
-    Args: node_keys, readings。
+    Args: node_keys, readings, online_sources。
     """
+    online = {str(source_id) for source_id in online_sources}
     return [
-        _item_of(node_key, readings.get(node_key)) for node_key in node_keys
+        _item_of(
+            node_key,
+            readings.get(node_key),
+            is_online=node_key.partition(":")[0] in online,
+        )
+        for node_key in node_keys
     ]
 
 
@@ -116,24 +132,30 @@ def index_by_node_key(items: Iterable[Item]) -> dict[str, Item]:
     return {_node_key_of(item): item for item in items}
 
 
-def _item_of(node_key: str, reading: PointReading | None) -> Item:
+def _item_of(
+    node_key: str, reading: PointReading | None, *, is_online: bool
+) -> Item:
     """一个点位的一条条目。
 
-    Args: node_key, reading。
+    Args: node_key, reading, is_online。
     """
     if reading is None:
         return _error_item(node_key, reason=MISSING_REASON)
     if not _is_finite(reading.value):
         return _error_item(node_key, reason=NON_FINITE_REASON)
-    return {
+    is_current = is_online and reading.is_current
+    item = {
         KEY_NODE: node_key,
-        KEY_STATE: POINT_STATE_OK,
+        KEY_STATE: POINT_STATE_OK if is_current else POINT_STATE_STALE,
         KEY_VALUE: reading.value,
         # ⚠ 采样时刻，不是本拍的墙钟：换成墙钟，界面上「更新于」这一列就会
         # 对每一个点位都显示「刚刚」，而它本来是判断现场还动不动的唯一依据
         KEY_TIMESTAMP_MS: reading.timestamp_ms,
         KEY_QUALITY: reading.quality,
     }
+    if not is_current:
+        item[KEY_ERROR] = PREVIOUS_OWNER_REASON if is_online else STALE_REASON
+    return item
 
 
 def _is_finite(value: object) -> bool:

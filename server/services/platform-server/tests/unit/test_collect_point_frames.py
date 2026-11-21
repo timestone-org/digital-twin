@@ -7,6 +7,8 @@
 """
 
 import json
+import uuid
+from functools import partial
 
 import pytest
 
@@ -22,12 +24,16 @@ from platform_server.apps.collect.services.point_frames import (
     NON_FINITE_REASON,
     POINT_STATE_ERROR,
     POINT_STATE_OK,
+    POINT_STATE_STALE,
     POINT_STATES,
-    build_items,
+    STALE_REASON,
     changed_items,
     error_items,
     index_by_node_key,
     shards,
+)
+from platform_server.apps.collect.services.point_frames import (
+    build_items as build_point_items,
 )
 
 SOURCE = "0198f0c0-0000-7000-8000-00000000abcd"
@@ -36,6 +42,9 @@ INLET = f"{SOURCE}:inlet_temp"
 NOW_MS = 1_760_000_000_000
 # 一天。用来验「很久没变的值照样是正常值」
 A_DAY_MS = 86_400_000
+build_items = partial(
+    build_point_items, online_sources=frozenset({uuid.UUID(SOURCE)})
+)
 
 
 def reading(
@@ -83,6 +92,24 @@ def test_a_point_without_a_snapshot_says_so_and_carries_no_value() -> None:
             KEY_NODE: OUTLET,
             KEY_STATE: POINT_STATE_ERROR,
             KEY_ERROR: MISSING_REASON,
+        }
+    ]
+
+
+def test_an_unconfirmed_source_keeps_the_last_value_and_quality_as_stale() -> (
+    None
+):
+    items = build_point_items(
+        [OUTLET], {OUTLET: reading(21.5, quality="uncertain")}, frozenset()
+    )
+    assert items == [
+        {
+            KEY_NODE: OUTLET,
+            KEY_STATE: POINT_STATE_STALE,
+            KEY_VALUE: 21.5,
+            KEY_TIMESTAMP_MS: NOW_MS,
+            KEY_QUALITY: "uncertain",
+            KEY_ERROR: STALE_REASON,
         }
     ]
 
@@ -190,5 +217,9 @@ def test_a_batch_within_the_ceiling_stays_in_one_piece() -> None:
 
 def test_the_states_are_a_closed_set_of_strings() -> None:
     # ⚠ 数字枚举在两个仓之间对不上号时没有任何提示（api-contract §4.2）
-    assert set(POINT_STATES) == {POINT_STATE_ERROR, POINT_STATE_OK}
+    assert set(POINT_STATES) == {
+        POINT_STATE_ERROR,
+        POINT_STATE_OK,
+        POINT_STATE_STALE,
+    }
     assert all(isinstance(state, str) for state in POINT_STATES)

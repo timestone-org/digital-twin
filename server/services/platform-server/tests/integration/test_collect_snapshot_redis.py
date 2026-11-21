@@ -16,8 +16,12 @@ from collectwire import (
     FIELD_TIMESTAMP_MS,
     FIELD_VALUE,
     snapshot_key,
+    snapshot_owner_stamp,
+    snapshot_owners_key,
 )
 from lib.errors import DependencyUnavailable
+from platform_server.apps.collect.services import snapshot_source
+from platform_server.apps.collect.services.point_frames import build_items
 from platform_server.apps.collect.services.snapshot_source import (
     RedisSnapshotSource,
 )
@@ -138,3 +142,134 @@ async def test_an_unreachable_redis_fails_loudly_instead_of_reading_empty(
         assert await source.ping() is False
     finally:
         await source.close()
+
+
+async def _stamp(
+    client: Redis, source_id: uuid.UUID, code: str, token: str
+) -> None:
+    """记录原始字段的属主证明。Args: client, source_id, code, token。"""
+    payload = await client.hget(snapshot_key(source_id), code)
+    assert isinstance(payload, str)
+    await client.hset(
+        snapshot_owners_key(source_id),
+        code,
+        snapshot_owner_stamp(token, payload),
+    )
+
+
+async def test_only_the_current_owner_makes_a_snapshot_fresh(
+    snapshots: RedisSnapshotSource,
+    redis_url: str,
+    source_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lease_key = f"collect:test:leader:{uuid.uuid4()}"
+    monkeypatch.setattr(
+        snapshot_source, "COLLECT_LEASE_KEY", lease_key, raising=False
+    )
+    await seed(redis_url, source_id, {"hot": 21.5, "cold": 18.0})
+    client = Redis.from_url(redis_url, decode_responses=True)
+    keys = [compose_node_key(source_id, code) for code in ("hot", "cold")]
+    owners_key = snapshot_owners_key(source_id)
+    try:
+        await _stamp(client, source_id, "hot", "old")
+        await client.set(lease_key, "old", ex=60)
+        initial = build_items(
+            keys, await snapshots.read(keys), frozenset({source_id})
+        )
+        await client.delete(lease_key)
+        expired = build_items(
+            keys, await snapshots.read(keys), frozenset({source_id})
+        )
+        await client.set(lease_key, "next", ex=60)
+        takeover = build_items(
+            keys, await snapshots.read(keys), frozenset({source_id})
+        )
+        await _stamp(client, source_id, "cold", "next")
+        sampled = build_items(
+            keys, await snapshots.read(keys), frozenset({source_id})
+        )
+        assert [
+            [item["state"] for item in frame]
+            for frame in (initial, expired, takeover, sampled)
+        ] == [
+            ["ok", "stale"],
+            ["stale", "stale"],
+            ["stale", "stale"],
+            ["stale", "ok"],
+        ]
+        assert [item["value"] for item in sampled] == [21.5, 18.0]
+    finally:
+        await client.delete(lease_key, owners_key, snapshot_key(source_id))
+        await client.aclose()
+
+
+async def test_legacy_writer_values_remain_visible_but_stale_on_rollback(
+    snapshots: RedisSnapshotSource,
+    redis_url: str,
+    source_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lease_key = f"collect:test:leader:{uuid.uuid4()}"
+    monkeypatch.setattr(snapshot_source, "COLLECT_LEASE_KEY", lease_key)
+    owner_key = snapshot_owners_key(source_id)
+    raw = Redis.from_url(redis_url, decode_responses=True)
+    keys = [
+        compose_node_key(source_id, code)
+        for code in ("temperature", "pressure")
+    ]
+    try:
+        await raw.hset(owner_key, "temperature", "previous-fenced-writer")
+        await raw.set(lease_key, "legacy-writer", ex=60)
+        await seed(redis_url, source_id, {"temperature": 28.5, "pressure": 12})
+        current = await snapshots.read(keys)
+        items = build_items(keys, current, frozenset({source_id}))
+        assert [(item["state"], item["value"]) for item in items] == [
+            ("stale", 28.5),
+            ("stale", 12),
+        ]
+        assert all(item["timestampMs"] == NOW_MS for item in items)
+    finally:
+        await raw.delete(lease_key, owner_key, snapshot_key(source_id))
+        await raw.aclose()
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [{"value": 23.0}, {"ts_ms": NOW_MS + 1}, {"quality": "uncertain"}],
+    ids=["value", "same-value-new-time", "same-value-new-quality"],
+)
+async def test_late_legacy_write_cannot_reuse_the_current_owner_stamp(
+    snapshots: RedisSnapshotSource,
+    redis_url: str,
+    source_id: uuid.UUID,
+    monkeypatch: pytest.MonkeyPatch,
+    changed: Mapping[str, object],
+) -> None:
+    lease_key = f"collect:test:leader:{uuid.uuid4()}"
+    monkeypatch.setattr(snapshot_source, "COLLECT_LEASE_KEY", lease_key)
+    key, owners = snapshot_key(source_id), snapshot_owners_key(source_id)
+    point = compose_node_key(source_id, "temperature")
+    owner = "current-collector"
+    before = {"value": 21.5, "ts_ms": NOW_MS, "quality": "good"}
+    original = json.dumps(before)
+    legacy = before | changed
+    raw = Redis.from_url(redis_url, decode_responses=True)
+    try:
+        await raw.set(lease_key, owner, ex=60)
+        await raw.hset(key, "temperature", original)
+        await raw.hset(
+            owners, "temperature", snapshot_owner_stamp(owner, original)
+        )
+        assert (await snapshots.read([point]))[point].is_current
+        await raw.hset(key, "temperature", json.dumps(legacy))
+        found = (await snapshots.read([point]))[point]
+        assert not found.is_current
+        assert (found.value, found.timestamp_ms, found.quality) == (
+            legacy["value"],
+            legacy["ts_ms"],
+            legacy["quality"],
+        )
+    finally:
+        await raw.delete(lease_key, key, owners)
+        await raw.aclose()

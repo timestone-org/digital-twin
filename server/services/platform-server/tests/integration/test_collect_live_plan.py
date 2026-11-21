@@ -5,6 +5,7 @@ import uuid
 import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.collect_fakes import FakeHistorySource
 from unit.publish_fakes import (
     FakeRealtime,
     FakeSnapshotSource,
@@ -23,6 +24,7 @@ from platform_server.apps.collect.services.live_publisher import (
     SourceLivePublisher,
 )
 from platform_server.apps.collect.services.snapshot_source import PointReading
+from platform_server.apps.collect.services.state_source import SourceStateSource
 from platform_server.apps.collect.services.topic_reconcile import (
     DatabaseSourceIndex,
 )
@@ -160,6 +162,34 @@ async def seed_large_source(
     return tuple(f"{source_id}:{code}" for code in codes)
 
 
+def _live_publisher(
+    session: AsyncSession,
+    source_id: uuid.UUID,
+    snapshots: FakeSnapshotSource,
+    realtime: FakeRealtime,
+) -> SourceLivePublisher:
+    viewers = FakeViewerSource(
+        rows=[
+            subscription_row(
+                topic_of(source_id), uuid.uuid5(source_id, "viewer")
+            )
+        ]
+    )
+    return SourceLivePublisher(
+        plans=DatabaseLivePlanSource(database=SessionDatabase(session)),
+        watchers=SubscriptionWatchers(source=viewers),
+        snapshots=snapshots,
+        realtime=realtime,
+        options=LiveOptions(max_items=200, batch_points=1000, plan_ttl_s=10.0),
+        states=SourceStateSource(
+            FakeHistorySource(
+                rows=[{"source_id": source_id, "state": "online"}]
+            )
+        ),
+        ticker=lambda: 0.0,
+    )
+
+
 async def test_a_large_source_is_fully_published_in_bounded_batches(
     app_client: httpx.AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -171,23 +201,8 @@ async def test_a_large_source_is_fully_published_in_bounded_batches(
             for key in node_keys
         }
     )
-    viewers = FakeViewerSource(
-        rows=[
-            subscription_row(
-                topic_of(source_id), uuid.uuid5(source_id, "viewer")
-            )
-        ]
-    )
     realtime = FakeRealtime()
-    publisher = SourceLivePublisher(
-        plans=DatabaseLivePlanSource(database=SessionDatabase(db_session)),
-        watchers=SubscriptionWatchers(source=viewers),
-        snapshots=snapshots,
-        realtime=realtime,
-        options=LiveOptions(max_items=200, batch_points=1000, plan_ttl_s=10.0),
-        ticker=lambda: 0.0,
-    )
-
+    publisher = _live_publisher(db_session, source_id, snapshots, realtime)
     report = await publisher.publish_once()
 
     assert report.items == 1119

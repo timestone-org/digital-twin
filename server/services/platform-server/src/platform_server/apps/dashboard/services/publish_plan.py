@@ -6,12 +6,15 @@
 
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
+from platform_server.apps.collect.services.snapshot_source import (
+    group_by_source,
+)
 from platform_server.apps.dashboard.crud import publish_crud
 
 
@@ -21,6 +24,12 @@ class DashboardPlan:
 
     row_version: int
     node_keys: tuple[str, ...]
+    source_ids: frozenset[uuid.UUID] = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "source_ids", frozenset(group_by_source(self.node_keys))
+        )
 
 
 @dataclass(frozen=True)

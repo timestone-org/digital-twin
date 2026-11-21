@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import pytest
 
 from lib.errors import DependencyUnavailable
+from platform_server.apps.collect.errors import HistoryUnavailable
 from platform_server.apps.collect.services.live_plan import LivePlan
 from platform_server.apps.collect.services.live_publisher import (
     LIVE_HEARTBEAT_S,
@@ -19,8 +20,10 @@ from platform_server.apps.collect.services.live_publisher import (
     SourceLivePublisher,
 )
 from platform_server.apps.collect.services.snapshot_source import PointReading
+from platform_server.apps.collect.services.state_source import SourceStateSource
 from platform_server.apps.collect.services.topics import topic_of
 from platform_server.apps.collect.services.watchers import SubscriptionWatchers
+from unit.collect_fakes import FakeHistorySource
 from unit.publish_fakes import (
     FakeRealtime,
     FakeSnapshotSource,
@@ -72,6 +75,7 @@ class Harness:
     realtime: FakeRealtime
     viewers: FakeViewerSource
     ticker: FakeTicker
+    state_history: FakeHistorySource
 
 
 def reading(value: object, *, at_ms: int = NOW_MS) -> PointReading:
@@ -106,6 +110,9 @@ def build_harness(
     )
     realtime = FakeRealtime()
     ticker = FakeTicker()
+    state_history = FakeHistorySource(
+        rows=[{"source_id": SOURCE_ID, "state": "online"}]
+    )
     publisher = SourceLivePublisher(
         plans=plans,
         watchers=SubscriptionWatchers(source=viewers),
@@ -116,6 +123,7 @@ def build_harness(
             batch_points=batch_points,
             plan_ttl_s=plan_ttl_s,
         ),
+        states=SourceStateSource(state_history),
         ticker=ticker,
     )
     return Harness(
@@ -125,6 +133,7 @@ def build_harness(
         realtime=realtime,
         viewers=viewers,
         ticker=ticker,
+        state_history=state_history,
     )
 
 
@@ -163,6 +172,25 @@ async def test_an_unchanged_second_tick_pushes_nothing() -> None:
     await harness.publisher.publish_once()
     await harness.publisher.publish_once()
     assert len(harness.realtime.published) == 1
+
+
+async def test_missing_source_status_does_not_publish_a_normal_reading() -> (
+    None
+):
+    harness = build_harness(batch_points=1)
+    harness.state_history.failure = HistoryUnavailable("运行态读失败")
+    await harness.publisher.publish_once()
+    for item in harness.realtime.published[0][1]:
+        assert item["state"] == "stale"
+        assert item["value"] == 1.0
+        assert item["timestampMs"] == NOW_MS
+    assert len(harness.state_history.queries) == 1
+
+    harness.state_history.failure = None
+    await harness.publisher.publish_once()
+    assert all(
+        item["state"] == "ok" for item in harness.realtime.published[1][1]
+    )
 
 
 async def test_only_the_changed_point_goes_out_on_the_next_tick() -> None:

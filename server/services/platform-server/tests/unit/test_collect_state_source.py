@@ -4,11 +4,16 @@
 按「还不知道」显示，而不是弹一个 503。
 """
 
+import asyncio
 import uuid
+from collections.abc import Mapping
 from datetime import UTC, datetime
+
+import pytest
 
 from collectwire import STATE_UNKNOWN
 from platform_server.apps.collect.errors import HistoryUnavailable
+from platform_server.apps.collect.services import state_source
 from platform_server.apps.collect.services.state_source import (
     UNKNOWN,
     SourceStateSource,
@@ -59,6 +64,40 @@ async def test_a_source_the_collector_never_saw_is_simply_absent() -> None:
 async def test_an_unreadable_state_degrades_instead_of_failing() -> None:
     history = FakeHistorySource(failure=HistoryUnavailable("库读不了"))
     assert await SourceStateSource(history=history).read([SOURCE_A]) == {}
+
+
+async def test_a_database_connection_failure_confirms_no_online_sources() -> (
+    None
+):
+    history = FakeHistorySource(failure=ConnectionRefusedError())
+    assert (
+        await SourceStateSource(history=history).online_ids([SOURCE_A])
+        == frozenset()
+    )
+
+
+async def test_the_live_status_lookup_cancels_a_slow_database_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    finished = asyncio.Event()
+
+    class SlowHistory:
+        async def fetch_all(
+            self, sql: str, params: Mapping[str, object]
+        ) -> list[dict[str, object]]:
+            del sql, params
+            try:
+                await asyncio.Event().wait()
+            finally:
+                finished.set()
+            return [state_row()]
+
+    monkeypatch.setattr(state_source, "LIVE_STATUS_TIMEOUT_S", 0)
+    result = await SourceStateSource(history=SlowHistory()).online_ids(
+        [SOURCE_A]
+    )
+    assert result == frozenset()
+    assert finished.is_set()
 
 
 def test_the_unknown_placeholder_says_it_does_not_know() -> None:
