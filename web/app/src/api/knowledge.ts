@@ -7,6 +7,7 @@
  * 把整条 `/api/v1/knowledge/...` 当 path 传，客户端会再拼一次缺省的 auth 前缀，
  * 拿回来的是一个 403 的 HTML 页，前端只说得出「服务端响应格式异常」。
  */
+import type { KnowledgeBaseMetadataPatch } from '@dt/contracts'
 import type { Page } from '@dt/contracts'
 
 import { KNOWLEDGE_BASE_URL } from '@/config/app'
@@ -110,6 +111,22 @@ export async function readBase(
     await requestData<unknown>(
       `${BASES}/${encodeURIComponent(baseId)}`,
       onKnowledge({ signal }),
+    ),
+  )
+}
+
+/** 修改知识库名或描述。
+ * @param baseId 知识库标识
+ * @param changes 实际修改的字段
+ */
+export async function updateBaseMetadata(
+  baseId: string,
+  changes: KnowledgeBaseMetadataPatch,
+): Promise<KnowledgeBase> {
+  return toBase(
+    await requestData<unknown>(
+      `${BASES}/${encodeURIComponent(baseId)}`,
+      onKnowledge({ method: 'PATCH', body: changes }),
     ),
   )
 }

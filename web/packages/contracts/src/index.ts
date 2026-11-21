@@ -90,6 +90,7 @@ export type { ApiKey, ApiKeyFilters, ApiKeySecret } from './apiKey'
 export type {
   KnowledgeAnswer,
   KnowledgeBase,
+  KnowledgeBaseMetadataPatch,
   KnowledgeCapability,
   KnowledgeChatAdvanceIn,
   KnowledgeChatMessage,

@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   KnowledgeAnswer,
   KnowledgeBase,
+  KnowledgeBaseMetadataPatch,
   KnowledgeCapability,
   KnowledgeChatAdvanceIn,
   KnowledgeChatMessage,
@@ -99,6 +100,11 @@ const SHAPES: Record<string, Record<string, true>> = {
     model: true,
     reason: true,
   } satisfies Keys<KnowledgeRerankCapability>,
+
+  KnowledgeBaseMetadataIn: {
+    name: true,
+    description: true,
+  } satisfies Keys<KnowledgeBaseMetadataPatch>,
 
   KnowledgeBaseOut: {
     id: true,

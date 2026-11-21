@@ -113,6 +113,18 @@ describe('知识库面的前缀', () => {
 
   it('来源、同步、文档、重解析、检索也都在 knowledge 前缀上', async () => {
     requestData.mockResolvedValue([])
+    requestData.mockResolvedValue(BASE_WIRE)
+    const updated = await knowledge.updateBaseMetadata('b/1', {
+      description: '',
+    })
+    expect(lastCall(requestData)[0]).toBe('/knowledge-bases/b%2F1')
+    expect(lastCall(requestData)[1]).toMatchObject({
+      method: 'PATCH',
+      body: { description: '' },
+    })
+    expect(updated.id).toBe('b1')
+
+    requestData.mockResolvedValue([])
     await knowledge.listSources('b1')
     expect(lastCall(requestData)[0]).toBe('/knowledge-bases/b1/sources')
     expect(lastCall(requestData)[1].baseUrl).toBe(KNOWLEDGE_PREFIX)

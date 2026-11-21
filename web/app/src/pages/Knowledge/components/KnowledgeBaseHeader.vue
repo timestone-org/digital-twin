@@ -2,7 +2,11 @@
 /**
  * @fileoverview 选中知识库的详情头：名 / 策略与嵌入档 / 描述 / 刷新与删除 / 元信息行。
  */
-import type { KnowledgeStrategy, KnowledgeVectorStatus } from '@dt/contracts'
+import type {
+  KnowledgeBaseMetadataPatch,
+  KnowledgeStrategy,
+  KnowledgeVectorStatus,
+} from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtCard, DtTag } from '@dt/ui'
 
@@ -10,12 +14,18 @@ import PermGuard from '@/components/PermGuard.vue'
 import type { KnowledgeBase } from '@/api/knowledge'
 import { formatDateTime } from '@/utils/datetime'
 import KnowledgeReembedding from './KnowledgeReembedding.vue'
+import KnowledgeBaseMetadataEditor from './KnowledgeBaseMetadataEditor.vue'
 
 defineProps<{
   base: KnowledgeBase
   /** 表里此刻的文档数：库清单上那个数不随上传与删除动。 */
   documentCount: number
+  canEditMetadata: boolean
   refreshing: boolean
+  saveMetadata: (
+    baseId: string,
+    changes: KnowledgeBaseMetadataPatch,
+  ) => Promise<void>
 }>()
 
 defineEmits<{
@@ -97,6 +107,12 @@ const VECTOR_LABELS: Record<KnowledgeVectorStatus | 'unknown', string> = {
           @click="$emit('refresh')"
         />
         <PermGuard :codes="[PERMISSION_CODES.knowledgeManage]">
+          <KnowledgeBaseMetadataEditor
+            v-if="canEditMetadata"
+            :key="base.id"
+            :base="base"
+            :save="saveMetadata"
+          />
           <DtButton
             variant="ghost"
             intent="danger"

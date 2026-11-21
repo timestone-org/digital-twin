@@ -4,6 +4,7 @@
  * 状态在 `knowledgeState.ts`，动作在 `knowledgeActions.ts`——拆开是因为
  * 动作那一堆逐个都要拿到整份状态，写在一个闭包里会顶破函数行数上限。
  */
+import type { KnowledgeBaseMetadataPatch } from '@dt/contracts'
 import * as actions from './knowledgeActions'
 import { createState, refreshDocuments, refreshLibrary } from './knowledgeState'
 
@@ -20,6 +21,8 @@ export function useKnowledgePage() {
     pollDocuments: () => refreshDocuments(state, true),
     create: (name: string, description: string) =>
       actions.create(state, name, description),
+    editMetadata: (baseId: string, changes: KnowledgeBaseMetadataPatch) =>
+      actions.editMetadata(state, baseId, changes),
     drop: (baseId: string) => actions.drop(state, baseId),
     addFiles: (files: readonly File[]) => actions.addFiles(state, files),
     reparse: (documentId: string) => actions.reparse(state, documentId),

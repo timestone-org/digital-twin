@@ -2,8 +2,10 @@
  * @fileoverview 知识库页的动作：建库删库、传文档、重新解析、删文档、检索。
  * 每个动作回「跑成了没有」，页面按它决定要不要弹成功提示；失败原因在 `state.error`。
  */
+import type { KnowledgeBaseMetadataPatch } from '@dt/contracts'
 import {
   createBase,
+  updateBaseMetadata,
   deleteBase,
   deleteDocument,
   readCapability,
@@ -96,6 +98,24 @@ export async function create(
     state.bases.value = [made, ...state.bases.value]
     await select(state, made.id)
   })
+}
+
+/** 将确认的修改合入相应库，切库后仍按原库 ID 更新列表。
+ * @param state 页面状态
+ * @param baseId 编辑时选定的库
+ * @param changes 实际修改的字段
+ */
+export async function editMetadata(
+  state: KnowledgeState,
+  baseId: string,
+  changes: KnowledgeBaseMetadataPatch,
+): Promise<void> {
+  const saved = await updateBaseMetadata(baseId, changes)
+  if (state.isDisposed.value) return
+  state.countsRace.cancel()
+  state.bases.value = state.bases.value.map((base) =>
+    base.id === baseId ? saved : base,
+  )
 }
 
 /**

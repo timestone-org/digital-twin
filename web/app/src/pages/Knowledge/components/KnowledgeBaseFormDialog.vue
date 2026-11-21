@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 「新建知识库」弹窗：名字必填、描述选填；策略固定混合，不给选。
+ * @fileoverview 知识库名称与描述表单。
  */
 import { computed, ref, watch } from 'vue'
 import { DtButton, DtInput, DtModal, DtNotice, DtTextarea } from '@dt/ui'
@@ -8,7 +8,8 @@ import { DtButton, DtInput, DtModal, DtNotice, DtTextarea } from '@dt/ui'
 const props = defineProps<{
   modelValue: boolean
   isBusy: boolean
-  /** 上一次创建失败时后端那句话；空串表示没有。 */
+  initial?: { name: string; description: string }
+  /** 服务端返回的保存失败原因。 */
   error: string
 }>()
 
@@ -20,32 +21,45 @@ const emit = defineEmits<{
 const name = ref('')
 const description = ref('')
 
-const isDirty = computed(
-  () => name.value.trim() !== '' || description.value.trim() !== '',
+const isDirty = computed(() =>
+  props.initial
+    ? name.value !== props.initial.name ||
+      description.value !== props.initial.description
+    : name.value.trim() !== '' || description.value.trim() !== '',
 )
 
 watch(
   () => props.modelValue,
   (open) => {
     if (open) {
-      name.value = ''
-      description.value = ''
+      name.value = props.initial?.name ?? ''
+      description.value = props.initial?.description ?? ''
     }
   },
+  { immediate: true },
 )
 
 function onSubmit(): void {
   const trimmed = name.value.trim()
-  if (trimmed === '' || props.isBusy) return
-  emit('submit', trimmed, description.value.trim())
+  if (trimmed === '' || props.isBusy || (props.initial && !isDirty.value))
+    return
+  emit(
+    'submit',
+    trimmed,
+    props.initial ? description.value : description.value.trim(),
+  )
 }
 </script>
 
 <template>
   <DtModal
     :model-value="props.modelValue"
-    title="新建知识库"
-    description="建好后往里传手册与规程；检索走关键词与向量两路的混合策略。"
+    :title="props.initial ? '编辑知识库' : '新建知识库'"
+    :description="
+      props.initial
+        ? undefined
+        : '建好后往里传手册与规程；检索走关键词与向量两路的混合策略。'
+    "
     :dirty="isDirty"
     @update:model-value="emit('update:modelValue', $event)"
   >
@@ -54,12 +68,14 @@ function onSubmit(): void {
       <DtInput
         v-model="name"
         label="名字"
+        :maxlength="120"
         required
         placeholder="例如：锅炉运维手册"
       />
       <DtTextarea
         v-model="description"
         label="描述"
+        :maxlength="1000"
         hint="选填，说一句这个库装的是什么资料。"
         autosize
       />
@@ -78,10 +94,10 @@ function onSubmit(): void {
       </DtButton>
       <DtButton
         :loading="props.isBusy"
-        :disabled="name.trim() === ''"
+        :disabled="name.trim() === '' || Boolean(props.initial && !isDirty)"
         @click="onSubmit"
       >
-        创建
+        {{ props.initial ? '保存' : '创建' }}
       </DtButton>
     </template>
   </DtModal>

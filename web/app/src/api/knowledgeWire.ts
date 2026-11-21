@@ -115,6 +115,7 @@ export interface KnowledgeRerankLane {
 
 /** 这套部署此刻的知识库能力。 */
 export interface KnowledgeCapability {
+  supportsBaseMetadata?: boolean
   isEmbeddingEnabled: boolean
   isModelEnabled: boolean
   /** 语音输入接上了吗。为假时对话页不放麦克风键。 */
@@ -281,6 +282,7 @@ export function toCapability(value: unknown): KnowledgeCapability {
   const row = record(value, '能力')
   const index = record(row.index, '索引档')
   return {
+    supportsBaseMetadata: row.supports_base_metadata === true,
     isEmbeddingEnabled: row.is_embedding_enabled === true,
     isModelEnabled: row.is_model_enabled === true,
     isAsrEnabled: row.is_asr_enabled === true,

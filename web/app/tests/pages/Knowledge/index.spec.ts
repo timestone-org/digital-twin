@@ -32,6 +32,7 @@ const api = vi.hoisted(() => ({
   createSource: vi.fn(),
   syncSource: vi.fn(),
   createBase: vi.fn(),
+  updateBaseMetadata: vi.fn(),
   deleteBase: vi.fn(),
   uploadDocument: vi.fn(),
   reparseDocument: vi.fn(),
@@ -131,6 +132,7 @@ beforeEach(() => {
   api.readCapability.mockResolvedValue({
     ...READY,
     sourceKinds: ['upload', 'platform'],
+    supportsBaseMetadata: true,
   })
   api.listSources.mockResolvedValue([])
   api.listBases.mockResolvedValue([BASE])
@@ -799,6 +801,74 @@ describe('建库', () => {
   })
 })
 
+describe('编辑知识库', () => {
+  it('旧服务缺编辑能力标志时仍能读取和刷新', async () => {
+    api.readCapability.mockResolvedValue({ ...READY })
+    const wrapper = await render()
+    expect(wrapper.find('button[aria-label="编辑知识库"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="刷新状态"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain(BASE.name)
+  })
+
+  it('填入现有元数据，只保存改过的描述并保留选库', async () => {
+    const wrapper = await render()
+    api.updateBaseMetadata.mockResolvedValue({ ...BASE, description: '新描述' })
+    await wrapper.get('button[aria-label="编辑知识库"]').trigger('click')
+    await flushPromises()
+    expect(modalField('input[type="text"]').value).toBe(BASE.name)
+    expect(modalField('textarea').value).toBe(BASE.description)
+    type(modalField('textarea'), '新描述')
+    await flushPromises()
+    modalButton('保存').click()
+    await flushPromises()
+    expect(api.updateBaseMetadata).toHaveBeenCalledWith(BASE.id, {
+      description: '新描述',
+    })
+    expect(wrapper.text()).toContain('新描述')
+    expect(document.body.querySelector('.dt-modal')).toBeNull()
+  })
+
+  it('保存失败保留原输入并显示原因', async () => {
+    const wrapper = await render()
+    api.updateBaseMetadata.mockRejectedValue(new Error('库暂时无法保存'))
+    await wrapper.get('button[aria-label="编辑知识库"]').trigger('click')
+    await flushPromises()
+    type(modalField('input[type="text"]'), '新库名')
+    await flushPromises()
+    modalButton('保存').click()
+    await flushPromises()
+    expect(modalField('input[type="text"]').value).toBe('新库名')
+    expect(document.body.querySelector('.dt-modal')?.textContent).toContain(
+      '库暂时无法保存',
+    )
+    expect(wrapper.get('h2[title]').text()).toBe(BASE.name)
+  })
+  it('先前库的迟到回执不能改动新库的编辑弹窗', async () => {
+    const other = { ...BASE, id: 'b2', name: '乙库' }
+    api.listBases.mockResolvedValue([BASE, other])
+    const pending = deferred<KnowledgeBase>()
+    api.updateBaseMetadata.mockReturnValue(pending.promise)
+    const wrapper = await render()
+    await wrapper.get('button[aria-label="编辑知识库"]').trigger('click')
+    await flushPromises()
+    type(modalField('input[type="text"]'), '甲的新名字')
+    await flushPromises()
+    modalButton('保存').click()
+    await flushPromises()
+    modalButton('取消').click()
+    await flushPromises()
+    await wrapper.get('span[title="乙库"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-label="编辑知识库"]').trigger('click')
+    await flushPromises()
+    pending.settle({ ...BASE, name: '甲的新名字' })
+    await flushPromises()
+    expect(modalField('input[type="text"]').value).toBe('乙库')
+    expect(wrapper.get('h2[title]').text()).toBe('乙库')
+    expect(wrapper.text()).toContain('甲的新名字')
+  })
+})
+
 describe('删除知识库', () => {
   it('先问一句，取消就不打接口', async () => {
     confirmSpy.mockResolvedValue(false)
@@ -907,6 +977,7 @@ describe('权限', () => {
 
     const labels = wrapper.findAll('button').map((one) => one.text())
     expect(labels).not.toContain('新建知识库')
+    expect(wrapper.find('button[aria-label="编辑知识库"]').exists()).toBe(false)
     expect(labels).not.toContain('重新解析')
     expect(wrapper.find('button[aria-label="删除文档"]').exists()).toBe(false)
     expect(wrapper.find('button[aria-label="删除知识库"]').exists()).toBe(false)
@@ -919,6 +990,7 @@ describe('权限', () => {
     const labels = wrapper.findAll('button').map((one) => one.text())
     expect(labels).toContain('重新解析')
     expect(labels).not.toContain('新建知识库')
+    expect(wrapper.find('button[aria-label="编辑知识库"]').exists()).toBe(false)
     expect(wrapper.find('button[aria-label="删除知识库"]').exists()).toBe(false)
   })
 

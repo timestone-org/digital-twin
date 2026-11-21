@@ -110,6 +110,12 @@ export interface KnowledgeCapability {
   rerank: KnowledgeRerankCapability
 }
 
+/** 管理员提交的库名或描述，至少提供一项。 */
+export interface KnowledgeBaseMetadataPatch {
+  name?: string
+  description?: string
+}
+
 /** 一个知识库。 */
 export interface KnowledgeBase {
   id: string
