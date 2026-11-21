@@ -43,6 +43,7 @@ from platform_server.apps.collect.services.point_query import (
     PointFilters,
     PointQueryContext,
 )
+from platform_server.apps.dataset.services import column_service
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(
@@ -171,12 +172,15 @@ async def delete_point(
     write: ManageDep,
     is_forced: Annotated[bool, Query(alias="force")] = False,
 ) -> Response:
-    """删点位。被大屏绑着就 409 并列出那些大屏；`force` 跳过绑定守卫。
+    """删点位。有大屏或台账列引用就 409；`force` 跳过引用检查。
 
     Args: point_id, session, write, is_forced。
     """
     await point_service.delete_point(
-        session, point_id=point_id, is_forced=is_forced
+        session,
+        point_id=point_id,
+        ledger_references=column_service.count_point_references,
+        is_forced=is_forced,
     )
     await write.plans.notify(reason=REASON_POINT_CHANGED)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -197,7 +201,10 @@ async def batch_delete_points(
     Args: payload, session, write。
     """
     await point_service.delete_points(
-        session, point_ids=payload.point_ids, is_forced=payload.is_forced
+        session,
+        point_ids=payload.point_ids,
+        ledger_references=column_service.count_point_references,
+        is_forced=payload.is_forced,
     )
     await write.plans.notify(reason=REASON_POINT_CHANGED)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

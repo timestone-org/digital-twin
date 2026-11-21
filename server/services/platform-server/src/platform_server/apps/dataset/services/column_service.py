@@ -1,6 +1,7 @@
 """列管理面。事务边界在这一层：crud 不提交，api 不写业务。"""
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -8,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors.base import FieldError
 from lib.logging import get_logger
+from platform_server.apps.collect.services import lock_point_references
 from platform_server.apps.dataset.crud import column_crud
 from platform_server.apps.dataset.errors import (
     DatasetColumnInUse,
@@ -75,6 +77,16 @@ async def list_column_specs(
     )
 
 
+async def count_point_references(
+    session: AsyncSession, node_keys: Sequence[str]
+) -> dict[str, int]:
+    """只返回引用计数，采集权限不用连带授出台账查看权限。
+
+    Args: session, node_keys。
+    """
+    return await column_crud.count_point_references(session, node_keys)
+
+
 async def list_columns(
     session: AsyncSession, *, table_id: uuid.UUID
 ) -> list[ColumnOut]:
@@ -112,6 +124,8 @@ async def create_column(
     column = _new_column(
         table.id, payload, await _order_of(session, payload, table.id), deps
     )
+    if payload.source == "point" and payload.node_key is not None:
+        await lock_point_references(session, [payload.node_key])
     column_crud.add(session, column)
     await flush_unique(
         session,
@@ -136,7 +150,7 @@ async def update_column(
     Args: session, table_id, column_id, payload。
     """
     column = await require_column(
-        session, table_id=table_id, column_id=column_id
+        session, table_id=table_id, column_id=column_id, should_lock=True
     )
     changes = given_changes(payload)
     source, node_key = _merged_binding(column, changes)
@@ -148,12 +162,31 @@ async def update_column(
         columns=await column_crud.list_by_table(session, column.table_id),
         draft=draft,
     )
+    await _lock_binding_change(session, column, source, node_key)
     column_crud.apply_changes(column, changes)
     await session.flush()
     _logger.info(
         "dataset_column_updated", "台账列已更新", column_id=str(column.id)
     )
     return to_column_out(column)
+
+
+async def _lock_binding_change(
+    session: AsyncSession,
+    column: DatasetColumn,
+    source: ColumnSource,
+    node_key: str | None,
+) -> None:
+    """只在列改绑或解绑时锁住新旧点位键。
+
+    Args: session, column, source, node_key。
+    """
+    before = column.node_key if column.source == "point" else None
+    after = node_key if source == "point" else None
+    if before != after:
+        await lock_point_references(
+            session, [key for key in (before, after) if key is not None]
+        )
 
 
 async def delete_column(
@@ -223,15 +256,23 @@ async def reorder_columns(
 
 
 async def require_column(
-    session: AsyncSession, *, table_id: uuid.UUID, column_id: uuid.UUID
+    session: AsyncSession,
+    *,
+    table_id: uuid.UUID,
+    column_id: uuid.UUID,
+    should_lock: bool = False,
 ) -> DatasetColumn:
     """取这张台账下的一列，取不到即 404。
 
     ⚠ 列属于别的台账时同样报 404 而不是 403：拿 403 回答等于告诉调用方
     「这个 id 存在，只是不在你说的那张表下」（api-contract §3.3）。
-    Args: session, table_id, column_id。
+    Args: session, table_id, column_id, should_lock。
     """
-    column = await column_crud.get(session, column_id)
+    column = (
+        await column_crud.get_for_update(session, table_id, column_id)
+        if should_lock
+        else await column_crud.get(session, column_id)
+    )
     if column is None or column.table_id != table_id:
         raise DatasetColumnNotFound("这张台账下没有这一列")
     return column

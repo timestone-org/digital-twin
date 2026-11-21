@@ -26,6 +26,9 @@ from platform_server.apps.collect.services.plan_notifier import PlanNotifier
 from platform_server.apps.collect.services.point_catalog import (
     DatabasePointCatalog,
 )
+from platform_server.apps.collect.services.point_reference_lock import (
+    lock_point_references,
+)
 from platform_server.apps.collect.services.snapshot_source import (
     PointReading,
     RedisSnapshotSource,
@@ -48,6 +51,7 @@ __all__ = [
     "binding_guard",
     "field_service",
     "history_service",
+    "lock_point_references",
     "plan_service",
     "point_frames",
     "point_service",

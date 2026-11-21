@@ -144,21 +144,38 @@ class PointCrud(CrudBase[CollectPoint]):
             for point_id, source_id, code in rows.tuples()
         ]
 
+    async def get_for_update(
+        self, session: AsyncSession, point_id: uuid.UUID
+    ) -> CollectPoint | None:
+        """读取点位的最新配置并锁定该行。Args: session, point_id。"""
+        return await session.get(
+            CollectPoint, point_id, with_for_update=True, populate_existing=True
+        )
+
     async def list_by_ids(
-        self, session: AsyncSession, point_ids: Sequence[uuid.UUID]
+        self,
+        session: AsyncSession,
+        point_ids: Sequence[uuid.UUID],
+        *,
+        should_lock: bool = False,
     ) -> list[CollectPoint]:
         """按主键取这一批点位，顺序同列表面。
 
-        Args: session, point_ids。
+        Args: session, point_ids, should_lock。
         """
         if not point_ids:
             return []
-        rows = await session.execute(
+        query = (
             select(CollectPoint)
             .where(CollectPoint.id.in_(list(point_ids)))
             .order_by(*DEFAULT_ORDER)
         )
-        return list(rows.scalars().all())
+        if should_lock:
+            query = query.with_for_update().execution_options(
+                populate_existing=True
+            )
+        rows = await session.scalars(query)
+        return list(rows.all())
 
     async def delete_many(
         self, session: AsyncSession, point_ids: Sequence[uuid.UUID]

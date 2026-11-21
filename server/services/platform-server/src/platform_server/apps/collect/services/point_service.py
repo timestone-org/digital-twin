@@ -137,20 +137,23 @@ async def update_point(
 
 
 async def delete_point(
-    session: AsyncSession, *, point_id: uuid.UUID, is_forced: bool = False
+    session: AsyncSession,
+    *,
+    point_id: uuid.UUID,
+    ledger_references: binding_guard.LedgerReferences,
+    is_forced: bool = False,
 ) -> str:
     """删点位，返回它的 `node_key`。
 
-    ⚠ 先问「有没有大屏绑着它」：被绑着就 409 并列出那些大屏。删掉一个还被绑
-    着的点位，大屏上那个槽会静默变成永远没有数据。
-    ⚠ `is_forced` 是显式跳过这道守卫：仍绑着它的大屏引用就此失效——界面要
-    在二次确认里把这句话说出来。
-    Args: session, point_id, is_forced。
+    ⚠ `is_forced` 会跳过引用守卫，强删后大屏和台账将失去该点位的读数。
+    Args: session, point_id, ledger_references, is_forced。
     """
-    point = await require_point(session, point_id)
+    point = await require_point(session, point_id, should_lock=True)
     node_key = compose_node_key(point.source_id, point.code)
     if not is_forced:
-        await binding_guard.raise_if_bound(session, node_key=node_key)
+        await binding_guard.raise_if_bound(
+            session, node_key=node_key, ledger_references=ledger_references
+        )
     _logger.info(
         "collect_point_deleted",
         "点位已删除",
@@ -166,24 +169,22 @@ async def delete_points(
     session: AsyncSession,
     *,
     point_ids: Sequence[uuid.UUID],
+    ledger_references: binding_guard.LedgerReferences,
     is_forced: bool = False,
 ) -> int:
     """批量删点，返回删掉几个。
 
-    ⚠ 整批全删或全不删：只要有一个还被大屏绑着，就整批 409 并点名那几个。
-    部分成功会让界面上剩下的那几条看着像「没勾中」，用户于是再勾一次再删一次。
-    ⚠ 撞见已经不在的点位一律 404，不静默跳过：别人刚删掉其中一条时，静默成功
-    会让人以为自己删的是另一条，而那一条还好好地在表里。
-    ⚠ `is_forced` 是显式跳过这道守卫：仍绑着它们的大屏引用就此失效——界面要
-    在二次确认里把这句话说出来。
-    Args: session, point_ids, is_forced。
+    ⚠ 整批全删或全不删：返回被引用的点位；撞见已删除的点位一律 404。
+    Args: session, point_ids, ledger_references, is_forced。
     """
     wanted = list(dict.fromkeys(point_ids))
-    points = await point_crud.list_by_ids(session, wanted)
+    points = await point_crud.list_by_ids(session, wanted, should_lock=True)
     _raise_if_missing(wanted, points)
     if not is_forced:
         await binding_guard.raise_if_any_bound(
-            session, points=[_point_ref(point) for point in points]
+            session,
+            points=[_point_ref(point) for point in points],
+            ledger_references=ledger_references,
         )
     _logger.info(
         "collect_points_deleted",
@@ -197,13 +198,17 @@ async def delete_points(
 
 
 async def require_point(
-    session: AsyncSession, point_id: uuid.UUID
+    session: AsyncSession, point_id: uuid.UUID, *, should_lock: bool = False
 ) -> CollectPoint:
     """取点位，取不到即 404。
 
-    Args: session, point_id。
+    Args: session, point_id, should_lock。
     """
-    point = await point_crud.get(session, point_id)
+    point = (
+        await point_crud.get_for_update(session, point_id)
+        if should_lock
+        else await point_crud.get(session, point_id)
+    )
     if point is None:
         raise PointNotFound("点位不存在")
     return point

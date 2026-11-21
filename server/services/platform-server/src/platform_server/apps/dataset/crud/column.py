@@ -1,8 +1,9 @@
 """列定义的数据访问。"""
 
 import uuid
+from collections.abc import Sequence
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Text, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -36,6 +37,44 @@ class ColumnCrud(CrudBase[DatasetColumn]):
             .order_by(*DEFAULT_ORDER)
         )
         return list(rows.scalars().all())
+
+    async def count_point_references(
+        self, session: AsyncSession, node_keys: Sequence[str]
+    ) -> dict[str, int]:
+        """按点位键一次取所有台账列的引用数。
+
+        Args: session, node_keys。
+        """
+        if not node_keys:
+            return {}
+        stored_key = DatasetColumn.node_key
+        identity = func.platform.dataset_point_identity(
+            stored_key, type_=Text()
+        )
+        rows = await session.execute(
+            select(identity, func.count())
+            .where(
+                stored_key.is_not(None),
+                identity.in_(node_keys),
+                DatasetColumn.source == "point",
+            )
+            .group_by(identity)
+        )
+        return dict(rows.tuples().all())
+
+    async def get_for_update(
+        self, session: AsyncSession, table_id: uuid.UUID, column_id: uuid.UUID
+    ) -> DatasetColumn | None:
+        """锁定并刷新列当前引用。Args: session, table_id, column_id。"""
+        return await session.scalar(
+            select(DatasetColumn)
+            .where(
+                DatasetColumn.id == column_id,
+                DatasetColumn.table_id == table_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
 
     async def get_by_key(
         self, session: AsyncSession, table_id: uuid.UUID, key: str
