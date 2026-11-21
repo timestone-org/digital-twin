@@ -15,6 +15,7 @@ from sqlalchemy import (
     Integer,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -88,6 +89,11 @@ class DatasetColumn(UuidPrimaryKeyMixin, TimestampMixin, Base):
         ),
         UniqueConstraint("table_id", "key"),
         Index("ix_dataset_columns_table_id", "table_id"),
+        Index(
+            "ix_dataset_columns_point_node_key",
+            text("platform.dataset_point_identity(node_key)"),
+            postgresql_where=text("node_key IS NOT NULL"),
+        ),
         CheckConstraint(
             f"data_type IN ({sql_values(COLUMN_TYPES)})",
             name="data_type_known",

@@ -22,6 +22,7 @@ INDEXES = (
     "modeling_commands_idx_20261030",
     "modeling_workflow_idx_20261103",
 )
+POINT_REFERENCE_INDEX = "dataset_point_ref_idx_20261121"
 
 
 def migration_path(revision: str) -> Path:
@@ -56,7 +57,17 @@ def test_index_failure_keeps_a_completed_structure_revision_to_resume_from():
         script = scripts.get_revision(revision)
         assert script is not None
         assert script.down_revision == predecessor
-    assert scripts.get_current_head() == "modeling_template_src_20261105"
+    heads = scripts.get_heads()
+    assert len(heads) == 1
+    ancestry = {
+        script.revision
+        for script in scripts.iterate_revisions(heads[0], "base")
+    }
+    assert STRUCTURES[-1] in ancestry
+    assert POINT_REFERENCE_INDEX in ancestry
+    point_index = scripts.get_revision(POINT_REFERENCE_INDEX)
+    assert point_index is not None
+    assert point_index.down_revision == STRUCTURES[-1]
 
 
 @pytest.mark.parametrize("revision", STRUCTURES)
