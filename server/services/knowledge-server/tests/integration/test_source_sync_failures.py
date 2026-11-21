@@ -432,15 +432,23 @@ async def test_stale_sync_cannot_overwrite_a_new_success(
         assert (source.sync_cursor, source.last_synced_at) == ("7", when)
 
 
+@pytest.mark.parametrize("is_detached", [False, True])
 async def test_source_deleted_during_discovery_leaves_no_snapshot(
     db_stack: DbStack,
+    is_detached: bool,
 ) -> None:
     _base_id, source_id = await _create(db_stack.client)
     store = _SyncStore()
 
     async def respond(_request: httpx.Request) -> httpx.Response:
-        async with CommittingSession(db_stack.sessions) as session:
-            await crud.source.delete_source(session, uuid.UUID(source_id))
+        if is_detached:
+            detached = await db_stack.client.delete(
+                f"{API_PREFIX}/sources/{source_id}"
+            )
+            assert detached.status_code == 204
+        else:
+            async with CommittingSession(db_stack.sessions) as session:
+                await crud.source.delete_source(session, uuid.UUID(source_id))
         return httpx.Response(
             200, json={"data": {"items": [{"row_id": "deleted"}]}}
         )

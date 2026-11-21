@@ -53,6 +53,9 @@ class KnowledgeSource(UuidPrimaryKeyMixin, TimestampMixin, Base):
     sync_cursor: Mapped[str | None] = mapped_column(
         String(CURSOR_MAX_LENGTH), nullable=True
     )
+    detached_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     last_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,15 +32,25 @@ async def insert_source(
 
 
 async def get_source(
-    session: AsyncSession, source_id: uuid.UUID, *, is_locked: bool = False
+    session: AsyncSession,
+    source_id: uuid.UUID,
+    *,
+    is_locked: bool = False,
+    should_include_detached: bool = False,
 ) -> KnowledgeSource | None:
-    """按 id 取一路来源。
+    """按 id 取来源，可为历史原文读取已解绑的来源。
 
-    Args: session, source_id。
+    Args: session, source_id, is_locked, should_include_detached。
     """
     if is_locked:
         await content_lock.source(session, source_id)
-    query = select(KnowledgeSource).where(KnowledgeSource.id == source_id)
+    query = (
+        select(KnowledgeSource)
+        .where(KnowledgeSource.id == source_id)
+        .execution_options(populate_existing=True)
+    )
+    if not should_include_detached:
+        query = query.where(KnowledgeSource.detached_at.is_(None))
     found = await session.execute(
         query.with_for_update() if is_locked else query
     )
@@ -59,7 +69,10 @@ async def list_sources(
     """
     rows = await session.execute(
         select(KnowledgeSource)
-        .where(KnowledgeSource.base_id == base_id)
+        .where(
+            KnowledgeSource.base_id == base_id,
+            KnowledgeSource.detached_at.is_(None),
+        )
         .order_by(KnowledgeSource.created_at)
     )
     return list(rows.scalars())
@@ -76,7 +89,10 @@ async def find_source_by_kind(
     """
     found = await session.execute(
         select(KnowledgeSource)
-        .where(KnowledgeSource.base_id == base_id)
+        .where(
+            KnowledgeSource.base_id == base_id,
+            KnowledgeSource.detached_at.is_(None),
+        )
         .where(KnowledgeSource.kind == kind)
         .order_by(KnowledgeSource.created_at)
         .limit(1)
@@ -141,3 +157,16 @@ async def mark_sync_failed(
         .values(last_error=reason)
     )
     return max(0, cast("CursorResult[Any]", done).rowcount)
+
+
+async def has_imported(session: AsyncSession, source_id: uuid.UUID) -> bool:
+    """判断来源是否已登记原文或已知的稳定上游记录。Args: session, source_id。"""
+    value = await session.scalar(
+        text("""
+        SELECT EXISTS (SELECT 1 FROM knowledge.kb_documents WHERE source_id=:id)
+            OR EXISTS (SELECT 1 FROM knowledge.kb_source_records
+                       WHERE source_id=:id)
+    """),
+        {"id": source_id},
+    )
+    return bool(value)

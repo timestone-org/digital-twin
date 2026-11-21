@@ -167,7 +167,9 @@ async def _raw_of(
     Args: sessions, deps, document。
     """
     async with sessions() as session:
-        source = await crud.source.get_source(session, document.source_id)
+        source = await crud.source.get_source(
+            session, document.source_id, should_include_detached=True
+        )
         if source is None:
             raise IngestFailed("这份文档所属的来源已经不在了")
         kind = source.kind
@@ -462,7 +464,7 @@ async def _publish_parsed(
         ) as batch:
             figures = await _figures_of(deps, document, parsed)
             async with sessions() as session:
-                await ingest_vectors.publish_document(
+                await ingest_vectors.publish(
                     session, batch, deps.embedder, chunks, figures
                 )
     except EmbeddingUnavailable as error:

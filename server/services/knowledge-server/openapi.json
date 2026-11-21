@@ -2159,6 +2159,30 @@
         "title": "ParsingCapabilityOut",
         "type": "object"
       },
+      "PlatformSourcePatch": {
+        "additionalProperties": false,
+        "description": "平台路径、记录标识、标题及分页参数的部分更新。",
+        "minProperties": 1,
+        "properties": {
+          "id_field": {
+            "$ref": "#/components/schemas/_OptionalText"
+          },
+          "page_param": {
+            "$ref": "#/components/schemas/_OptionalText"
+          },
+          "path": {
+            "$ref": "#/components/schemas/_OptionalText"
+          },
+          "size_param": {
+            "$ref": "#/components/schemas/_OptionalText"
+          },
+          "title_field": {
+            "$ref": "#/components/schemas/_OptionalText"
+          }
+        },
+        "title": "PlatformSourcePatch",
+        "type": "object"
+      },
       "ReembeddingJobOut": {
         "properties": {
           "base_id": {
@@ -2471,6 +2495,25 @@
         "title": "SourceIn",
         "type": "object"
       },
+      "SourceMetadataIn": {
+        "additionalProperties": false,
+        "description": "平台来源名称与配置的部分更新。",
+        "minProperties": 1,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/PlatformSourcePatch",
+            "title": "Config"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "SourceMetadataIn",
+        "type": "object"
+      },
       "SourceOut": {
         "description": "一路来源的样子。",
         "properties": {
@@ -2693,6 +2736,9 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "_OptionalText": {
+        "type": "string"
       }
     }
   },
@@ -4307,6 +4353,95 @@
         "summary": "就绪探针",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/knowledge/sources/{source_id}": {
+      "delete": {
+        "description": "停止后续同步，保留已导入资料。\n\nArgs: source_id, session, _manager。",
+        "operationId": "detach_api_v1_knowledge_sources__source_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "解绑平台来源",
+        "tags": [
+          "source"
+        ]
+      },
+      "patch": {
+        "description": "修改名称及指定的配置字段。Args: source_id, body, session, _manager。",
+        "operationId": "edit_api_v1_knowledge_sources__source_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceMetadataIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SourceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "编辑平台来源",
+        "tags": [
+          "source"
         ]
       }
     },
