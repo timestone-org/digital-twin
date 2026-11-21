@@ -3,7 +3,7 @@
 from pydantic import Field, SecretStr
 from pydantic_settings import SettingsConfigDict
 
-from lib.config import AppSettings, PostgresSettings, RedisSettings
+from lib.config import HttpAppSettings, PostgresSettings, RedisSettings
 
 SERVICE_NAME: str = "hierarchy-server"
 API_PREFIX: str = "/api/v1/hierarchy"
@@ -24,7 +24,7 @@ class MigrationSettings(PostgresSettings):
     postgres_schema: str = DB_SCHEMA
 
 
-class Settings(AppSettings, PostgresSettings, RedisSettings):
+class Settings(HttpAppSettings, PostgresSettings, RedisSettings):
     """冻结的进程配置。"""
 
     model_config = SettingsConfigDict(
