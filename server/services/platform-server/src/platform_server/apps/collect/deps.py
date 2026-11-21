@@ -4,7 +4,7 @@
 本模块只补数据源出参要的旁路信息与三档写上下文。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated
 
 from fastapi import Depends
@@ -147,4 +147,10 @@ async def get_write_value_context(
 
     Args: container, caller, idempotency_key。
     """
-    return _write_context(container, caller, idempotency_key)
+    context = _write_context(container, caller, idempotency_key)
+    return replace(
+        context,
+        idempotency=replace(
+            context.idempotency, should_reserve_full_window=True
+        ),
+    )

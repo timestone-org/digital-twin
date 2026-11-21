@@ -4,6 +4,7 @@
 零业务逻辑：载荷怎么解释归 `command_bus.py`。
 """
 
+import asyncio
 import json
 from collections.abc import Mapping, Sequence
 from typing import Any, Protocol, cast
@@ -69,7 +70,7 @@ class RedisCommandTransport:
         request_id: str,
         timeout_s: float,
     ) -> dict[str, Any] | None:
-        """投请求 → 阻塞等应答。超时给 None，由调用方决定怎么说。
+        """在同一个时限内投请求并等应答，超时返回 None。
 
         ⚠ 本层**不重试**：一条链路只有一层负责重试，而写值这条链路一层都不许
         重试（runtime-resilience §4.2 与 §2）。
@@ -80,12 +81,21 @@ class RedisCommandTransport:
         """
         stamped = {TRACEPARENT_KEY: current_traceparent(), **dict(envelope)}
         body = json.dumps(stamped, ensure_ascii=False, default=str)
-        await self._run(self._client.lpush(REQUEST_KEY, body))
-        raw = await self._run(
-            self._client.blpop(  # pyright: ignore[reportUnknownMemberType]
-                [reply_key(request_id)], timeout=timeout_s
-            )
-        )
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout_s
+        try:
+            async with asyncio.timeout_at(deadline):
+                await self._run(self._client.lpush(REQUEST_KEY, body))
+                remaining_s = deadline - loop.time()
+                if remaining_s <= 0:
+                    return None
+                raw = await self._run(
+                    self._client.blpop(  # pyright: ignore[reportUnknownMemberType]
+                        [reply_key(request_id)], timeout=remaining_s
+                    )
+                )
+        except TimeoutError:
+            return None
         return _decode(raw)
 
     async def close(self) -> None:

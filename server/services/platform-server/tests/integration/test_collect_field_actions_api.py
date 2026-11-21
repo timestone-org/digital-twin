@@ -5,6 +5,8 @@
 """
 
 import logging
+from collections.abc import Mapping
+from typing import Any
 
 import httpx
 import pytest
@@ -25,6 +27,7 @@ from integration.collect_helpers import (
     payload,
     point_item,
 )
+from lib.errors import DependencyUnavailable
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -445,3 +448,96 @@ async def test_a_refused_write_maps_to_its_own_code(
     )
     assert response.status_code == 400
     assert envelope(response)["code"] == 41113
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        "missing",
+        "native-timeout",
+        "network",
+        "malformed",
+        "legacy-driver-failed",
+        "unknown-reason",
+        "missing-status-with-reason",
+        "bogus-status-with-reason",
+    ],
+)
+async def test_an_unconfirmed_write_is_never_sent_again_with_the_same_key(
+    app_client: httpx.AsyncClient,
+    collect_fakes: CollectFakes,
+    monkeypatch: pytest.MonkeyPatch,
+    reply: str,
+) -> None:
+    source = await create_source(app_client)
+    batch = await create_points(app_client, source["id"])
+    url = f"{POINTS}/{batch['items'][0]['id']}:write"
+    device: list[object] = []
+
+    async def send(
+        command: Mapping[str, Any], *, request_id: str, timeout_s: float
+    ) -> dict[str, Any] | None:
+        del request_id, timeout_s
+        assert command["action"] == ACTION_WRITE
+        device.append(command["value"])
+        if reply == "native-timeout":
+            return {"status": "error", "reason": "write_outcome_unknown"}
+        if reply == "network":
+            raise DependencyUnavailable("本机假总线在等待回执时断开")
+        if reply == "missing-status-with-reason":
+            return {"reason": "source_offline"}
+        if reply == "bogus-status-with-reason":
+            return {"status": "unrecognized", "reason": "write_unsupported"}
+        if reply == "malformed":
+            return {"data": {}}
+        if reply in ("legacy-driver-failed", "unknown-reason"):
+            reason = (
+                "driver_failed"
+                if reply == "legacy-driver-failed"
+                else "unrecognized"
+            )
+            return {"status": "error", "reason": reason}
+        return None
+
+    monkeypatch.setattr(collect_fakes.bus, "call", send)
+    request = {"value": 31.25}
+    initial = await app_client.post(url, json=request, headers=WRITE_KEY)
+    repeated = await app_client.post(url, json=request, headers=WRITE_KEY)
+    assert repeated.status_code == 409
+    assert "未确认" in envelope(repeated)["message"]
+    assert initial.status_code == 503
+    assert envelope(initial)["code"] == 51101
+    assert device == [31.25]
+
+
+@pytest.mark.parametrize(
+    ("reason", "status"),
+    [
+        ("write_unsupported", 400),
+        ("write_rejected", 400),
+        ("source_offline", 409),
+        ("driver_not_connected", 409),
+        ("point_not_loaded", 409),
+        ("missing_point_code", 502),
+        ("unknown_action", 502),
+    ],
+)
+async def test_a_confirmed_write_refusal_releases_the_key(
+    app_client: httpx.AsyncClient,
+    collect_fakes: CollectFakes,
+    reason: str,
+    status: int,
+) -> None:
+    source = await create_source(app_client)
+    batch = await create_points(app_client, source["id"])
+    url = f"{POINTS}/{batch['items'][0]['id']}:write"
+    collect_fakes.bus.replies[ACTION_WRITE] = {
+        "status": "error",
+        "reason": reason,
+    }
+    refused = await app_client.post(url, json={"value": 1}, headers=WRITE_KEY)
+    assert refused.status_code == status
+    collect_fakes.bus.replies[ACTION_WRITE] = {"status": "ok", "data": {}}
+    resumed = await app_client.post(url, json={"value": 1}, headers=WRITE_KEY)
+    assert resumed.status_code == 200
+    assert len(collect_fakes.bus.envelopes_of(ACTION_WRITE)) == 2

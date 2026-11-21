@@ -12,6 +12,7 @@ class SourceNotFound(AppError):
 
     code = 41101
     http_status = 404
+    is_execution_rejected = True
 
 
 class PointNotFound(AppError):
@@ -19,6 +20,7 @@ class PointNotFound(AppError):
 
     code = 41102
     http_status = 404
+    is_execution_rejected = True
 
 
 class SourceCodeTaken(AppError):
@@ -58,6 +60,7 @@ class SourceOffline(AppError):
 
     code = 41107
     http_status = 409
+    is_execution_rejected = True
 
 
 class SourceInvalid(AppError):
@@ -90,6 +93,7 @@ class WriteUnsupported(AppError):
 
     code = 41113
     http_status = 400
+    is_execution_rejected = True
 
 
 class IdempotencyKeyRequired(AppError):
@@ -135,11 +139,23 @@ class CollectorUnreachable(AppError):
     http_status = 503
 
 
+class CollectorWriteUnconfirmed(CollectorUnreachable):
+    """采集侧没有确认写值结果。"""
+
+    is_outcome_unknown = True
+
+
 class CommandFailed(AppError):
     """采集侧执行命令失败。"""
 
     code = 51102
     http_status = 502
+
+
+class CollectorWriteRejected(CommandFailed):
+    """采集侧在执行写值之前拒绝了请求。"""
+
+    is_execution_rejected = True
 
 
 class HistoryUnavailable(AppError):

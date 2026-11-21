@@ -10,6 +10,7 @@ import pytest
 from platform_server.apps.collect.errors import (
     BrowseUnsupported,
     CollectorUnreachable,
+    CollectorWriteUnconfirmed,
     CommandFailed,
     SourceOffline,
     WriteUnsupported,
@@ -330,12 +331,13 @@ async def test_write_translates_offline_into_a_conflict() -> None:
     assert raised.value.http_status == 409
 
 
-async def test_an_unknown_write_failure_falls_back_to_command_failed() -> None:
+async def test_a_legacy_write_failure_has_an_unconfirmed_outcome() -> None:
     transport = FakeCommandTransport(
         replies={ACTION_WRITE: {"status": "error", "reason": "driver_failed"}}
     )
-    with pytest.raises(CommandFailed):
+    with pytest.raises(CollectorWriteUnconfirmed) as raised:
         await build_bus(transport).write(SOURCE_ID, "setpoint", 1)
+    assert raised.value.http_status == 503
 
 
 async def test_browsing_gets_the_wider_budget() -> None:

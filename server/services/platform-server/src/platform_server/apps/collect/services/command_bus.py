@@ -23,10 +23,15 @@ from collectwire import (
     REASON_BROWSE_PAGE_TOO_LARGE,
     REASON_BROWSE_UNSUPPORTED,
     REASON_COLLECTOR_UNREACHABLE,
+    REASON_DRIVER_NOT_CONNECTED,
     REASON_MALFORMED_REPLY,
+    REASON_MISSING_POINT_CODE,
+    REASON_POINT_NOT_LOADED,
     REASON_SOURCE_OFFLINE,
     REASON_UNKNOWN_ACTION,
+    REASON_WRITE_REJECTED,
     REASON_WRITE_UNSUPPORTED,
+    STATUS_ERROR,
     STATUS_OK,
     TRACEPARENT_KEY,
     DataType,
@@ -40,6 +45,8 @@ from platform_server.apps.collect.errors import (
     BrowsePageTooLarge,
     BrowseUnsupported,
     CollectorUnreachable,
+    CollectorWriteRejected,
+    CollectorWriteUnconfirmed,
     CommandFailed,
     SourceOffline,
     WriteUnsupported,
@@ -291,8 +298,8 @@ class CommandBus:
                 envelope, request_id=request_id, timeout_s=timeout_s
             )
         except DependencyUnavailable as error:
-            raise CollectorUnreachable(
-                "采集侧暂时联系不上，请稍后重试"
+            raise _unreachable_error(
+                action, "采集侧暂时联系不上，请稍后重试"
             ) from error
         if reply is None:
             _logger.error(
@@ -301,8 +308,19 @@ class CommandBus:
                 action=action,
                 source_id=str(source_id),
             )
-            raise CollectorUnreachable("采集侧没有在预算内答复")
+            raise _unreachable_error(action, "采集侧没有在预算内答复")
         return _outcome(reply)
+
+
+def _unreachable_error(action: str, message: str) -> CollectorUnreachable:
+    """区分写结果未知和其它命令无应答。Args: action, message。"""
+    if action == ACTION_WRITE:
+        return _unconfirmed_write()
+    return CollectorUnreachable(message)
+
+
+def _unconfirmed_write() -> CollectorWriteUnconfirmed:
+    return CollectorWriteUnconfirmed("写值结果未确认，请先核对现场值")
 
 
 def _deadline_ms(timeout_s: float) -> int:
@@ -320,7 +338,7 @@ def _outcome(reply: dict[str, Any]) -> CommandOutcome:
         # JSON 的边界：isinstance 只能确认它是 dict，键值类型仍要在这里收敛
         data = cast("dict[str, Any]", raw) if isinstance(raw, dict) else {}
         return CommandOutcome(is_ok=True, data=data, reason="")
-    reason = reply.get("reason")
+    reason = reply.get("reason") if status == STATUS_ERROR else None
     return CommandOutcome(
         is_ok=False,
         data={},
@@ -448,6 +466,12 @@ def _write_error(reason: str) -> Exception:
     """
     if reason == REASON_WRITE_UNSUPPORTED:
         return WriteUnsupported("这个数据源不允许下发写值")
-    if reason == REASON_SOURCE_OFFLINE:
+    if reason == REASON_WRITE_REJECTED:
+        return WriteUnsupported("设备明确拒绝此写值，请核对点位权限和值类型")
+    if reason in (REASON_SOURCE_OFFLINE, REASON_DRIVER_NOT_CONNECTED):
         return SourceOffline("采集侧还没连上这个数据源")
-    return CommandFailed("采集侧执行写值失败")
+    if reason == REASON_POINT_NOT_LOADED:
+        return SourceOffline("采集会话尚未加载这个点位")
+    if reason in (REASON_MISSING_POINT_CODE, REASON_UNKNOWN_ACTION):
+        return CollectorWriteRejected("采集侧执行写值失败")
+    return _unconfirmed_write()
