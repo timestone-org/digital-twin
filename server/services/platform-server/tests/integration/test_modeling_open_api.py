@@ -401,7 +401,16 @@ async def test_a_value_outside_the_training_range_is_flagged(
     assert answer["predictions"][0] is not None
     kinds = [item["kind"] for item in answer["warnings"]]
     assert "out_of_training_range" in kinds
+    assert {item["row"] for item in answer["warnings"]} == {0}
     assert str(FAR_OUTSIDE) not in response.text
+
+    invalid = await app_client.post(
+        f"{OPEN}/{deployment['code']}:predict",
+        json={"rows": [{TEMPERATURE: "合成无效温度", LOAD: 400.0}]},
+        headers=caller_headers,
+    )
+    assert invalid.status_code == HTTP_BAD_REQUEST
+    assert "第 1 行" in invalid.json()["message"]
 
 
 async def test_an_unknown_code_is_a_plain_not_found(

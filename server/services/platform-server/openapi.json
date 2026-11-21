@@ -17969,6 +17969,7 @@
             "type": "string"
           },
           "row": {
+            "description": "请求 rows 的下标，从 0 开始。错误正文以 1 作为首行编号。",
             "title": "Row",
             "type": "integer"
           }
