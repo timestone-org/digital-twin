@@ -51,6 +51,9 @@ async def update(
     row = await _platform_source(session, source_id)
     if row.detached_at is not None:
         raise SourceNotFound("平台来源已解绑")
+    has_imported = source_id in await crud.source.imported_sources(
+        session, [source_id]
+    )
     if fields.config is not None:
         changes = fields.config.model_dump(exclude_unset=True)
         try:
@@ -62,9 +65,7 @@ async def update(
             raise ValidationFailed(
                 "平台来源配置无效，请检查路径与字段"
             ) from error
-        if _identity(before) != _identity(
-            after
-        ) and await crud.source.has_imported(session, source_id):
+        if _identity(before) != _identity(after) and has_imported:
             raise SourceIdentityInUse(
                 "该来源已经导入资料，请新建来源以更换路径或记录标识字段"
             )
@@ -75,7 +76,7 @@ async def update(
     if fields.name is not None:
         row.name = fields.name
     await session.flush()
-    return source_out(row)
+    return source_out(row, has_imported)
 
 
 async def detach(session: AsyncSession, source_id: uuid.UUID) -> None:

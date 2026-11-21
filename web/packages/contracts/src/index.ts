@@ -112,6 +112,8 @@ export type {
   KnowledgeRerankCapability,
   KnowledgeSearchResult,
   KnowledgeSource,
+  KnowledgePlatformSourcePatch,
+  KnowledgeSourceMetadataPatch,
   KnowledgeStrategy,
   KnowledgeSyncResult,
   KnowledgeUploadTicket,

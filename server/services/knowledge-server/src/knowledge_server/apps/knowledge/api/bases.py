@@ -159,9 +159,7 @@ async def list_sources(
 
     Args: session, _viewer, base_id。
     """
-    await library_service.read_base(session, base_id)
-    rows = await crud.source.list_sources(session, base_id)
-    return ok([library_service.source_out(one) for one in rows])
+    return ok(await library_service.list_sources(session, base_id))
 
 
 @router.post(

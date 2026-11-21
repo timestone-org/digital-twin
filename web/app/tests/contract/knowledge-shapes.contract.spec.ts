@@ -35,6 +35,8 @@ import type {
   KnowledgeParsingCapability,
   KnowledgeSearchResult,
   KnowledgeSource,
+  KnowledgePlatformSourcePatch,
+  KnowledgeSourceMetadataPatch,
   KnowledgeSyncResult,
   KnowledgeUploadTicket,
 } from '@dt/contracts'
@@ -120,7 +122,20 @@ const SHAPES: Record<string, Record<string, true>> = {
     updated_at: true,
   } satisfies Keys<KnowledgeBase>,
 
+  SourceMetadataIn: {
+    name: true,
+    config: true,
+  } satisfies Keys<KnowledgeSourceMetadataPatch>,
+  PlatformSourcePatch: {
+    path: true,
+    id_field: true,
+    title_field: true,
+    page_param: true,
+    size_param: true,
+  } satisfies Keys<KnowledgePlatformSourcePatch>,
+
   SourceOut: {
+    can_change_identity: true,
     id: true,
     base_id: true,
     kind: true,

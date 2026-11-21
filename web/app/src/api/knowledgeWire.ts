@@ -37,6 +37,7 @@ export interface KnowledgeBase {
 
 /** 一路来源。 */
 export interface KnowledgeSource {
+  canChangeIdentity?: boolean
   id: string
   baseId: string
   kind: string
@@ -210,6 +211,9 @@ export function toBase(value: unknown): KnowledgeBase {
 export function toSource(value: unknown): KnowledgeSource {
   const row = record(value, '来源')
   return {
+    ...(typeof row.can_change_identity === 'boolean'
+      ? { canChangeIdentity: row.can_change_identity }
+      : {}),
     id: text(row.id),
     baseId: text(row.base_id),
     kind: text(row.kind),

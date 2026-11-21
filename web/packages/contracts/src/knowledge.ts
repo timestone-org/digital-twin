@@ -138,6 +138,7 @@ export interface KnowledgeBase {
 
 /** 一个库下的一路来源。文件上传只是其中一路。 */
 export interface KnowledgeSource {
+  can_change_identity?: boolean
   id: string
   base_id: string
   kind: string
@@ -151,6 +152,21 @@ export interface KnowledgeSource {
    */
   last_error: string
   created_at: string
+}
+
+/** 平台来源配置中实际提交的字段。 */
+export interface KnowledgePlatformSourcePatch {
+  path?: string
+  id_field?: string
+  title_field?: string
+  page_param?: string
+  size_param?: string
+}
+
+/** 名称或平台来源配置的修改。 */
+export interface KnowledgeSourceMetadataPatch {
+  name?: string
+  config?: KnowledgePlatformSourcePatch
 }
 
 /** 一份文档。 */

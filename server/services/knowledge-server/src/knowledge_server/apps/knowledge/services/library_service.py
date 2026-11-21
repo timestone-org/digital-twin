@@ -197,12 +197,13 @@ def base_out(
     )
 
 
-def source_out(row: KnowledgeSource) -> SourceOut:
+def source_out(row: KnowledgeSource, has_imported: bool = False) -> SourceOut:
     """一行来源摊成出参。
 
     Args: row。
     """
     return SourceOut(
+        can_change_identity=row.kind == "platform" and not has_imported,
         id=row.id,
         base_id=row.base_id,
         kind=row.kind,
@@ -212,6 +213,18 @@ def source_out(row: KnowledgeSource) -> SourceOut:
         last_error=row.last_error,
         created_at=row.created_at,
     )
+
+
+async def list_sources(
+    session: AsyncSession, base_id: uuid.UUID
+) -> list[SourceOut]:
+    """列出活动来源，并告知是否还能更换记录标识。Args: session, base_id。"""
+    await read_base(session, base_id)
+    rows = await crud.source.list_sources(session, base_id)
+    imported = await crud.source.imported_sources(
+        session, [row.id for row in rows]
+    )
+    return [source_out(row, row.id in imported) for row in rows]
 
 
 async def create_base(

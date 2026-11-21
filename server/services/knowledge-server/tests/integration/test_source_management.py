@@ -84,6 +84,7 @@ async def test_imported_source_can_edit_display_and_paging(
         },
     )
     assert before.status_code == 200
+    assert before.json()["data"]["can_change_identity"] is True
     await _material(db_stack, base, source)
     changed = await client.patch(
         path,
@@ -99,6 +100,7 @@ async def test_imported_source_can_edit_display_and_paging(
     assert changed.status_code == 200
     data = changed.json()["data"]
     assert data["name"] == "新显示名"
+    assert data["can_change_identity"] is False
     assert data["config"] == {
         "path": "/api/v1/platform/old",
         "id_field": "record_id",
@@ -128,6 +130,7 @@ async def test_detaching_stops_sync_and_keeps_documents_and_citations(
     assert (await client.delete(path)).status_code == 204
     listed = (await client.get(f"{BASES}/{base}/sources")).json()["data"]
     assert [s["kind"] for s in listed] == ["upload"]
+    assert listed[0]["can_change_identity"] is False
     assert (await client.post(path + ":sync", json={})).status_code == 404
     assert (
         await client.patch(path, json={"name": "已解绑"})

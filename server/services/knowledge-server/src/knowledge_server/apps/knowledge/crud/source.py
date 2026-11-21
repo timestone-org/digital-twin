@@ -159,14 +159,20 @@ async def mark_sync_failed(
     return max(0, cast("CursorResult[Any]", done).rowcount)
 
 
-async def has_imported(session: AsyncSession, source_id: uuid.UUID) -> bool:
-    """判断来源是否已登记原文或已知的稳定上游记录。Args: session, source_id。"""
-    value = await session.scalar(
+async def imported_sources(
+    session: AsyncSession, source_ids: list[uuid.UUID]
+) -> set[uuid.UUID]:
+    """一次查询这些来源已经登记的文档或稳定记录。Args: session, source_ids。"""
+    if not source_ids:
+        return set()
+    rows = await session.scalars(
         text("""
-        SELECT EXISTS (SELECT 1 FROM knowledge.kb_documents WHERE source_id=:id)
-            OR EXISTS (SELECT 1 FROM knowledge.kb_source_records
-                       WHERE source_id=:id)
+        SELECT requested.id FROM unnest(CAST(:ids AS uuid[])) requested(id)
+        WHERE EXISTS (SELECT FROM knowledge.kb_documents d
+                      WHERE d.source_id=requested.id)
+           OR EXISTS (SELECT FROM knowledge.kb_source_records r
+                      WHERE r.source_id=requested.id)
     """),
-        {"id": source_id},
+        {"ids": source_ids},
     )
-    return bool(value)
+    return set(rows)

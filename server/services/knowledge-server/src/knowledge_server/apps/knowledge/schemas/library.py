@@ -119,6 +119,7 @@ class SourceOut(BaseModel):
     id: uuid.UUID
     base_id: uuid.UUID
     kind: str
+    is_identity_editable: bool = Field(alias="can_change_identity")
     name: str
     config: dict[str, Any]
     last_synced_at: datetime | None

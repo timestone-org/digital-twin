@@ -2522,6 +2522,10 @@
             "title": "Base Id",
             "type": "string"
           },
+          "can_change_identity": {
+            "title": "Can Change Identity",
+            "type": "boolean"
+          },
           "config": {
             "additionalProperties": true,
             "title": "Config",
@@ -2566,6 +2570,7 @@
           "id",
           "base_id",
           "kind",
+          "can_change_identity",
           "name",
           "config",
           "last_synced_at",
