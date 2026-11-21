@@ -74,11 +74,12 @@ const channel = usePublicRealtimeChannel(publicToken())
 
 // ⚠ 不装历史 provider：公开面没有历史端点，`archive` 绑定如实显示为没有数据。
 // 拿实时通道里收到过的那几个点冒充历史，会画出一条从打开页面才开始的假曲线
+const subscribe = createPointSubscribe(channel, () => {
+  const token = publicToken()
+  return token === '' ? null : publicTopic(token)
+})
 installDashboardDataSources({
-  subscribe: createPointSubscribe(channel, () => {
-    const token = publicToken()
-    return token === '' ? null : publicTopic(token)
-  }),
+  subscribe,
 })
 
 const getManifest: GetModuleManifest = (moduleType: string) =>
@@ -107,6 +108,7 @@ const values = useDashboardValues(
   () => nodes.value,
   () => publicToken(),
   {
+    subscribe,
     connectionState: () => channel.connectionState.value,
     dataset: {
       readLatest: (keys, signal) =>

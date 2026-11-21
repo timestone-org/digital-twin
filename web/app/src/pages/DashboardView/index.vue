@@ -64,11 +64,12 @@ const file = useDashboardDoc()
 
 const channel = useRealtimeChannel()
 
+const subscribe = createPointSubscribe(channel, () => {
+  const current = file.dashboard.value
+  return current === null ? null : dashboardTopic(current.id)
+})
 installDashboardDataSources({
-  subscribe: createPointSubscribe(channel, () => {
-    const current = file.dashboard.value
-    return current === null ? null : dashboardTopic(current.id)
-  }),
+  subscribe,
   fetchHistory: fetchPointHistory,
   fetchDatasetSeries,
 })
@@ -80,7 +81,7 @@ const nodes = computed(() => file.dashboard.value?.nodes ?? [])
 const values = useDashboardValues(
   () => nodes.value,
   () => file.dashboard.value?.id ?? '',
-  { connectionState: () => channel.connectionState.value },
+  { subscribe, connectionState: () => channel.connectionState.value },
 )
 
 // 时序槽的取数与刷新节拍叠在实时那一份之上，整屏一个节拍。

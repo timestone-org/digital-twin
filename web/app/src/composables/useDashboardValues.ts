@@ -19,6 +19,7 @@ import {
   createBindingReader,
   type ReadPointSample,
 } from '@/runtime/bindingReader'
+import type { SubscribePoints } from '@/runtime/pointStream'
 
 export interface DashboardValues {
   /** 收到过读数的点位数，供状态条显示。 */
@@ -39,6 +40,7 @@ export interface DashboardDatasetPorts {
 }
 
 interface DashboardValueOptions {
+  subscribe?: SubscribePoints | undefined
   connectionState?: (() => ModuleConnectionState) | undefined
   currentConnection?: (() => ModuleConnectionState | undefined) | undefined
   hasDatasetAccess?: boolean
@@ -50,7 +52,7 @@ interface DashboardValueOptions {
  * 收渲染子集：编辑器给的是全量草稿节点，公开页给的是窄面，都能装。
  * @param nodes 当前大屏的全部节点
  * @param scope 当前是哪张屏；跨屏跳转时订阅与快照都要跟着翻篇（见 usePointSamples）
- * @param options 运行页的连接提示、编辑器的样本生命周期与台账读取端口
+ * @param options 本页订阅入口、连接提示、样本生命周期与台账读取端口
  */
 export function useDashboardValues(
   nodes: () => readonly DashboardNodeView[],
@@ -58,6 +60,7 @@ export function useDashboardValues(
   options: DashboardValueOptions = {},
 ): DashboardValues {
   const {
+    subscribe,
     connectionState,
     currentConnection,
     hasDatasetAccess = true,
@@ -66,6 +69,7 @@ export function useDashboardValues(
   const samples = usePointSamples(
     () => boundPointKeys(nodes()),
     scope,
+    subscribe,
     currentConnection,
   )
   const read =

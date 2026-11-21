@@ -8,8 +8,7 @@
  * 只看点位表的话，人已经在 B 屏、订阅还挂在 A 的主题上——画面照样有值
  * （同一批点位），坏的是 hub 那边观看者永远算在 A 头上、publisher 为一张没人看的
  * 屏一直推，而 A 一改绑定 B 屏当场没数据，且现场看不出这跟改 A 有什么关系。
- * ⚠ 没装实时 provider 时一条都不订：假装订上会让
- * 界面一直停在「等首帧」，而首帧永远不会来。
+ * 各页传入自己的订阅函数，工作区的其它页签不会影响本页重订。
  */
 
 import { onUnmounted, shallowRef, triggerRef, watch, type Ref } from 'vue'
@@ -18,12 +17,10 @@ import type {
   PointSample,
   Unsubscribe,
 } from '@dt/contracts'
-import { getProvider, hasProvider } from '@dt/datasources'
 
 import type { ReadPointSample } from '@/runtime/bindingReader'
 
-/** 实时点位这一种来源。⚠ 它是绑定的来源种类，不是模块类型。 */
-const REALTIME_KIND = 'opcua'
+import type { SubscribePoints } from '@/runtime/pointStream'
 
 /** 重订依据里「屏」与「点位表」之间的分隔符，点位身份里不会出现它。 */
 const SCOPE_SEPARATOR = '\n'
@@ -42,11 +39,13 @@ export interface PointSamples {
  * 订上这批点位并缓存它们的快照。须在 setup 内调用。
  * @param keys 当前要订的点位身份，**定序**——次序抖动会让这里反复退订重订
  * @param scope 当前的大屏 id 或公开令牌
+ * @param subscribe 该页的订阅入口
  * @param currentConnection 编辑器连接状态；断开时清空本次连接的读数
  */
 export function usePointSamples(
   keys: () => readonly string[],
   scope: () => string,
+  subscribe: SubscribePoints | undefined,
   currentConnection?: () => ModuleConnectionState | undefined,
 ): PointSamples {
   const store = new Map<string, PointSample>()
@@ -83,8 +82,8 @@ export function usePointSamples(
       subscribedScope = nextScope
       forgetSamples()
     }
-    if (wanted.length === 0 || !hasProvider(REALTIME_KIND)) return
-    stop = getProvider(REALTIME_KIND).subscribe(wanted, record)
+    if (wanted.length > 0 && subscribe !== undefined)
+      stop = subscribe(wanted, record)
   }
 
   watch(

@@ -62,17 +62,19 @@ export function useTwinLiveValues(
   // ⚠ 历史序列不注入：编辑视口上没有任何时序图元，注了也没人读，
   //   而注一个取不到数的通道只会在诊断时多一条假线索
   const channel = useRealtimeChannel()
+  const subscribe = createPointSubscribe(channel, () => {
+    const id = dashboardId()
+    return id === '' ? null : dashboardTopic(id)
+  })
   installDashboardDataSources({
-    subscribe: createPointSubscribe(channel, () => {
-      const id = dashboardId()
-      return id === '' ? null : dashboardTopic(id)
-    }),
+    subscribe,
   })
 
   const currentConnection = () => channel.connectionState?.value
   const samples = usePointSamples(
     () => boundPointKeysOf(bindings()),
     dashboardId,
+    subscribe,
     currentConnection,
   )
   const readDataset = useDatasetLatestValues(bindings, dashboardId)

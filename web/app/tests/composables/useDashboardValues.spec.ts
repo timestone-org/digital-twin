@@ -16,8 +16,8 @@ import type {
   ModuleConnectionState,
   PointValueListener,
 } from '@dt/contracts'
-import { __resetProviders, registerProvider } from '@dt/datasources'
 import { useRuntimeData } from '@dt/runtime'
+import type { SubscribePoints } from '@/runtime/pointStream'
 import type { RuntimeDataSource } from '@dt/runtime'
 
 import {
@@ -29,16 +29,14 @@ const unsubscribe = vi.fn()
 let asked: string[][] = []
 let emit: PointValueListener = () => undefined
 
-function registerFakeRealtime(): void {
-  registerProvider({
-    kind: 'opcua',
-    subscribe: (nodeKeys, onValue) => {
-      asked.push([...nodeKeys])
-      emit = onValue
-      return unsubscribe
-    },
-    readHistory: () => Promise.reject(new Error('不该被调用')),
-  })
+let subscribe: SubscribePoints | undefined
+
+function connectFakeRealtime(): void {
+  subscribe = (nodeKeys, onValue) => {
+    asked.push([...nodeKeys])
+    emit = onValue
+    return unsubscribe
+  }
 }
 
 function binding(nodeKey: string | null): BindingPayload {
@@ -105,7 +103,7 @@ function mountValues(
       const found = useDashboardValues(
         () => nodes.value,
         () => scope.value,
-        { connectionState, currentConnection },
+        { subscribe, connectionState, currentConnection },
       )
       values = found
       return () => h('div', [String(found.sampleCount.value), h(child)])
@@ -116,7 +114,7 @@ function mountValues(
 }
 
 beforeEach(() => {
-  __resetProviders()
+  subscribe = undefined
   asked = []
   unsubscribe.mockClear()
 })
@@ -127,20 +125,20 @@ afterEach(() => {
 
 describe('订阅', () => {
   it('只订实时且已挑点的那些点位，去重后升序', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     mountValues([node([binding('s:b'), binding('s:a'), binding(null)])])
 
     expect(asked).toEqual([['s:a', 's:b']])
   })
 
   it('一个点位都没有时不去订', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     mountValues([node([])])
 
     expect(asked).toEqual([])
   })
 
-  it('没登记实时 provider 时也不崩，只是没有值', () => {
+  it('没有订阅入口时仍可装好读取器', () => {
     const { wrapper } = mountValues([node([binding('s:a')])])
 
     expect(asked).toEqual([])
@@ -148,7 +146,7 @@ describe('订阅', () => {
   })
 
   it('绑定变了先退旧订阅再订新的', async () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { wrapper, nodes } = mountValues([node([binding('s:a')])])
 
     nodes.value = [node([binding('s:a'), binding('s:b')])]
@@ -159,7 +157,7 @@ describe('订阅', () => {
   })
 
   it('换了一张屏，点位表一模一样也要先退旧订阅再订新的', async () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { wrapper, scope } = mountValues([node([binding('s:a')])])
 
     scope.value = 'd2'
@@ -170,7 +168,7 @@ describe('订阅', () => {
   })
 
   it('卸载时退订', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { wrapper } = mountValues([node([binding('s:a')])])
 
     wrapper.unmount()
@@ -181,7 +179,7 @@ describe('订阅', () => {
 
 describe('换屏时的快照缓存', () => {
   it('换屏把上一屏的快照清掉，读回「等首帧」而不是上一屏的旧值', async () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { wrapper, scope, read } = mountValues([node([binding('s:a')])])
     emit('s:a', { state: 'ok', value: 21, timestampMs: 99, quality: 'good' })
 
@@ -195,7 +193,7 @@ describe('换屏时的快照缓存', () => {
   })
 
   it('只是绑定变了不清快照——编辑器里改一次绑定就闪一次整屏的值', async () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { wrapper, nodes, read } = mountValues([node([binding('s:a')])])
     emit('s:a', { state: 'ok', value: 21, timestampMs: 99, quality: 'good' })
 
@@ -212,7 +210,7 @@ describe('换屏时的快照缓存', () => {
 
 describe('取数源', () => {
   it('装上的读取器把快照读成槽结果', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { read } = mountValues([node([binding('s:a')])])
 
     emit('s:a', {
@@ -230,7 +228,7 @@ describe('取数源', () => {
   })
 
   it('还没收到过快照的点位是等首帧', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { read } = mountValues([node([binding('s:a')])])
 
     expect(read()?.readBinding()(binding('s:a'), {})).toEqual({
@@ -239,7 +237,7 @@ describe('取数源', () => {
   })
 
   it('收到的快照数会记进计数，界面据它显示「有几个点位在更新」', async () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { wrapper } = mountValues([node([binding('s:a')])])
 
     emit('s:a', { state: 'error', errorMessage: '读不到' })
@@ -253,7 +251,7 @@ describe('透出去的那份快照缓存', () => {
   // 助手的 read_values 读它。⚠ 必须与画布渲染是**同一份**：另发一次请求的话，
   // 会出现「助手说有值、画面上是占位符」
   it('与画布渲染读的是同一份缓存', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { values, read } = mountValues([node([binding('s:a')])])
 
     emit('s:a', { state: 'ok', value: 21, timestampMs: 99, quality: 'good' })
@@ -270,7 +268,7 @@ describe('透出去的那份快照缓存', () => {
   })
 
   it('没收到过的点位给 undefined，不拿一个空值冒充首帧', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const { values } = mountValues([node([binding('s:a')])])
 
     expect(values()?.read('s:a')).toBeUndefined()
@@ -279,7 +277,7 @@ describe('透出去的那份快照缓存', () => {
 
 describe('连接态', () => {
   it('编辑器重连后逐点等待首帧，断线旧值不能再次验收', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const state = ref<ModuleConnectionState>('open')
     const found = mountValues(
       [node([binding('s:a'), binding('s:b')])],
@@ -304,7 +302,7 @@ describe('连接态', () => {
   })
 
   it('运行页仍保留最后值，并提供断线状态用于陈旧标识', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const state = ref<ModuleConnectionState>('open')
     const found = mountValues([node([binding('s:a')])], 'd1', () => state.value)
     emit('s:a', { state: 'ok', value: 42, timestampMs: 99, quality: 'good' })
@@ -316,7 +314,7 @@ describe('连接态', () => {
     found.wrapper.unmount()
   })
   it('给了就装进取数源，且每次都现取——通道断了模块才重算得出来', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const state = ref<ModuleConnectionState>('open')
     const mounted = mountValues([node([])], 'd1', () => state.value)
 
@@ -326,7 +324,7 @@ describe('连接态', () => {
   })
 
   it('⚠ 不给就整支缺席：设计态的画布不该冒出「数据可能过期」', () => {
-    registerFakeRealtime()
+    connectFakeRealtime()
     const mounted = mountValues([node([])])
 
     expect(mounted.read()?.connectionState).toBeUndefined()

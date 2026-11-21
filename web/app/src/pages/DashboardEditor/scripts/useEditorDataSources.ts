@@ -35,15 +35,17 @@ export function useEditorDataSources(
   nodes: () => readonly DashboardNodeView[],
 ): DashboardValues & { readSeries: ReadRenderedSeries } {
   const channel = useRealtimeChannel()
+  const subscribe = createPointSubscribe(channel, () => {
+    const current = dashboard.value
+    return current === null ? null : dashboardTopic(current.id)
+  })
   installDashboardDataSources({
-    subscribe: createPointSubscribe(channel, () => {
-      const current = dashboard.value
-      return current === null ? null : dashboardTopic(current.id)
-    }),
+    subscribe,
     fetchHistory: fetchPointHistory,
     fetchDatasetSeries,
   })
   const values = useDashboardValues(nodes, () => dashboard.value?.id ?? '', {
+    subscribe,
     currentConnection: () => channel.connectionState?.value,
   })
   // ⚠ 必须排在 `useDashboardValues` 之后：两次注入的是同一个键，后者整份覆盖前者
