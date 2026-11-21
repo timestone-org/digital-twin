@@ -180,23 +180,40 @@ function pairOf(
  * @param nodes 全部节点
  * @param styles 全部节点样式（文档 ∪ 预置库）
  */
-export function edgeEnds(
+function routedEnds(
   edge: Twin2dEdge,
   nodes: readonly Twin2dNode[],
   styles: readonly Twin2dNodeStyle[],
-): readonly [Twin2dEdgeEnd, Twin2dEdgeEnd] | null {
+): {
+  ends: readonly [Twin2dEdgeEnd, Twin2dEdgeEnd]
+  boxes: readonly [Box, Box]
+} | null {
   const from = pairOf(edge.from.nodeId, nodes, styles)
   const to = pairOf(edge.to.nodeId, nodes, styles)
   if (from === null || to === null) return null
   const fromBox = worldBoxOf(from)
   const toBox = worldBoxOf(to)
-  return [
-    resolveEdgeEnd(edge.from, from.node, from.style, {
-      x: toBox.x,
-      y: toBox.y,
-    }),
-    resolveEdgeEnd(edge.to, to.node, to.style, { x: fromBox.x, y: fromBox.y }),
-  ]
+  return {
+    ends: [
+      resolveEdgeEnd(edge.from, from.node, from.style, toBox),
+      resolveEdgeEnd(edge.to, to.node, to.style, fromBox),
+    ],
+    boxes: [fromBox, toBox],
+  }
+}
+
+/**
+ * 供把手使用的两端落点与方向。
+ * @param edge 连线实例
+ * @param nodes 全部节点
+ * @param styles 全部节点样式
+ */
+export function edgeEnds(
+  edge: Twin2dEdge,
+  nodes: readonly Twin2dNode[],
+  styles: readonly Twin2dNodeStyle[],
+): readonly [Twin2dEdgeEnd, Twin2dEdgeEnd] | null {
+  return routedEnds(edge, nodes, styles)?.ends ?? null
 }
 
 /**
@@ -224,14 +241,16 @@ export function edgePolyline(
   nodeStyles: readonly Twin2dNodeStyle[],
   edgeStyles: readonly Twin2dEdgeStyle[],
 ): readonly Pt[] {
-  const ends = edgeEnds(edge, nodes, nodeStyles)
+  const routing = routedEnds(edge, nodes, nodeStyles)
   const style = edgeStyles.find((item) => item.id === edge.styleId)
-  if (ends === null || style === undefined) return []
+  if (routing === null || style === undefined) return []
+  const { ends, boxes } = routing
   return edgePath({
     start: ends[0].point,
     end: ends[1].point,
     startSide: ends[0].side,
     endSide: ends[1].side,
+    endpointBoxes: boxes,
     waypoints: edge.waypoints,
     route: routeOf(edge, style),
     radius: style.cornerRadius,

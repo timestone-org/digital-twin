@@ -276,7 +276,9 @@ describe('两端解析', () => {
 
     expect(points).toEqual([
       { x: 100, y: 30 },
-      { x: 450, y: 30 },
+      { x: 108, y: 30 },
+      { x: 108, y: -8 },
+      { x: 450, y: -8 },
       { x: 450, y: 0 },
     ])
   })
@@ -293,7 +295,8 @@ describe('两端解析', () => {
       config.edgeStyles,
     )
 
-    expect(points).toHaveLength(3)
+    expect(points.at(-2)).toEqual({ x: 450, y: -8 })
+    expect(points.at(-1)).toEqual({ x: 450, y: 0 })
   })
 
   it('端点指着一个已经没有的节点时整条挂不上', () => {

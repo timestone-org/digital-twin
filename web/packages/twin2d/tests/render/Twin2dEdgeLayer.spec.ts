@@ -664,3 +664,23 @@ describe('舞台接缝', () => {
     expect(wrapper.get('svg').attributes('viewBox')).toBe('0 0 1 1')
   })
 })
+
+it('默认正交线从两端的右端口向外引出，避开终点设备', () => {
+  const wrapper = render({
+    edges: [
+      {
+        ...EDGE,
+        route: 'orthogonal',
+        from: { nodeId: 'a', portId: 'r' },
+        to: { nodeId: 'b', portId: 'r' },
+      },
+    ],
+  })
+  const path = wrapper.get('[data-test="edge-stroke"]').attributes('d') ?? ''
+  const steps = path.split(' ')
+  const beforeEnd = steps.at(-2)?.replace(/^[ML]/, '').split(',') ?? []
+  expect(steps[0]).toBe('M100,30')
+  expect(steps.at(-1)).toBe('L500,30')
+  expect(Number(beforeEnd[0])).toBeGreaterThan(500)
+  expect(Number(beforeEnd[1])).toBe(30)
+})

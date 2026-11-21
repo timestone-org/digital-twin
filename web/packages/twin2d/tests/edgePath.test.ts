@@ -341,3 +341,64 @@ describe('edgePath 的反向渲染', () => {
     expect(reversed.label.y).toBeCloseTo(forward.label.y, 6)
   })
 })
+
+describe('绕开端点的自动正交线', () => {
+  const facing: EdgePathInput = {
+    ...BASE,
+    start: { x: 100, y: 30 },
+    end: { x: 103, y: 40 },
+    endpointBoxes: [
+      { x: 50, y: 30, w: 100, h: 60 },
+      { x: 153, y: 30, w: 100, h: 60 },
+    ],
+  }
+
+  it('狭缝内依然能转弯并沿两端的方向接回', () => {
+    const result = edgePath(facing)
+    expect(result.points.slice(1, -1)).toHaveLength(2)
+    for (const corner of result.points.slice(1, -1)) {
+      expect(corner.x).toBeGreaterThan(100)
+      expect(corner.x).toBeLessThan(103)
+    }
+    expect(result.startFrom.y).toBe(30)
+    expect(result.endFrom.y).toBe(40)
+  })
+
+  it('反向渲染沿同一条避障折线逆行', () => {
+    const geometry = {
+      ...facing,
+      endSide: 'right' as const,
+      end: { x: 203, y: 40 },
+    }
+    const forward = edgePath(geometry)
+    const reverse = edgePath({ ...geometry, reversed: true })
+    expect(reverse.points).toEqual([...forward.points].reverse())
+    expect(reverse.startFrom).toEqual(forward.endFrom)
+    expect(reverse.endFrom).toEqual(forward.startFrom)
+  })
+
+  it('手动折点的位置和圆角不受避障影响', () => {
+    const waypoints = [
+      { x: 140, y: 45 },
+      { x: 80, y: 50 },
+    ]
+    const manual = edgePath({ ...facing, waypoints })
+    expect(manual.points).toEqual([facing.start, ...waypoints, facing.end])
+    expect(manual.path).toBe(roundCorners(manual.points, facing.radius))
+  })
+
+  it('设备重叠且堵住引线时保留可绘制的正交线及出线方向', () => {
+    const overlap: EdgePathInput = {
+      ...facing,
+      end: { x: 90, y: 40 },
+      endpointBoxes: [
+        { x: 50, y: 30, w: 100, h: 60 },
+        { x: 140, y: 30, w: 100, h: 60 },
+      ],
+    }
+    const result = edgePath(overlap)
+    expect(result.startFrom.x).toBeGreaterThan(overlap.start.x)
+    expect(result.endFrom.x).toBeLessThan(overlap.end.x)
+    expect(result.path).not.toMatch(/NaN| A/)
+  })
+})

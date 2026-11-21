@@ -4,8 +4,9 @@
  * 逐条口径见 docs/MODULE_TWIN_2D_DESIGN.md §8 与 §7.9 #63–#66。
  */
 import { pointAlong, sideNormal } from './geometry'
-import type { Pt } from './geometry'
+import type { Box, Pt } from './geometry'
 import type { Twin2dRouteKind, Twin2dSide } from './kinds'
+import { avoidEndpointBoxes } from './orthogonalObstacles'
 import { finiteOr } from './sanitize'
 
 /** path 串的坐标精度 */
@@ -143,6 +144,7 @@ export interface EdgePathInput {
   end: Pt
   startSide: Twin2dSide
   endSide: Twin2dSide
+  endpointBoxes?: readonly [Box, Box]
   /** 画布坐标系上的拐点；非空时**优先于** `route`。 */
   waypoints: readonly Pt[]
   /** 四档走线；`orthogonal` 与 `step` 指向同一条路由。 */
@@ -291,6 +293,21 @@ export function edgePath(input: EdgePathInput): EdgePathResult {
     }
   }
   if (input.route === 'bezier') return bezierPath(ends, labelAt)
+  const boxes = input.endpointBoxes
+  if (boxes !== undefined) {
+    const { start, end, startSide, endSide } = input
+    const routed = avoidEndpointBoxes(
+      orthogonalRoute(start, end, startSide, endSide),
+      { point: start, side: startSide, box: boxes[0] },
+      { point: end, side: endSide, box: boxes[1] },
+      radius,
+    )
+    return polylineResult(
+      input.reversed ? routed.points.reverse() : routed.points,
+      routed.radius,
+      labelAt,
+    )
+  }
   const { start, end, startSide, endSide } = ends
   const points = orthogonalRoute(start, end, startSide, endSide)
   return polylineResult(points, radius, labelAt)
