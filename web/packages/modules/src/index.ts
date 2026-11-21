@@ -29,7 +29,7 @@ export {
   incompleteParts,
   strayPartSlots,
 } from './cardParts/audit'
-export { CARD_SLOT_DOCS, CARD_SLOT_KEYS } from './cardParts/types'
+export { CARD_SLOT_KEYS } from './cardParts/types'
 export type {
   CardCellFormat,
   CardCellView,
