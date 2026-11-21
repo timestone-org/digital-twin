@@ -128,6 +128,24 @@ describe('把算子 schema 摊成字段表', () => {
       '人工录入',
       '全要',
     ])
+    expect(field?.hint).toBe('')
+  })
+
+  it('只去掉下拉已展示的说明，保留额外的使用条件', () => {
+    const [field] = fieldsOf({
+      properties: {
+        mode: {
+          enum: ['sum', 'avg'],
+          description: 'sum=求和；avg=平均；缺失值会跳过',
+        },
+      },
+    })
+
+    expect(field?.options.map((option) => option.label)).toEqual([
+      '求和',
+      '平均',
+    ])
+    expect(field?.hint).toBe('缺失值会跳过')
   })
 
   it('成对写法只覆盖了一部分枚举值时，一个都不用', () => {
@@ -141,6 +159,7 @@ describe('把算子 schema 摊成字段表', () => {
     const field = fieldsOf(partial)[0]
 
     expect(field?.options.map((o) => o.label)).toEqual(['a', 'b'])
+    expect(field?.hint).toBe('a=甲')
   })
 
   it('上下限与必填原样带出来', () => {
