@@ -1,38 +1,31 @@
 /** @fileoverview 项目列表、切换、导入和历史恢复的页面状态。 */
 import * as api from '@/api/hierarchy'
 import { useRacedFetch } from '@/composables/useRacedFetch'
-import type { HierarchySummary, HierarchyVersion } from '@dt/contracts'
+import type { HierarchyVersion } from '@dt/contracts'
 import { useConfirm } from '@dt/ui'
-import { onBeforeUnmount, ref, shallowRef, watch } from 'vue'
+import { onBeforeUnmount, ref, shallowRef } from 'vue'
 import type { GraphDocument } from './types'
+import { useHierarchyProjectList } from './useHierarchyProjectList'
 import type { useHierarchySaving } from './useHierarchySaving'
 
 export function createState(saving: ReturnType<typeof useHierarchySaving>) {
-  const items = shallowRef<HierarchySummary[]>([]),
-    versions = shallowRef<HierarchyVersion[]>([])
-  const page = ref(1),
-    total = ref(0),
-    query = ref(''),
-    loading = ref(false),
-    listLoading = ref(false),
-    error = ref('')
-  const listRequest = useRacedFetch(),
-    projectRequest = useRacedFetch(),
-    historyRequest = useRacedFetch()
+  const versions = shallowRef<HierarchyVersion[]>([])
+  const loading = ref(false)
+  const error = ref('')
+  const projectRequest = useRacedFetch()
+  const historyRequest = useRacedFetch()
   const confirm = useConfirm()
   const fail = (caught: unknown) => {
     error.value = caught instanceof Error ? caught.message : '读取失败'
   }
+  const list = useHierarchyProjectList(saving.savedProject, fail, () => {
+    error.value = ''
+  })
   return {
-    items,
+    ...list,
     versions,
-    page,
-    total,
-    query,
     loading,
-    listLoading,
     error,
-    listRequest,
     projectRequest,
     historyRequest,
     confirm,
@@ -45,51 +38,11 @@ export function createState(saving: ReturnType<typeof useHierarchySaving>) {
 
 export class Controller {
   constructor(readonly state: ReturnType<typeof createState>) {
-    watch(state.saving.savedProject, (project) => {
-      if (project)
-        state.items.value = state.items.value.map((item) =>
-          item.id === project.id ? project : item,
-        )
-    })
     onBeforeUnmount(() => {
       this.state.alive = false
-      this.state.listRequest.cancel()
       this.state.projectRequest.cancel()
       this.state.historyRequest.cancel()
     })
-  }
-  setQuery = (query: string) => {
-    this.state.query.value = query
-  }
-  search = async () => {
-    this.state.page.value = 1
-    await this.refresh()
-  }
-  goToPage = async (page: number) => {
-    this.state.page.value = page
-    await this.refresh()
-  }
-  refresh = async () => {
-    if (!this.state.alive) return
-    this.state.listLoading.value = true
-    await this.state.listRequest.run(
-      (signal) =>
-        api.listProjects(
-          { page: this.state.page.value, size: 20, q: this.state.query.value },
-          signal,
-        ),
-      {
-        ok: (result) => {
-          this.state.items.value = result.items
-          this.state.total.value = result.total
-          this.state.error.value = ''
-        },
-        fail: this.state.fail,
-        settled: () => {
-          if (this.state.alive) this.state.listLoading.value = false
-        },
-      },
-    )
   }
   open = async (id: string) => {
     if (!this.state.alive) return
@@ -145,7 +98,7 @@ export class Controller {
       if (this.state.alive) {
         this.state.saving.install(project)
         this.state.page.value = 1
-        await this.refresh()
+        await this.state.refresh()
       }
     } finally {
       if (this.state.alive) this.state.loading.value = false
@@ -168,7 +121,7 @@ export class Controller {
       if (!this.state.alive || id !== this.state.saving.projectId.value)
         return false
       await api.deleteProject(id)
-      await this.refresh()
+      await this.state.refresh()
       return true
     } finally {
       if (this.state.alive) this.state.loading.value = false
@@ -209,7 +162,7 @@ export class Controller {
       )
       if (this.state.alive) {
         this.state.saving.install(project)
-        await this.refresh()
+        await this.state.refresh()
         await this.loadHistory()
         return true
       }

@@ -34,7 +34,6 @@ VUE_IMPORT = re.compile(r"""from\s+['"]vue['"]""")
 OVERSIZED_STATE_DEBT: frozenset[str] = frozenset(
     {
         "web/app/src/pages/Knowledge/scripts/knowledgeState.ts",
-        "web/app/src/pages/Tools/Hierarchy/scripts/hierarchyProjectsState.ts",
     }
 )
 MAX_PROPS = 10
