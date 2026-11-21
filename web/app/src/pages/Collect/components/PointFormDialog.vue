@@ -18,7 +18,11 @@ import type {
   DtNumberRange,
   DtSelectOption,
 } from '@dt/contracts'
-import { COLLECT_DATA_TYPES, COLLECT_MIN_INTERVAL_MS } from '@dt/contracts'
+import {
+  COLLECT_DATA_TYPES,
+  COLLECT_MIN_ARCHIVE_HEARTBEAT_MS,
+  COLLECT_MIN_INTERVAL_MS,
+} from '@dt/contracts'
 import {
   DtButton,
   DtField,
@@ -58,7 +62,10 @@ const SAMPLING_RANGE: DtNumberRange = {
   step: 100,
 }
 const DEADBAND_RANGE: DtNumberRange = { min: 0, step: 0.1, precision: 3 }
-const HEARTBEAT_RANGE: DtNumberRange = { min: 1000, step: 1000 }
+const HEARTBEAT_RANGE: DtNumberRange = {
+  min: COLLECT_MIN_ARCHIVE_HEARTBEAT_MS,
+  step: 1000,
+}
 // 下限是 0 而不是 1：0 是「跟随全局策略」这一档的表达，后端收到的是 null
 const RETENTION_RANGE: DtNumberRange = { min: 0, step: 1 }
 
@@ -230,6 +237,11 @@ function numberFields() {
   if (sampling === undefined) return '请填写采样周期'
   if (band === undefined) return '请填写归档死区'
   if (heartbeat === undefined) return '请填写归档心跳'
+  if (
+    !Number.isInteger(heartbeat) ||
+    heartbeat < COLLECT_MIN_ARCHIVE_HEARTBEAT_MS
+  )
+    return '归档心跳必须是正整数毫秒'
   if (retention === undefined) return '请填写保留天数'
   return { sampling, band, heartbeat, retention }
 }

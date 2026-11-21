@@ -277,3 +277,11 @@ describe('模板与导出', () => {
     expect(parsed.rows[0]?.item?.deadband).toBe(0.5)
   })
 })
+
+it('兼容导入已有点位的 1 毫秒归档心跳', () => {
+  const result = parsePointCsv('点位编码,归档心跳(ms)\nfixture,1')
+  expect(result.rows[0]?.item).toEqual({
+    code: 'fixture',
+    archive_max_interval_ms: 1,
+  })
+})

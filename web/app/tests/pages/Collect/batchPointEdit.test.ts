@@ -38,6 +38,19 @@ describe('批量编辑预览', () => {
       previewPointEdits([point], 'sampling_interval_ms', value),
     ).toThrow()
   })
+  it.each([1, 25, 49])('接受正毫秒整数归档心跳 %s', (value) => {
+    expect(
+      previewPointEdits([point], 'archive_max_interval_ms', String(value))[0]
+        ?.input,
+    ).toEqual({ archive_max_interval_ms: value })
+  })
+
+  it.each(['0', '1.5'])('拒绝无效归档心跳 %s', (value) => {
+    expect(() =>
+      previewPointEdits([point], 'archive_max_interval_ms', value),
+    ).toThrow()
+  })
+
   it('拒绝改编码', () => {
     expect(() => previewPointEdits([point], 'code', 'new')).toThrow()
   })

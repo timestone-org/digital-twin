@@ -1,5 +1,9 @@
 /** @fileoverview 批量点位编辑的预览与校验，点位编码保持稳定。 */
 import type { CollectPoint, CollectPointUpdateInput } from '@dt/contracts'
+import {
+  COLLECT_MIN_ARCHIVE_HEARTBEAT_MS,
+  COLLECT_MIN_INTERVAL_MS,
+} from '@dt/contracts'
 
 export const BATCH_FIELDS = [
   { value: 'unit', label: '单位' },
@@ -80,6 +84,11 @@ function validateValue(field: string, text: string): number {
 function validateNumber(field: string, text: string, number: number): void {
   if (text === '' || !Number.isFinite(number) || number < 0)
     throw new Error('请填写有效的非负数')
-  if (field !== 'deadband' && (!Number.isInteger(number) || number < 50))
-    throw new Error('间隔必须是至少 50 毫秒的整数')
+  if (field === 'deadband') return
+  const minimum =
+    field === 'archive_max_interval_ms'
+      ? COLLECT_MIN_ARCHIVE_HEARTBEAT_MS
+      : COLLECT_MIN_INTERVAL_MS
+  if (!Number.isInteger(number) || number < minimum)
+    throw new Error(`间隔必须是至少 ${minimum} 毫秒的整数`)
 }
