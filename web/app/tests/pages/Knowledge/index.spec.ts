@@ -18,6 +18,7 @@ import type {
   KnowledgeCapability,
   KnowledgeDocument,
 } from '@/api/knowledge'
+import * as reembedding from '@/api/knowledgeReembedding'
 import KnowledgePage from '@/pages/Knowledge/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -154,15 +155,26 @@ async function render(codes: string[] = ALL_CODES) {
   return wrapper
 }
 
-it('普通读者可见向量空间冲突和关键词回退，文档列表仍可读取', async () => {
-  const changed = { ...BASE, vectorStatus: 'space_mismatch' }
-  api.listBases.mockResolvedValue([changed])
-  api.readBase.mockResolvedValue(changed)
-  const wrapper = await render(['knowledge:use'])
-  expect(wrapper.text()).toContain('向量空间已变更')
-  expect(wrapper.text()).toContain('当前使用关键词检索')
-  expect(wrapper.text()).toContain(documentOf({}).title)
-})
+it.each([
+  { codes: ['knowledge:use'] },
+  { codes: ['knowledge:use', 'knowledge:write'] },
+])(
+  '非管理账号 $codes 可见向量状态并阅读文档，没有重嵌管理入口',
+  async ({ codes }) => {
+    const tasks = vi
+      .spyOn(reembedding, 'latestReembedding')
+      .mockResolvedValue(null)
+    const changed = { ...BASE, vectorStatus: 'space_mismatch' }
+    api.listBases.mockResolvedValue([changed])
+    api.readBase.mockResolvedValue(changed)
+    const wrapper = await render(codes)
+    expect(wrapper.text()).toContain('向量空间已变更')
+    expect(wrapper.text()).toContain('当前使用关键词检索')
+    expect(wrapper.text()).toContain(documentOf({}).title)
+    expect(buttonOf(wrapper, '整库重嵌')).toBeUndefined()
+    expect(tasks).not.toHaveBeenCalled()
+  },
+)
 
 it('刷新状态后按已发布的索引更新模型和维数', async () => {
   api.listBases.mockResolvedValue([{ ...BASE, vectorStatus: 'space_mismatch' }])
@@ -178,6 +190,59 @@ it('刷新状态后按已发布的索引更新模型和维数', async () => {
   expect(wrapper.text()).toContain('新档案模型')
   expect(wrapper.text()).toContain('向量索引可用')
   expect(wrapper.text()).not.toContain('向量空间已变更')
+})
+
+it('具有管理权限的账号可从已选知识库预检整库重嵌', async () => {
+  const tasks = vi
+    .spyOn(reembedding, 'latestReembedding')
+    .mockResolvedValue(null)
+  const base = { ...BASE, vectorStatus: 'space_mismatch' }
+  api.listBases.mockResolvedValue([base])
+  api.readBase.mockResolvedValue(base)
+  const wrapper = await render(ALL_CODES)
+  expect(buttonOf(wrapper, '整库重嵌')).toBeDefined()
+  expect(tasks).toHaveBeenCalledExactlyOnceWith(
+    BASE.id,
+    expect.any(AbortSignal),
+  )
+})
+
+it('旧服务没有向量状态时保留原模型且不请求管理接口', async () => {
+  const tasks = vi
+    .spyOn(reembedding, 'latestReembedding')
+    .mockResolvedValue(null)
+  const wrapper = await render(ALL_CODES)
+  expect(wrapper.text()).toContain(BASE.embeddingModel)
+  expect(buttonOf(wrapper, '整库重嵌')).toBeUndefined()
+  expect(tasks).not.toHaveBeenCalled()
+})
+
+it('预检期间失去管理权限会关闭操作而保留文档', async () => {
+  const base = { ...BASE, vectorStatus: 'space_mismatch' }
+  api.listBases.mockResolvedValue([base])
+  api.readBase.mockResolvedValue(base)
+  vi.spyOn(reembedding, 'latestReembedding').mockResolvedValue(null)
+  const pending = vi
+    .spyOn(reembedding, 'previewReembedding')
+    .mockImplementation(
+      (_id, signal) =>
+        new Promise((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(new Error('已关闭'))),
+        ),
+    )
+  const start = vi.spyOn(reembedding, 'startReembedding')
+  const wrapper = await render(ALL_CODES)
+  await buttonOf(wrapper, '整库重嵌')?.trigger('click')
+  await flushPromises()
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    '整库重嵌预检',
+  )
+  signIn(['knowledge:use'])
+  await flushPromises()
+  expect(pending.mock.calls[0]?.[1].aborted).toBe(true)
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(wrapper.text()).toContain(documentOf({}).title)
+  expect(start).not.toHaveBeenCalled()
 })
 
 function buttonOf(wrapper: VueWrapper, label: string) {

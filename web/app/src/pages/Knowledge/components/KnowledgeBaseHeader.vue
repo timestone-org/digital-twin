@@ -9,6 +9,7 @@ import { DtButton, DtCard, DtTag } from '@dt/ui'
 import PermGuard from '@/components/PermGuard.vue'
 import type { KnowledgeBase } from '@/api/knowledge'
 import { formatDateTime } from '@/utils/datetime'
+import KnowledgeReembedding from './KnowledgeReembedding.vue'
 
 defineProps<{
   base: KnowledgeBase
@@ -125,5 +126,15 @@ const VECTOR_LABELS: Record<KnowledgeVectorStatus | 'unknown', string> = {
         }}</span>
       </span>
     </div>
+    <PermGuard
+      v-if="base.vectorStatus && base.vectorStatus !== 'unknown'"
+      :codes="[PERMISSION_CODES.knowledgeManage]"
+    >
+      <KnowledgeReembedding
+        :key="base.id"
+        :base="base"
+        @published="$emit('refresh')"
+      />
+    </PermGuard>
   </DtCard>
 </template>
