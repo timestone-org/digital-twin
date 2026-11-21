@@ -3,6 +3,7 @@
 ⚠ 提交前失效时，并发的 /verify 回源读到的仍是旧行，却打上新时间戳缓存一个 TTL。
 """
 
+import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
@@ -154,3 +155,40 @@ async def test_the_next_read_after_commit_reloads(
     await run_after_commit_hooks(session)
     await cache.rules(session)
     assert reads.count == 2
+
+
+@pytest.mark.parametrize("should_warm_cache", [True, False])
+async def test_inflight_read_cannot_restore_an_invalidated_snapshot(
+    monkeypatch: pytest.MonkeyPatch, should_warm_cache: bool
+) -> None:
+    first_read = asyncio.Event()
+    release = asyncio.Event()
+    reads = 0
+    older = stored_rule()
+    current = stored_rule()
+    current.priority = 120
+
+    async def list_enabled(_session: AsyncSession) -> list[RouteRule]:
+        nonlocal reads
+        reads += 1
+        if reads == 1:
+            first_read.set()
+            await release.wait()
+            return [older]
+        return [current]
+
+    monkeypatch.setattr(route_rule_crud, "list_enabled", list_enabled)
+    cache = RouteRuleCache(clock=FrozenClock(NOW))
+    session = cast("AsyncSession", FakeSession())
+    loading = asyncio.create_task(cache.rules(session))
+    try:
+        await asyncio.wait_for(first_read.wait(), timeout=5)
+        cache.invalidate()
+        if should_warm_cache:
+            assert [row.priority for row in await cache.rules(session)] == [120]
+    finally:
+        release.set()
+        await asyncio.wait_for(loading, timeout=5)
+
+    assert [row.priority for row in await cache.rules(session)] == [120]
+    assert reads == 2
