@@ -25,6 +25,7 @@ from platform_server.apps.modeling.operators.reporting import (
 from platform_server.apps.modeling.services import (
     node_task,
     presenters,
+    preview,
     run_dispatch,
 )
 from platform_server.apps.modeling.services.node_task import (
@@ -154,6 +155,27 @@ def test_the_subprocess_asks_the_operator_what_to_say(
     )
     assert result.report == (GIST,)
     assert result.io["outputs"] == {"frame": ["温度", "负荷", "能耗"]}
+
+
+def test_the_node_process_returns_a_bounded_frame_preview(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(node_task, "registry", talkative_registry())
+    frame = linear_frame(300)
+    result = node_task.run_node_payload(
+        NodePayload(
+            operator="talkative_probe",
+            config={},
+            inputs={"frame": frame},
+            tz_offset_minutes=0,
+            split_plan=None,
+        )
+    )
+    expected, truncated = preview.fit_budget(preview.summarize(frame))
+    prepared = result.previews["frame"]
+    assert prepared.content == expected
+    assert prepared.size_bytes == preview.size_of(expected)
+    assert prepared.is_truncated is truncated is True
 
 
 async def test_a_step_that_says_nothing_leaves_the_column_null() -> None:

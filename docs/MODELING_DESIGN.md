@@ -1011,8 +1011,8 @@ worker 角色的消费循环（照 ac_model_worker 同构）
   ├─ 拓扑排序（Kahn）
   └─ 逐节点：
        ├─ 从上下文按 (from_node, from_port) 取输入
-       ├─ 提交给进程池 → 子进程跑 operator.run()
-       ├─ 收结果 → 生成 preview → 写 modeling_node_runs（每节点一次提交）
+       ├─ 提交给进程池 → 子进程跑算子并生成单份预算内的端口摘要
+       ├─ 收结果 → 核对本次运行的摘要总预算 → 写 modeling_node_runs（每节点一次提交）
        ├─ 写 run.heartbeat_at
        └─ 读 run.cancel_requested，置位则收摊
   └─ 终态：succeeded / failed / cancelled
@@ -1112,7 +1112,7 @@ worker 崩溃后可能需要用户查看失败原因再重新训练；不能以�
 
 ### 6.3 中间结果：产生
 
-每个节点执行完，对它的**每一个输出端口**生成一份 preview（`services/preview.py`），
+每个节点执行完，子进程对它的**每一个输出端口**生成并压缩一份 preview（`services/preview.py`），
 按契约分派：
 
 | 契约 | preview 形状 |

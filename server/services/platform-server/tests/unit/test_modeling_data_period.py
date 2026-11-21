@@ -275,7 +275,9 @@ def test_period_survives_the_total_run_preview_budget(
     monkeypatch.setattr(preview, "RUN_PREVIEW_MAX_BYTES", 200)
     summary = preview.summarize(sample_frame())
     summary["data_period"] = period
-    kept, is_truncated = run_executor._Budget().take({"frame": summary})
+    kept, is_truncated = run_executor._Budget().take(
+        {"frame": preview.prepare_preview(summary)}
+    )
     assert is_truncated
     assert "columns" not in kept["frame"]
     assert kept["frame"]["data_period"] == period

@@ -20,6 +20,11 @@ from platform_server.apps.modeling.services.artifact_store import (
     load,
     seal,
 )
+from platform_server.apps.modeling.services.preview import (
+    PreparedPreview,
+    prepare_preview,
+    summarize,
+)
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,10 @@ class NodeResult:
     #: 结果面上要讲的块。⚠ 与拟合参数同理：算子实例用完即弃，讲解不跟着输出走，
     #: 留在子进程里就再也拿不回来了（docs/MODELING_RESULT_VIEW_DESIGN.md §4.4）
     report: tuple[ReportBlock, ...] = ()
+    #: 按端口建键、已压进单份字节上限的结果摘要。
+    previews: dict[str, PreparedPreview] = field(
+        default_factory=dict[str, PreparedPreview]
+    )
 
 
 def run_node_payload(payload: NodePayload) -> NodeResult:
@@ -88,6 +97,10 @@ def run_node_payload(payload: NodePayload) -> NodeResult:
             "outputs": _keys_by_port(outputs),
         },
         report=operator.report(),
+        previews={
+            port: prepare_preview(summarize(value))
+            for port, value in outputs.items()
+        },
     )
 
 

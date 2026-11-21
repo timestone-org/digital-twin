@@ -216,7 +216,7 @@ class _Budget:
         self._used = 0
 
     def take(
-        self, previews: dict[str, dict[str, Any]]
+        self, previews: dict[str, preview_service.PreparedPreview]
     ) -> tuple[dict[str, dict[str, Any]], bool]:
         """把一组摘要压进预算，回 `(摘要, 是否被截断)`。
 
@@ -224,23 +224,23 @@ class _Budget:
         """
         kept: dict[str, dict[str, Any]] = {}
         truncated = False
-        for port, raw in previews.items():
-            fitted, was_cut = preview_service.fit_budget(raw)
-            size = preview_service.size_of(fitted)
+        for port, prepared in previews.items():
+            fitted = prepared.content
+            size = prepared.size_bytes
             if (
                 self._used + size > preview_service.RUN_PREVIEW_MAX_BYTES
-                and raw.get("kind") not in _UNBUDGETED_KINDS
+                and fitted.get("kind") not in _UNBUDGETED_KINDS
             ):
                 kept[port] = {
-                    "kind": raw.get("kind", "unknown"),
+                    "kind": fitted.get("kind", "unknown"),
                     "note": "本次运行的结果摘要已用满预算",
                 }
-                if raw.get("kind") == preview_service.KIND_FRAME:
+                if fitted.get("kind") == preview_service.KIND_FRAME:
                     kept[port]["data_period"] = fitted.get("data_period")
                 truncated = True
                 continue
             kept[port] = fitted
-            truncated = truncated or was_cut
+            truncated = truncated or prepared.is_truncated
             self._used += size
         return kept, truncated
 
@@ -279,12 +279,7 @@ async def _run_one(
     except Exception:
         return _node_failed(node, setting, started, traceback.format_exc())
     _remember_result(node.id, result, context)
-    previews, truncated = budgets.previews.take(
-        {
-            port: preview_service.summarize(value)
-            for port, value in result.outputs.items()
-        }
-    )
+    previews, truncated = budgets.previews.take(result.previews)
     return NodeOutcome(
         node_id=node.id,
         operator=node.operator,

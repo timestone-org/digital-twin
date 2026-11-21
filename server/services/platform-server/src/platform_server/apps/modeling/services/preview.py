@@ -6,7 +6,7 @@
 """
 
 import json
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from statistics import median
 from typing import Any
 
@@ -36,6 +36,21 @@ OVERSIZE_NOTE = "这一步的结果太大，摘要只留下了类型"
 KIND_FRAME = "frame"
 KIND_MODEL = "model"
 KIND_METRICS = "metrics"
+
+
+@dataclass(frozen=True)
+class PreparedPreview:
+    """子进程测量并压缩到单份字节预算的结果摘要。"""
+
+    content: dict[str, Any]
+    size_bytes: int
+    is_truncated: bool
+
+
+def prepare_preview(summary: dict[str, Any]) -> PreparedPreview:
+    """压缩并测量一份摘要。Args: summary。"""
+    content, is_truncated = fit_budget(summary)
+    return PreparedPreview(content, size_of(content), is_truncated)
 
 
 def summarize(payload: object) -> dict[str, Any]:

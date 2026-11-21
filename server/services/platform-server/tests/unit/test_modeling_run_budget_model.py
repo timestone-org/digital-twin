@@ -32,5 +32,7 @@ def test_model_and_metrics_survive_an_exhausted_run_budget(
     monkeypatch: pytest.MonkeyPatch, port: str, summary: dict[str, object]
 ) -> None:
     monkeypatch.setattr(preview, "RUN_PREVIEW_MAX_BYTES", 10)
-    kept, _ = run_executor._Budget().take({port: summary})
+    kept, _ = run_executor._Budget().take(
+        {port: preview.prepare_preview(summary)}
+    )
     assert kept[port] == summary
