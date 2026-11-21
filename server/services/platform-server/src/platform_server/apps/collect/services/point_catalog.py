@@ -1,4 +1,4 @@
-"""点位台账的只读面 —— 大屏绑定校验唯一要问的外部事实。
+"""点位台账的只读面，供大屏绑定与数据台账校验。
 
 ⚠ 这是 `apps/dashboard` 那个 `PointCatalog` 协议的真实现：绑一个不存在的点位
 必须当场 400 并指到字段，而不是静默放行一条永远产不出数据的绑定
@@ -11,12 +11,27 @@ from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Protocol
+from uuid import UUID
 
 from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.collect.models import CollectPoint
+from platform_server.apps.collect.protocols import DataType, as_data_type
 from timeseries import InvalidNodeKey, compose_node_key, split_node_key
+
+
+async def configured_data_type(
+    session: AsyncSession, source_id: UUID, point_code: str
+) -> DataType | None:
+    """从本地已保存的点位配置读取类型。Args: session, source_id, point_code。"""
+    result = await session.execute(
+        select(CollectPoint.data_type).where(
+            CollectPoint.source_id == source_id, CollectPoint.code == point_code
+        )
+    )
+    data_type = result.scalar_one_or_none()
+    return None if data_type is None else as_data_type(data_type)
 
 
 class SessionSource(Protocol):

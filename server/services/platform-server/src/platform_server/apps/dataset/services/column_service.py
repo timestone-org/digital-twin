@@ -19,6 +19,7 @@ from platform_server.apps.dataset.errors import (
 from platform_server.apps.dataset.models import DatasetColumn, DatasetTable
 from platform_server.apps.dataset.protocols import (
     ColumnSource,
+    as_agg_func,
     as_column_source,
 )
 from platform_server.apps.dataset.schemas import (
@@ -30,6 +31,7 @@ from platform_server.apps.dataset.schemas import (
 from platform_server.apps.dataset.services.changes import given_changes
 from platform_server.apps.dataset.services.column_rules import (
     check_formula_present,
+    check_point_aggregate,
     check_point_binding,
 )
 from platform_server.apps.dataset.services.formula_compile import (
@@ -110,7 +112,9 @@ async def create_column(
     table = await require_table(session, table_id, lock="reference")
     if await column_crud.get_by_key(session, table.id, payload.key) is not None:
         raise DatasetColumnKeyTaken(f"这张台账下已有同名列：{payload.key}")
-    check_point_binding(source=payload.source, node_key=payload.node_key)
+    point = check_point_binding(
+        source=payload.source, node_key=payload.node_key
+    )
     check_formula_present(source=payload.source, formula=payload.formula)
     deps = await compile_for_save(
         session,
@@ -127,6 +131,7 @@ async def create_column(
     )
     if payload.source == "point" and payload.node_key is not None:
         await lock_point_references(session, [payload.node_key])
+    await check_point_aggregate(session, point, payload.agg)
     column_crud.add(session, column)
     await flush_unique(
         session,
@@ -157,7 +162,7 @@ async def update_column(
     )
     changes = given_changes(payload)
     source, node_key = _merged_binding(column, changes)
-    check_point_binding(source=source, node_key=node_key)
+    point = check_point_binding(source=source, node_key=node_key)
     draft = _merged_draft(column, changes, source)
     check_formula_present(source=source, formula=draft.formula)
     column.formula_deps = await compile_for_save(
@@ -166,6 +171,9 @@ async def update_column(
         draft=draft,
     )
     await _lock_binding_change(session, column, source, node_key)
+    agg = as_agg_func(changes.get("agg", column.agg))
+    if (source, node_key, agg) != (column.source, column.node_key, column.agg):
+        await check_point_aggregate(session, point, agg)
     column_crud.apply_changes(column, changes)
     await session.flush()
     _logger.info(
