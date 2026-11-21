@@ -140,6 +140,11 @@ def _client_hooks(container: Container) -> tuple[LifespanHook, ...]:
     """
     return (
         LifespanHook(
+            name="model_inference",
+            shutdown=container.model_inference.close,
+            shutdown_order=96,
+        ),
+        LifespanHook(
             name="stream",
             shutdown=container.stream.close,
             shutdown_order=97,

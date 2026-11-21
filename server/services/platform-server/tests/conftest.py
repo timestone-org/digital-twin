@@ -439,9 +439,7 @@ async def app_context(
     sign: SignHeaders,
     external_fakes: ExternalFakes,
 ) -> AsyncIterator[AppContext]:
-    """整装应用 + 同连接的会话，每条用例一个回滚事务。
-    ⚠ 外库与 Redis 一律换成假件：用例不许打网络，CI 里也没有它们。
-    """
+    """每个用例使用真实平台应用、同一条回滚连接与隔离的外部依赖。"""
     if not postgres_available:
         pytest.skip("本机连不到 Postgres")
     application = build_app(settings)
@@ -479,6 +477,7 @@ async def app_context(
             recompute=recording_recompute(container),
             sessions=MakerSessions(maker),
         )
+    await container.model_inference.close()
     await transaction.rollback()
     await connection.close()
     await container.realtime.close()

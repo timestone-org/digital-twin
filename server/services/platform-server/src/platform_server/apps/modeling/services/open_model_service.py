@@ -3,7 +3,7 @@
 import math
 import time
 import uuid
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import cast
 
@@ -36,7 +36,6 @@ from platform_server.apps.modeling.models import (
 )
 from platform_server.apps.modeling.operators import (
     CHANNEL_BINARY,
-    OperatorError,
 )
 from platform_server.apps.modeling.protocols import ModelTask
 from platform_server.apps.modeling.schemas import (
@@ -49,15 +48,15 @@ from platform_server.apps.modeling.schemas import (
 from platform_server.apps.modeling.schemas.signature import (
     OpenModelSignatureOut,
 )
-from platform_server.apps.modeling.services import artifact_io
 from platform_server.apps.modeling.services.artifact_store import (
     ArtifactRejected,
 )
-from platform_server.apps.modeling.services.jsonshape import as_dict, as_list
-from platform_server.apps.modeling.services.serving import (
-    CompiledModel,
-    compile_model,
+from platform_server.apps.modeling.services.inference_pool import InferencePool
+from platform_server.apps.modeling.services.inference_task import (
+    ArtifactIdentity,
+    ScoreRows,
 )
+from platform_server.apps.modeling.services.jsonshape import as_dict, as_list
 from platform_server.apps.modeling.services.serving_contract import invoke_url
 from platform_server.apps.modeling.services.sessions import Sessions
 
@@ -94,10 +93,8 @@ class OpenModelDeps:
     #: ⚠ 调用记录要走**自己的**事务：请求那条在出错时会整个回滚，
     #: 而「这次调用失败了」恰恰是最该留下来的那一条
     sessions: Sessions
+    inference: InferencePool
     store: ObjectStore | None = None
-    artifacts: artifact_io.ArtifactCache = field(
-        default_factory=artifact_io.ArtifactCache
-    )
 
 
 async def resolve_call(
@@ -224,15 +221,19 @@ async def predict(
             f"一次最多算 {resolved.deployment.max_rows_per_call} 行，"
             f"这次给了 {len(payload.rows)} 行"
         )
-    compiled = await _compiled(deps, resolved.version)
     entry = _entry_of(resolved.version)
     rows = [
         _as_args(row, entry, index) for index, row in enumerate(payload.rows)
     ]
     try:
-        predictions = compiled.predict_many(rows)
-    except OperatorError as error:
-        raise PredictRequestInvalid(str(error)) from error
+        identity = await _artifact_identity(deps, resolved.version)
+        predictions = await deps.inference.predict(
+            ScoreRows(dict(resolved.version.serving_json), rows),
+            identity,
+            deps.store,
+        )
+    except ArtifactRejected as error:
+        raise DeploymentUnservable(str(error)) from error
     _require_finite(predictions)
     return OpenModelPredictOut(
         model=OpenModelInfoOut(
@@ -255,29 +256,10 @@ def _require_finite(predictions: list[float | None]) -> None:
             )
 
 
-async def _compiled(
+async def _artifact_identity(
     deps: OpenModelDeps, version: ModelVersion
-) -> CompiledModel:
-    """把版本编译成可调用对象，通道 B 顺带把模型本体装回来。
-
-    Args: deps, version。
-    """
-    try:
-        return compile_model(
-            dict(version.serving_json),
-            estimator=await _estimator(deps, version),
-        )
-    except (ArtifactRejected, OperatorError) as error:
-        raise DeploymentUnservable(str(error)) from error
-
-
-async def _estimator(
-    deps: OpenModelDeps, version: ModelVersion
-) -> object | None:
-    """通道 B 的模型本体；通道 A 给 `None`。
-
-    Args: deps, version。
-    """
+) -> ArtifactIdentity | None:
+    """在短事务中读取不可变版本的制品引用。Args: deps, version。"""
     if version.serving_channel != CHANNEL_BINARY:
         return None
     if deps.store is None:
@@ -286,13 +268,14 @@ async def _estimator(
         row = await model_artifact_crud.get_by_version(session, version.id)
         if row is None:
             raise ArtifactRejected("这个模型版本没有留下模型产物")
-        meta = {
-            "object_key": row.object_key,
-            "digest": row.digest,
-            "format_version": row.format_version,
-            "runtime": dict(row.runtime_json),
-        }
-    return await artifact_io.fetch(deps.store, meta, deps.artifacts)
+        return ArtifactIdentity(
+            key=row.object_key,
+            digest=row.digest,
+            version=row.format_version,
+            runtime={
+                key: str(value) for key, value in row.runtime_json.items()
+            },
+        )
 
 
 def _entry_of(version: ModelVersion) -> list[dict[str, object]]:

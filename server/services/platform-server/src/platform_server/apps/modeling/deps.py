@@ -84,7 +84,7 @@ def get_open_model_deps(
         cache=container.cache,
         sessions=sessions,
         store=container.object_store,
-        artifacts=container.modeling_artifacts,
+        inference=container.model_inference,
     )
 
 

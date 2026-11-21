@@ -4,6 +4,7 @@ import re
 import time
 from collections.abc import Mapping
 from dataclasses import replace
+from functools import partial
 
 from lib.errors import AppError
 from platform_server.apps.modeling.errors import (
@@ -40,7 +41,7 @@ async def calculate_and_record(
     started = time.monotonic()
     counted = replace(resolved, row_count=len(payload.rows))
     try:
-        answer = _calculate(counted, payload)
+        answer = await _calculate(deps, counted, payload)
     except AppError as error:
         await open_model_service.record_call(
             deps, counted, started, error.http_status, error.code
@@ -50,10 +51,10 @@ async def calculate_and_record(
     return answer
 
 
-def _calculate(
-    resolved: ResolvedCall, payload: OpenModelCalculateIn
+async def _calculate(
+    deps: OpenModelDeps, resolved: ResolvedCall, payload: OpenModelCalculateIn
 ) -> OpenModelCalculateOut:
-    """规则输入只接受完整数值并返回结构化结果。Args: resolved, payload。"""
+    """执行冻结规则并返回逐行明细。Args: deps, resolved, payload。"""
     if resolved.version.task != "rule_calculation":
         raise PredictRequestInvalid("这个模型不是规则计算模型")
     if len(payload.rows) > resolved.deployment.max_rows_per_call:
@@ -67,14 +68,11 @@ def _calculate(
     keys = tuple(str(column["key"]) for column in entry)
     if not keys:
         raise DeploymentUnservable("规则模型缺少输入签名，请重新发布")
-    try:
-        rows = [
-            _arguments(row, keys, seat) for seat, row in enumerate(payload.rows)
-        ]
-        compiled = compile_model(dict(resolved.version.serving_json))
-        results = compiled.calculate_many([(row, None) for row in rows])
-    except OperatorError as error:
-        raise PredictRequestInvalid(str(error)) from error
+    results = await deps.inference.calculate(
+        partial(
+            _rule_results, dict(resolved.version.serving_json), keys, payload
+        )
+    )
     return OpenModelCalculateOut.model_validate(
         {
             "model": OpenModelInfoOut(
@@ -83,6 +81,24 @@ def _calculate(
             "results": results,
         }
     )
+
+
+def _rule_results(
+    serving: dict[str, object],
+    keys: tuple[str, ...],
+    payload: OpenModelCalculateIn,
+) -> list[dict[str, object]] | AppError:
+    """用冻结的列序和规则计算明细。Args: serving, keys, payload。"""
+    try:
+        rows = [
+            _arguments(row, keys, seat) for seat, row in enumerate(payload.rows)
+        ]
+        compiled = compile_model(serving)
+        return compiled.calculate_many([(row, None) for row in rows])
+    except OperatorError as error:
+        return PredictRequestInvalid(str(error))
+    except PredictRequestInvalid as error:
+        return error
 
 
 def _arguments(
