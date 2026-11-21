@@ -23,12 +23,16 @@ from platform_server.apps.modeling.crud import (
     model_version_crud,
 )
 from platform_server.apps.modeling.models import (
+    ModelingConfigurationAudit,
     ModelingDeployment,
     ModelingModelVersion,
     ModelingNodeRun,
     ModelingPipeline,
     ModelingRuleVersion,
     ModelingRun,
+)
+from platform_server.apps.modeling.models.deployment_switch import (
+    ModelingDeploymentSwitch,
 )
 from platform_server.apps.modeling.schemas import (
     ModelDeploymentUpdateIn,
@@ -167,14 +171,14 @@ async def _seed_deployment(
             task="regression",
             target_key="目标",
         )
-        rules = ModelingRuleVersion(
+        newer = ModelingModelVersion(
             **_version_fields(pipeline_id, runs[1]),
             version=2,
-            algo="energy_rules",
-            task="rule_calculation",
-            target_key=None,
+            algo="linear_regression",
+            task="regression",
+            target_key="目标",
         )
-        session.add_all((trained, rules))
+        session.add_all((trained, newer))
         await session.flush()
         deployment = ModelingDeployment(
             id=uuid7(),
@@ -184,7 +188,7 @@ async def _seed_deployment(
         )
         session.add(deployment)
         await session.flush()
-        return deployment.id, trained.id, rules.id
+        return deployment.id, trained.id, newer.id
 
 
 async def _blocked_deployment(
@@ -198,7 +202,7 @@ async def _blocked_deployment(
 async def _exercise_switching(
     database: Database, pipeline_id: uuid.UUID
 ) -> tuple[uuid.UUID | None, uuid.UUID | None, uuid.UUID]:
-    deployment_id, trained_id, rule_id = await _seed_deployment(
+    deployment_id, trained_id, newer_id = await _seed_deployment(
         database, pipeline_id
     )
     async with database.session() as stale:
@@ -209,14 +213,20 @@ async def _exercise_switching(
             await deployment_service.update_deployment(
                 first,
                 deployment_id=deployment_id,
-                payload=ModelDeploymentUpdateIn(model_version_id=rule_id),
+                payload=ModelDeploymentUpdateIn(
+                    model_version_id=newer_id, expected_revision=1
+                ),
+                actor=Actor(user_id="qa", name="测试员"),
             )
             with pytest.raises(DBAPIError, match="lock timeout"):
                 await _blocked_deployment(database, deployment_id)
         await deployment_service.update_deployment(
             stale,
             deployment_id=deployment_id,
-            payload=ModelDeploymentUpdateIn(model_version_id=trained_id),
+            payload=ModelDeploymentUpdateIn(
+                model_version_id=trained_id, expected_revision=2
+            ),
+            actor=Actor(user_id="qa", name="测试员"),
         )
     async with database.session() as session:
         deployed = await deployment_crud.get(session, deployment_id)
@@ -226,6 +236,19 @@ async def _exercise_switching(
 
 async def _cleanup(database: Database, pipeline_id: uuid.UUID) -> None:
     async with database.session() as session:
+        deployment = select(ModelingDeployment.id).where(
+            ModelingDeployment.code == f"switch-{pipeline_id}"
+        )
+        await session.execute(
+            delete(ModelingConfigurationAudit).where(
+                ModelingConfigurationAudit.target_id.in_(deployment)
+            )
+        )
+        await session.execute(
+            delete(ModelingDeploymentSwitch).where(
+                ModelingDeploymentSwitch.deployment_id.in_(deployment)
+            )
+        )
         await session.execute(
             delete(ModelingDeployment).where(
                 ModelingDeployment.code == f"switch-{pipeline_id}"
@@ -244,7 +267,7 @@ async def _cleanup(database: Database, pipeline_id: uuid.UUID) -> None:
     await database.dispose()
 
 
-async def test_cross_type_updates_refresh_cached_references_and_lock_deployment(
+async def test_switch_refreshes_cached_references_and_locks_deployment(
     settings: Settings, app_context: AppContext
 ) -> None:
     del app_context

@@ -575,12 +575,19 @@ export async function updateModelDeployment(
     is_enabled?: boolean | undefined
     max_rows_per_call?: number | undefined
     rate_limit_per_minute?: number | undefined
+    is_signature_change_confirmed?: boolean | undefined
     expected_revision?: number | undefined
   },
 ): Promise<ModelDeployment> {
   return await requestData<ModelDeployment>(
     `/modeling-deployments/${deploymentId}`,
-    onPlatform({ method: 'PATCH', body: input }),
+    onPlatform({
+      method: 'PATCH',
+      body: input,
+      ...(input.model_version_id === undefined
+        ? {}
+        : { headers: idempotent(newIdempotencyKey()) }),
+    }),
   )
 }
 

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /** @fileoverview 模型部署的配置、调用说明与调用量。 */
 import type { ModelCallStat, ModelDeployment } from '@dt/contracts'
-import { DtButton } from '@dt/ui'
+import { DtButton, useToast } from '@dt/ui'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import * as modeling from '@/api/modeling'
@@ -41,6 +41,8 @@ const scope = computed(
 )
 
 const editing = ref<ModelDeployment | null>(null)
+const formRequest = useRacedFetch()
+const toast = useToast()
 const inspecting = ref<ModelDeployment | null>(null)
 const stats = ref<ModelCallStat[]>([])
 const isStatsLoading = ref(false)
@@ -113,9 +115,23 @@ function closeAccess(): void {
   inspecting.value = null
 }
 
-function openForm(row: ModelDeployment): void {
+async function openForm(row: ModelDeployment): Promise<void> {
   if (isWritingBlocked.value) return
-  editing.value = row
+  formRequest.cancel()
+  if (row.revision !== undefined) {
+    editing.value = row
+    return
+  }
+  await formRequest.run(
+    (signal) => modeling.getModelDeployment(row.id, signal),
+    {
+      ok: (current) => {
+        editing.value = current
+      },
+      fail: (caught) => toast.error(describeError(caught)),
+      settled: () => {},
+    },
+  )
 }
 
 async function toggleDeployment(
@@ -139,7 +155,18 @@ async function submitForm(payload: {
 }): Promise<void> {
   const row = editing.value
   if (row === null || isWritingBlocked.value) return
-  const done = await ops.update(row.id, payload)
+  if (
+    row.revision === undefined &&
+    payload.model_version_id !== row.model_version_id
+  ) {
+    toast.error('无法取得部署修订号，请刷新后再切换版本')
+    return
+  }
+  const patch =
+    row.revision === undefined
+      ? payload
+      : { ...payload, expected_revision: row.revision }
+  const done = await ops.update(row.id, patch, () => editing.value === row)
   if (done !== null) editing.value = null
 }
 
@@ -153,12 +180,15 @@ async function filterStatus(value: string): Promise<void> {
   await list.reloadFromFirstPage()
 }
 watch(scope, () => {
+  formRequest.cancel()
   editing.value = null
   closeAccess()
 })
 onMounted(() => void list.reload())
 
 onBeforeUnmount(() => {
+  formRequest.cancel()
+  editing.value = null
   inspectionRequest.cancel()
   statsRequest.cancel()
 })

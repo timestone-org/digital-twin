@@ -14897,6 +14897,11 @@
             ],
             "title": "Is Enabled"
           },
+          "is_signature_change_confirmed": {
+            "default": false,
+            "title": "Is Signature Change Confirmed",
+            "type": "boolean"
+          },
           "max_rows_per_call": {
             "anyOf": [
               {

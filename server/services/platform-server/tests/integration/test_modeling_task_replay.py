@@ -20,6 +20,7 @@ from integration.test_modeling_templates import (
 from lib.testing import InMemoryCache
 from lib.utils.ids import uuid7
 from platform_server.apps.modeling.models import (
+    ModelingDeployment,
     ModelingModelVersion,
     ModelingRuleVersion,
     ModelingRun,
@@ -183,6 +184,20 @@ async def test_old_instance_receipt_keeps_first_revision_and_name(
     assert data_of(await client.get(INSTANCES))["total"] == 1
 
 
+async def _seed_legacy_switch(
+    session: AsyncSession, deployment_id: str, replacement: str
+) -> None:
+    """还原既有跨任务指针。Args: session, deployment_id, replacement。"""
+    # 存量部署可以已有跨任务的版本指针，当前写入口不会再创建这种状态。
+    historical = await session.get(ModelingDeployment, uuid.UUID(deployment_id))
+    assert historical is not None
+    historical.model_version_id = None
+    historical.rule_version_id = uuid.UUID(replacement)
+    historical.name = "已切换规则版本"
+    historical.revision = 2
+    await session.flush()
+
+
 @pytest.mark.parametrize(
     "should_retire_original", [False, True], ids=["retained", "retired"]
 )
@@ -209,10 +224,10 @@ async def test_old_deployment_receipt_uses_its_original_version_task(
     assert first.status_code == 201, first.text
     saved = data_of(first)
     await _remove_durable_task(app_context, first, should_remove_urls=True)
-    switched = await client.patch(
-        f"{DEPLOYMENTS}/{saved['id']}",
-        json={"model_version_id": replacement, "name": "已切换规则版本"},
+    await _seed_legacy_switch(
+        app_context.session, _identity(saved), replacement
     )
+    switched = await client.get(f"{DEPLOYMENTS}/{saved['id']}")
     assert switched.status_code == 200, switched.text
     assert data_of(switched)["task"] == "rule_calculation"
     if should_retire_original:

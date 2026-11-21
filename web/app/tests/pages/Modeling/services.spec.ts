@@ -9,14 +9,16 @@ import type {
   Page,
 } from '@dt/contracts'
 import { DOMWrapper, flushPromises, mount } from '@vue/test-utils'
-import { DtInput, useConfirm, useToast } from '@dt/ui'
+import { DtInput, DtSelect, useConfirm, useToast } from '@dt/ui'
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { BizError } from '@/api/client'
 import * as modeling from '@/api/modeling'
 import * as serving from '@/api/modelingServing'
 import ServicesPage from '@/pages/Modeling/Services/index.vue'
 import CallStatList from '@/pages/Modeling/Services/components/CallStatList.vue'
+import DeploymentFormDialog from '@/pages/Modeling/Services/components/DeploymentFormDialog.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const STAMP = '2026-01-01T00:00:00.000Z'
@@ -131,6 +133,9 @@ function stub(
   versions: ModelingVersionSummary[] = [],
 ): void {
   vi.spyOn(modeling, 'listModelDeploymentsPage').mockResolvedValue(page(rows))
+  vi.spyOn(modeling, 'getModelDeployment').mockResolvedValue(
+    rows[0] ?? deployment(),
+  )
   vi.spyOn(modeling, 'listModelApiKeys').mockResolvedValue(keys)
   vi.spyOn(modeling, 'listModelCallStats').mockResolvedValue([])
   vi.spyOn(modeling, 'listModelingVersions').mockResolvedValue(page(versions))
@@ -419,6 +424,85 @@ it('使用账号鉴权的服务仍可修改配置、启停并删除', async () =
   useConfirm().resolve(true)
   await flushPromises()
   expect(remove).toHaveBeenCalledWith('d1')
+})
+
+it.each([false, true])(
+  '版本签名变化只在明确确认后提交同一修订 %s',
+  async (accepted) => {
+    const row = deployment({ revision: 7 })
+    const target = { ...version(), id: 'v2', name: '新模型', version: 4 }
+    stub([row], [], [version(), target])
+    signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+    const update = vi
+      .spyOn(modeling, 'updateModelDeployment')
+      .mockRejectedValueOnce(
+        new BizError(41435, '模型输入输出签名已改变', 409, 'test'),
+      )
+      .mockResolvedValue(row)
+    const wrapper = open()
+    await flushPromises()
+    await dom().get('button[aria-label="改配置"]').trigger('click')
+    await flushPromises()
+    const picker = wrapper
+      .findAllComponents(DtSelect)
+      .find((item) => item.props('label') === '钉住的模型版本')
+    if (!picker) throw new Error('缺少版本选择器')
+    picker.vm.$emit('update:modelValue', 'v2')
+    await flushPromises()
+    const save = dom()
+      .findAll('button')
+      .find((item) => item.text() === '保存')
+    if (!save) throw new Error('缺少保存按钮')
+    await save.trigger('click')
+    await flushPromises()
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(update).toHaveBeenCalledWith(
+      'd1',
+      expect.objectContaining({ model_version_id: 'v2', expected_revision: 7 }),
+    )
+    expect(useConfirm().pending.value?.message).toContain('输入')
+    useConfirm().resolve(accepted)
+    await flushPromises()
+    expect(update).toHaveBeenCalledTimes(accepted ? 2 : 1)
+    if (accepted) {
+      expect(update).toHaveBeenLastCalledWith(
+        'd1',
+        expect.objectContaining({
+          model_version_id: 'v2',
+          expected_revision: 7,
+          is_signature_change_confirmed: true,
+        }),
+      )
+    }
+  },
+)
+
+it('缺少部署修订号时补读详情，只用可核验的修订换版', async () => {
+  const old = deployment()
+  stub([old], [], [version()])
+  signIn([PERMISSION_CODES.modelingView, PERMISSION_CODES.modelingPublish])
+  const update = vi
+    .spyOn(modeling, 'updateModelDeployment')
+    .mockResolvedValue(old)
+  const wrapper = open()
+  await flushPromises()
+  await dom().get('button[aria-label="改配置"]').trigger('click')
+  await flushPromises()
+  expect(modeling.getModelDeployment).toHaveBeenCalledWith(
+    old.id,
+    expect.any(AbortSignal),
+  )
+  wrapper.getComponent(DeploymentFormDialog).vm.$emit('submit', {
+    model_version_id: 'new',
+    name: old.name,
+    max_rows_per_call: 10,
+    rate_limit_per_minute: 20,
+  })
+  await flushPromises()
+  expect(update).not.toHaveBeenCalled()
+  expect(
+    useToast().toasts.value.some((item) => item.message.includes('修订号')),
+  ).toBe(true)
 })
 
 it('固定发布入口仍可查看与关闭调用说明', async () => {

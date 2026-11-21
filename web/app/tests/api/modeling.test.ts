@@ -66,6 +66,20 @@ it('部署启停保留各自expected_revision作为并发保护', async () => {
   ])
 })
 
+it('选择固定版本时，每个不同确认请求有自己的命令键', async () => {
+  const body = { model_version_id: 'v2', expected_revision: 7 }
+  await modeling.updateModelDeployment('deployment-1', body)
+  const first = call()[1]['headers']
+  await modeling.updateModelDeployment('deployment-1', {
+    ...body,
+    is_signature_change_confirmed: true,
+  })
+  const second = call()[1]['headers']
+  expect(first).toEqual({ 'Idempotency-Key': expect.any(String) })
+  expect(second).toEqual({ 'Idempotency-Key': expect.any(String) })
+  expect(first).not.toEqual(second)
+})
+
 it('BDM 目录走平台代理并传递取消信号', async () => {
   const controller = new AbortController()
   await modeling.listModelingBdmCatalog(

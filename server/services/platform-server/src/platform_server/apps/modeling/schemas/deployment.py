@@ -63,6 +63,7 @@ class ModelDeploymentUpdateIn(InputModel):
     )
     rate_limit_per_minute: int | None = Field(default=None, ge=1, le=6000)
     expected_revision: int | None = Field(default=None, ge=1)
+    is_signature_change_confirmed: bool = False
 
 
 class ModelDeploymentOut(OutputModel):

@@ -50,9 +50,11 @@ Authorization: Bearer <账号 APIKey>
 
 ## 3. 部署修订、换版与回滚
 
-部署输出增加整数 `revision`，存量部署有效初始值为 1。`PATCH /modeling-deployments/{deployment_id}` 新增可选 `expected_revision`；给出时在同一更新事务中检查，冲突返回 409。新客户端应提交修订号。未给修订号的旧 PATCH 保持兼容，但不能获得防覆盖保证。
+部署输出增加整数 `revision`，存量部署有效初始值为 1。`PATCH /modeling-deployments/{deployment_id}` 新增可选 `expected_revision`；给出时在同一更新事务中检查，冲突返回 409。新客户端应提交修订号。旧客户端仍可省略修订号修改名称、配额或启停，包括表单回传当前版本的请求。此类修改不检查覆盖冲突。
 
-受控版本切换使用以下新动作，避免把旧 PATCH 的兼容能力误当成完整换版保证：
+PATCH 选择不同版本时，必须提交当前修订号。签名变化需要显式确认。版本与同批元数据在同一事务生效，修订号只增加一次，切换历史可用于回滚。专用切换动作接受相同的换版条件。
+
+发布时按平台 ADR-0008 暂停建模写入，所有 API 和 worker 升级后再恢复。回滚窗口内，部署编辑和换版仍由能检查签名并记录历史的副本处理。
 
 ```http
 POST /api/v1/platform/modeling-deployments/019c0000-0000-7000-8000-000000000005:switch

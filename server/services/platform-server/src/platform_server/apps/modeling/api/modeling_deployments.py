@@ -9,6 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.auth import CallerContext
 from lib.web import ApiResponse, Page, ok
 from platform_server.apps.modeling.catalog import MODELING_VIEW
+from platform_server.apps.modeling.configuration_deps import (
+    ConfigurationWriteContext,
+    get_instance_publish,
+)
 from platform_server.apps.modeling.deps import (
     WriteGate,
     get_publish_context,
@@ -112,18 +116,18 @@ async def update_deployment(
     deployment_id: uuid.UUID,
     payload: ModelDeploymentUpdateIn,
     session: SessionDep,
-    write: PublishDep,
+    write: Annotated[ConfigurationWriteContext, Depends(get_instance_publish)],
     response: Response,
 ) -> ApiResponse[ModelDeploymentOut]:
     """修改部署；Args: deployment_id, payload, session, write, response。"""
     if payload.expected_revision is None:
         response.headers["Deprecation"] = "true"
     return ok(
-        await write.run_once(
+        await write.gate.run_once(
             endpoint=f"modeling.update_deployment.{deployment_id}",
             model=ModelDeploymentOut,
             action=lambda: deployment_service.update_deployment(
-                session, deployment_id=deployment_id, payload=payload
+                session, deployment_id, payload, write.actor
             ),
         )
     )

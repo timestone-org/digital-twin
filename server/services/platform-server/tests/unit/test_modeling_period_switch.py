@@ -10,8 +10,8 @@ from platform_server.apps.modeling.management_errors import (
 )
 from platform_server.apps.modeling.models import ModelingModelVersion
 from platform_server.apps.modeling.schemas.management import DeploymentSwitchIn
-from platform_server.apps.modeling.services.deployment_switch import (
-    _check_switch,
+from platform_server.apps.modeling.services.deployment_version_change import (
+    require_compatible_version,
 )
 
 
@@ -76,7 +76,7 @@ def test_changed_data_period_requires_explicit_confirmation(
         expected_revision=1, model_version_id=target.id
     )
     with pytest.raises(DeploymentSignatureChanged):
-        _check_switch(source, target, payload)
+        require_compatible_version(source, target, payload)
 
 
 @pytest.mark.parametrize("is_legacy", [False, True], ids=["full", "legacy"])
@@ -87,7 +87,7 @@ def test_missing_and_null_data_period_are_compatible(is_legacy: bool) -> None:
     payload = DeploymentSwitchIn(
         expected_revision=1, model_version_id=target.id
     )
-    assert _check_switch(source, target, payload) is None
+    assert require_compatible_version(source, target, payload) is None
 
 
 def test_a_confirmed_data_period_change_is_allowed() -> None:
@@ -98,4 +98,4 @@ def test_a_confirmed_data_period_change_is_allowed() -> None:
         model_version_id=target.id,
         is_signature_change_confirmed=True,
     )
-    assert _check_switch(source, target, payload) is None
+    assert require_compatible_version(source, target, payload) is None

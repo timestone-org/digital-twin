@@ -25,7 +25,6 @@ from platform_server.apps.modeling.errors import (
 )
 from platform_server.apps.modeling.management_errors import (
     DeploymentRevisionConflict,
-    DeploymentVersionMismatch,
     WorkflowDeploymentConflict,
 )
 from platform_server.apps.modeling.models import (
@@ -42,6 +41,11 @@ from platform_server.apps.modeling.schemas import (
     ModelDeploymentUpdateIn,
 )
 from platform_server.apps.modeling.schemas.command import CommandResourceOut
+from platform_server.apps.modeling.schemas.management import DeploymentSwitchIn
+from platform_server.apps.modeling.services.deployment_version_change import (
+    change_version,
+    require_revision,
+)
 from platform_server.apps.modeling.services.management_guard import (
     require_active_version,
 )
@@ -124,41 +128,40 @@ async def get_deployment(
 
 async def update_deployment(
     session: AsyncSession,
-    *,
     deployment_id: uuid.UUID,
     payload: ModelDeploymentUpdateIn,
+    actor: Actor,
 ) -> ModelDeploymentOut:
-    """改一个对外服务。`code` 不在可改之列。
+    """修改部署的元数据和固定版本。
 
-    Args: session, deployment_id, payload。
+    Args: session, deployment_id, payload, actor。
     """
-    found = await _presented(session, deployment_id, should_lock=True)
-    row = found.row
-    if payload.expected_revision is not None and payload.expected_revision != (
-        row.revision or 1
-    ):
-        raise DeploymentRevisionConflict("部署已修改，请重新读取")
-    row.revision = (row.revision or 1) + 1
-    version = found.version
-    if payload.model_version_id is not None:
-        version = await require_active_version(
-            session, payload.model_version_id
+    row = await lock_deployment(session, deployment_id)
+    target = payload.model_version_id
+    if target is not None and target != row.effective_version_id:
+        if payload.expected_revision is None:
+            raise DeploymentRevisionConflict("切换版本需要当前部署修订号")
+        await change_version(
+            session,
+            row,
+            DeploymentSwitchIn(
+                expected_revision=payload.expected_revision,
+                model_version_id=target,
+                is_signature_change_confirmed=payload.is_signature_change_confirmed,
+            ),
+            actor,
         )
-        if version.pipeline_id != found.version.pipeline_id:
-            raise DeploymentVersionMismatch("部署只能切换同一工作流的模型版本")
-        if not version.servable:
-            raise ModelVersionUnservable("请选择可服务的模型版本")
-        row.model_version_id = (
-            None if version.task == "rule_calculation" else version.id
-        )
-        row.rule_version_id = (
-            version.id if version.task == "rule_calculation" else None
-        )
+    else:
+        require_revision(row, payload.expected_revision)
+        if target is None or payload.model_fields_set - {
+            "expected_revision",
+            "model_version_id",
+            "is_signature_change_confirmed",
+        }:
+            row.revision = (row.revision or 1) + 1
     _apply_patch(row, payload)
     await session.flush()
-    return _present(
-        _Presented(row=row, version=version, key_count=found.key_count)
-    )
+    return await get_deployment(session, deployment_id)
 
 
 def _apply_patch(
