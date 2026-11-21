@@ -7,6 +7,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import Annotated, Any, Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import Field
 
@@ -38,6 +39,10 @@ from platform_server.apps.modeling.operators.reporting import (
     axis_block,
     bins_block,
     rows_block,
+)
+from platform_server.apps.modeling.operators.resample_grid import (
+    Bucket,
+    buckets_of,
 )
 from platform_server.apps.modeling.operators.steps import (
     Stage,
@@ -77,9 +82,6 @@ AGG_FUNCS: tuple[str, ...] = (
     "min",
     "sum",
 )
-
-# 一分钟的毫秒数，把时区偏移折成毫秒用
-_MINUTE_MS = 60_000
 
 # 这个算子只有一路输出，讲解全挂在它上面
 PORT = "frame"
@@ -180,16 +182,25 @@ class Resample(OperatorBase):
                 "这份数据没有时间索引，重采样无从下手——"
                 "请把取数那一步的行来源改成带时刻的那一档"
             )
-        buckets = _buckets_of(
-            frame.index, self._config.bucket, self.tz_offset_minutes
+        width = _BUCKET_MS[self._config.bucket]
+        timezone = self.business_timezone
+        zone = (
+            ZoneInfo(timezone)
+            if timezone is not None and timezone != "UTC"
+            else None
+        )
+        buckets = buckets_of(
+            frame.index, width, offset_minutes=self.tz_offset_minutes, zone=zone
         )
         _check_aggregations(frame, self._config)
         buckets = _complete_buckets(frame, buckets, self._config)
-        folded = _merged(frame, buckets, self._config)
+        folded = _merged(frame, buckets, self._config, zone)
         self._folding = _Folding(
             row_count=frame.row_count,
-            starts=tuple(start for start, _ in buckets),
-            sizes=tuple(len(positions) for _, positions in buckets),
+            starts=tuple(bucket.bounds.start for bucket in buckets),
+            sizes=tuple(len(bucket.positions) for bucket in buckets),
+            business_timezone=zone.key if zone else None,
+            span_count=_bucket_count(buckets, width, zone),
         )
         return {"frame": folded}
 
@@ -200,7 +211,7 @@ class Resample(OperatorBase):
             return ()
         width = _BUCKET_MS[self._config.bucket]
         return (
-            _rows_block(folding, width),
+            _rows_block(folding),
             _axis_block(folding, width, self.tz_offset_minutes),
             _sizes_block(folding),
         )
@@ -216,17 +227,19 @@ class _Folding:
     starts: tuple[int, ...]
     #: 与 `starts` 同序的每桶行数
     sizes: tuple[int, ...]
+    business_timezone: str | None
+    span_count: int | None
 
     @property
     def excluded_rows(self) -> int:
         return self.row_count - sum(self.sizes)
 
 
-def _rows_block(folding: _Folding, width: int) -> ReportBlock:
+def _rows_block(folding: _Folding) -> ReportBlock:
     """压缩比：多少行折成多少行。
 
     ⚠ 只把完整桶筛选排除的行记为丢弃，合并进桶的行不算丢弃。
-    Args: folding, width。
+    Args: folding。
     """
     after = len(folding.starts)
     return rows_block(
@@ -237,18 +250,20 @@ def _rows_block(folding: _Folding, width: int) -> ReportBlock:
             dropped=folding.excluded_rows,
             ratio_actual=ratio_of(after, folding.row_count),
         ),
-        funnel=funnel_of(_bucket_stages(folding, width)),
+        funnel=funnel_of(_bucket_stages(folding)),
     )
 
 
-def _bucket_stages(folding: _Folding, width: int) -> tuple[Stage, ...]:
+def _bucket_stages(folding: _Folding) -> tuple[Stage, ...]:
     """进来多少行 → 这一段横跨几个桶 → 其中几个有数据 → 几个是空的。
 
-    Args: folding, width。
+    Args: folding。
     """
     occupied = len(folding.starts)
-    span = _span_of(folding.starts, width)
-    note = "" if span is not None else NOTE_NO_ROWS
+    span = folding.span_count
+    note = "" if occupied else NOTE_NO_ROWS
+    if occupied and span is None:
+        note = "业务时区发生跳变，未按固定宽度推算空桶"
     return (
         Stage("输入行", folding.row_count, "行"),
         *(
@@ -262,14 +277,26 @@ def _bucket_stages(folding: _Folding, width: int) -> tuple[Stage, ...]:
     )
 
 
-def _span_of(starts: tuple[int, ...], width: int) -> int | None:
-    """首尾两个桶之间一共横跨几个桶；一个桶都没有时给 `None`。
-
-    Args: starts, width。
-    """
-    if not starts:
+def _bucket_count(
+    buckets: list[Bucket], width: int, zone: ZoneInfo | None
+) -> int | None:
+    """按同一网格计桶。Args: buckets, width, zone。"""
+    if not buckets:
         return None
-    return (starts[-1] - starts[0]) // width + 1
+    first, last = buckets[0].bounds, buckets[-1].bounds
+    if zone is not None and width > _BUCKET_MS["1h"]:
+        return (last.label - first.label) // width + 1
+    span = (last.start - first.start) // width + 1
+    if zone is not None and (
+        span < len(buckets)
+        or (last.start - first.start) % width
+        or any(
+            bucket.bounds.end - bucket.bounds.start != width
+            for bucket in buckets
+        )
+    ):
+        return None
+    return span
 
 
 def _axis_block(
@@ -286,14 +313,20 @@ def _axis_block(
     return axis_block(
         BlockAt(
             zone="charts",
-            title="桶占用与断档",
+            title=(
+                f"桶占用与断档（按 {folding.business_timezone} 对齐，轴用 UTC）"
+                if folding.business_timezone
+                else "桶占用与断档"
+            ),
             port=PORT,
             tier=TIER_LARGE,
             is_primary=True,
         ),
         TimeAxis(
             bucket_ms=width,
-            tz_offset_minutes=tz_offset_minutes,
+            tz_offset_minutes=(
+                0 if folding.business_timezone else tz_offset_minutes
+            ),
             actual_since=moment_text(starts[0]) if starts else None,
             actual_until=moment_text(starts[-1]) if starts else None,
             occupancy=span.occupancy,
@@ -334,35 +367,15 @@ def _sizes_block(folding: _Folding) -> ReportBlock:
     )
 
 
-def _buckets_of(
-    index: tuple[int, ...], bucket: BucketWidth, tz_offset_minutes: int
-) -> list[tuple[int, list[int]]]:
-    """`[(桶起点, 落在这个桶里的行下标)]`，按桶起点升序，桶内按时刻升序。
-
-    ⚠ 先加时区偏移再取整、再减回去：直接对 UTC 毫秒取整，「一天」的边界会落在
-    当地时间早上八点上。
-    ⚠ 桶内按时刻排而不按行序：上游排序或拼接后行序不是时序，首末值与差值会
-    取错且不报错。同一时刻按行序，结果稳定。
-    Args: index, bucket, tz_offset_minutes。
-    """
-    width = _BUCKET_MS[bucket]
-    offset = tz_offset_minutes * _MINUTE_MS
-    grouped: dict[int, list[int]] = {}
-    for position, moment in enumerate(index):
-        start = ((moment + offset) // width) * width - offset
-        grouped.setdefault(start, []).append(position)
-    return [
-        (start, sorted(positions, key=lambda position: index[position]))
-        for start, positions in sorted(grouped.items())
-    ]
-
-
 def _merged(
-    frame: Frame, buckets: list[tuple[int, list[int]]], config: ResampleConfig
+    frame: Frame,
+    buckets: list[Bucket],
+    config: ResampleConfig,
+    zone: ZoneInfo | None,
 ) -> Frame:
     """把每个桶折成一行。
 
-    Args: frame, buckets, config。
+    Args: frame, buckets, config, zone。
     """
     methods: list[AggFunc] = [
         _column_method(column, config) for column in frame.columns
@@ -371,13 +384,13 @@ def _merged(
         tuple(
             _column_value(
                 column,
-                [frame.rows[at][position] for at in positions],
+                [frame.rows[at][position] for at in bucket.positions],
                 methods[position],
                 config.missing_policy,
             )
             for position, column in enumerate(frame.columns)
         )
-        for _, positions in buckets
+        for bucket in buckets
     )
     columns = tuple(
         (
@@ -391,14 +404,26 @@ def _merged(
         frame,
         columns=columns,
         rows=rows,
-        index=tuple(start for start, _ in buckets),
+        index=tuple(bucket.bounds.start for bucket in buckets),
         provenance=replace(
             frame.provenance,
-            data_period=DataPeriod(
-                kind="fixed", interval_ms=_BUCKET_MS[config.bucket]
-            ),
+            data_period=_bucket_period(config.bucket, zone, buckets),
         ),
     )
+
+
+def _bucket_period(
+    bucket: BucketWidth, zone: ZoneInfo | None, buckets: list[Bucket]
+) -> DataPeriod | None:
+    """记录实际数据周期。Args: bucket, zone, buckets。"""
+    if zone is not None and bucket == "1d":
+        return DataPeriod(
+            kind="calendar", calendar_unit="day", timezone=zone.key
+        )
+    width = _BUCKET_MS[bucket]
+    if any(item.bounds.end - item.bounds.start != width for item in buckets):
+        return None
+    return DataPeriod(kind="fixed", interval_ms=width)
 
 
 def _check_aggregations(frame: Frame, config: ResampleConfig) -> None:
@@ -441,8 +466,8 @@ def _column_value(
 
 
 def _complete_buckets(
-    frame: Frame, buckets: list[tuple[int, list[int]]], config: ResampleConfig
-) -> list[tuple[int, list[int]]]:
+    frame: Frame, buckets: list[Bucket], config: ResampleConfig
+) -> list[Bucket]:
     """仅保留查询范围完整覆盖的桶。Args: frame, buckets, config。"""
     if not config.should_keep_complete_buckets:
         return buckets
@@ -458,11 +483,10 @@ def _complete_buckets(
         min(source.until, source.observed_until or source.until).timestamp()
         * 1000
     )
-    width = _BUCKET_MS[config.bucket]
     return [
-        (start, positions)
-        for start, positions in buckets
-        if since <= start and start + width <= until
+        bucket
+        for bucket in buckets
+        if since <= bucket.bounds.start and bucket.bounds.end <= until
     ]
 
 

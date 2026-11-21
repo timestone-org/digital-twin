@@ -39,6 +39,7 @@ class NodePayload:
     model_artifact: SealedArtifact | None = None
     #: 测试分支由训练节点回灌的参数。空字典仍代表已拟合。
     fitted: dict[str, Any] | None = None
+    business_timezone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,7 @@ def run_node_payload(payload: NodePayload) -> NodeResult:
     operator.bind_runtime(
         tz_offset_minutes=payload.tz_offset_minutes,
         split_plan=payload.split_plan,
+        business_timezone=payload.business_timezone,
     )
     if payload.model_artifact is not None:
         sealed = payload.model_artifact

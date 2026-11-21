@@ -116,6 +116,7 @@ class Execution:
     #: 每个节点落一次库。⚠ 必须逐节点落而不是攒到最后：跑到一半的进度要对
     #: 别的副本可见，前端轮询读的就是这些行
     on_node_finished: Callable[[NodeOutcome], Awaitable[None]]
+    business_timezone: str | None = None
 
 
 @dataclass
@@ -344,6 +345,7 @@ async def _run_node(
             config=dict(node.config),
             inputs=_inputs_of(node, setting, context),
             tz_offset_minutes=execution.tz_offset_minutes,
+            business_timezone=execution.business_timezone,
             split_plan=split_plan_of(setting.graph, setting.nodes, node.id),
             model_artifact=_input_artifact(node, setting, context),
             fitted=_training_fit(

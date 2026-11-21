@@ -226,6 +226,7 @@ class OperatorBase:
     RUNTIME_ATTRS: ClassVar[tuple[str, ...]] = (
         "tz_offset_minutes",
         "split_plan",
+        "business_timezone",
     )
 
     # 业务时区相对 UTC 的分钟偏移。⚠ 按 UTC 算时间特征会整体偏 8 小时且不报错
@@ -233,19 +234,25 @@ class OperatorBase:
     # 下游切分的计划。带拟合的算子据此只在「将来会进训练集」的行上算统计量
     # （测试行参与拟合就是泄漏）；None = 图里没有切分，用整帧
     split_plan: dict[str, Any] | None = None
+    business_timezone: str | None = None
 
     def __init__(self, config: OperatorConfig) -> None:
         self.config = config
 
     def bind_runtime(
-        self, *, tz_offset_minutes: int, split_plan: dict[str, Any] | None
+        self,
+        *,
+        tz_offset_minutes: int,
+        split_plan: dict[str, Any] | None,
+        business_timezone: str | None = None,
     ) -> None:
         """逐项注入 `RUNTIME_ATTRS` 里的运行期上下文。
 
-        Args: tz_offset_minutes, split_plan。
+        Args: tz_offset_minutes, split_plan, business_timezone。
         """
         self.tz_offset_minutes = tz_offset_minutes
         self.split_plan = split_plan
+        self.business_timezone = business_timezone
 
     def run(self, inputs: dict[str, Any]) -> dict[str, Any]:
         """跑这一步：吃 `{输入端口名: 负载}`，吐 `{输出端口名: 负载}`。

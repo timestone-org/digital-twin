@@ -63,6 +63,7 @@ class DispatchOptions:
     bdm_connection: BdmConnection | None = None
     pool: NodePool | None = None
     stale_after_s: float = 3600
+    business_timezone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,7 @@ async def _run_claimed(
             execution=Execution(
                 sources=sources,
                 tz_offset_minutes=options.tz_offset_minutes,
+                business_timezone=options.business_timezone,
                 runner=options.runner,
                 should_cancel=lambda: _is_cancelled(sessions, run_id),
                 on_node_finished=lambda node: _persist(

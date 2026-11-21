@@ -146,6 +146,9 @@ class TimeFeature(OperatorBase):
             raise OperatorError(
                 "这份数据没有时刻，造不出时间特征——推理时请在请求里带上时刻"
             )
+        timezone = self.business_timezone
+        if timezone is not None and timezone != "UTC":
+            self._timezone = ZoneInfo(timezone)
         parts = _deduped(list(self._config.parts))
         _refuse_collisions(frame, parts)
         made = [
@@ -159,7 +162,9 @@ class TimeFeature(OperatorBase):
         return {"frame": result}
 
     def dump_fitted(self) -> dict[str, Any] | None:
-        """把造列用的时区偏移冻进可服务表示，推理时按同一个时区造列。"""
+        """把造列用的业务时区冻进可服务表示。"""
+        if self._timezone is not None and self._timezone.key != "UTC":
+            return {FITTED_TIMEZONE: self._timezone.key}
         return {_FITTED_TZ: self.tz_offset_minutes}
 
     def load_fitted(self, params: dict[str, Any]) -> None:
@@ -169,6 +174,7 @@ class TimeFeature(OperatorBase):
         """
         self.validate_fitted(params)
         self._timezone = _fitted_timezone(params)
+        self.business_timezone = None
         offset = params.get(_FITTED_TZ)
         if isinstance(offset, int):
             self.tz_offset_minutes = offset
@@ -213,6 +219,7 @@ class TimeFeature(OperatorBase):
             ),
             tz_offset_minutes=self.tz_offset_minutes,
             span=(min(index), max(index)) if index else None,
+            business_timezone=self._timezone.key if self._timezone else None,
         )
 
 

@@ -40,6 +40,9 @@ from platform_server.apps.dataset.services.backfill_jobs import (
 from platform_server.apps.dataset.services.backfill_service import (
     BackfillRunner,
 )
+from platform_server.apps.dataset.services.bucket_offsets import (
+    offset_segments,
+)
 from platform_server.apps.dataset.services.column_service import ColumnSpec
 from platform_server.apps.dataset.services.dirty import (
     DIRTY_TABLES_KEY,
@@ -96,6 +99,7 @@ __all__ = [
     "formula_service",
     "formula_usage",
     "library_service",
+    "offset_segments",
     "parse_boolean",
     "recompute_service",
     "record_overrides",
