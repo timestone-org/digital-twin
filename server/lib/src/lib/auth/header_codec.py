@@ -101,6 +101,27 @@ def sign_context(secret: str, context: SignedContext) -> str:
     ).hexdigest()
 
 
+def sign_named_context(
+    secret: str, context: SignedContext, encoded_username: str
+) -> str:
+    """签发带账号名的身份声明。Args: secret, context, encoded_username。"""
+    wire = json.dumps(
+        [
+            "edge-identity/v2",
+            context.user_id,
+            encoded_username,
+            context.role,
+            context.permissions_b64,
+            context.expires_at,
+        ],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    )
+    return hmac.new(
+        secret.encode("utf-8"), wire.encode("ascii"), sha256
+    ).hexdigest()
+
+
 def verify_context(
     secret: str, context: SignedContext, *, signature: str, now: int
 ) -> bool:

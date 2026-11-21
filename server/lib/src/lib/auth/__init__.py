@@ -3,12 +3,14 @@
 from lib.auth.context import CallerContext
 from lib.auth.edge_headers import (
     HEADER_EXPIRES,
+    HEADER_NAMED_SIGNATURE,
     HEADER_PERMISSIONS,
     HEADER_ROLE,
     HEADER_SIGNATURE,
     HEADER_TRUNCATED,
     HEADER_USER_ID,
     HEADER_USERNAME,
+    IDENTITY_HEADERS,
     REASON_BAD_EXPIRY,
     REASON_BAD_SIGNATURE,
     REASON_BAD_SUBJECT,
@@ -25,6 +27,7 @@ from lib.auth.header_codec import (
     encode_identity,
     encode_permissions,
     sign_context,
+    sign_named_context,
     verify_context,
 )
 from lib.auth.jwt import JwtCodec, TokenClaims, TokenError
@@ -32,12 +35,14 @@ from lib.auth.password import PasswordHasher
 
 __all__ = [
     "HEADER_EXPIRES",
+    "HEADER_NAMED_SIGNATURE",
     "HEADER_PERMISSIONS",
     "HEADER_ROLE",
     "HEADER_SIGNATURE",
     "HEADER_TRUNCATED",
     "HEADER_USERNAME",
     "HEADER_USER_ID",
+    "IDENTITY_HEADERS",
     "MAX_PERMISSION_HEADER_BYTES",
     "REASON_BAD_EXPIRY",
     "REASON_BAD_SIGNATURE",
@@ -57,5 +62,6 @@ __all__ = [
     "encode_identity",
     "encode_permissions",
     "sign_context",
+    "sign_named_context",
     "verify_context",
 ]

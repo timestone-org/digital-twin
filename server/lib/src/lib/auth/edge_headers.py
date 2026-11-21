@@ -26,6 +26,18 @@ HEADER_PERMISSIONS = "X-Auth-Permissions"
 HEADER_TRUNCATED = "X-Auth-Permissions-Truncated"
 HEADER_EXPIRES = "X-Auth-Exp"
 HEADER_SIGNATURE = "X-Auth-Sig"
+HEADER_NAMED_SIGNATURE = "X-Auth-Sig-V2"
+
+IDENTITY_HEADERS = (
+    HEADER_USER_ID,
+    HEADER_USERNAME,
+    HEADER_ROLE,
+    HEADER_PERMISSIONS,
+    HEADER_TRUNCATED,
+    HEADER_EXPIRES,
+    HEADER_SIGNATURE,
+    HEADER_NAMED_SIGNATURE,
+)
 
 # 判不可信的原因，稳定字面量。调用方据它决定给用户看哪句话——五种情况的处置
 # 完全不同（重登录 / 走网关 / 联系管理员），合成一句话等于让现场自己猜

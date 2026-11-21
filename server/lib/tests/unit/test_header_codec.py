@@ -2,6 +2,8 @@
 非法输入一律 fail-closed。这三条错了都是静默的安全洞。
 """
 
+from dataclasses import replace
+
 import pytest
 
 from lib.auth import header_codec as codec
@@ -80,3 +82,41 @@ def test_missing_secret_or_signature_fails_closed() -> None:
     signed = context()
     assert not codec.verify_context("", signed, signature="x", now=1)
     assert not codec.verify_context("s", signed, signature="", now=1)
+
+
+def test_named_signature_binds_all_legitimate_account_claims() -> None:
+    account = codec.SignedContext(
+        user_id="00000000-0000-7000-8000-000000000001",
+        role=codec.encode_identity("读者"),
+        permissions_b64=codec.encode_permissions(["assets:view"]),
+        expires_at=1999999999,
+    )
+    username = codec.encode_identity("本地验收员")
+    before = codec.sign_named_context("unit-test", account, username)
+    claims = [
+        (
+            replace(account, user_id="00000000-0000-7000-8000-000000000002"),
+            username,
+        ),
+        (replace(account, role=codec.encode_identity("维护员")), username),
+        (
+            replace(account, permissions_b64=codec.encode_permissions([])),
+            username,
+        ),
+        (replace(account, expires_at=account.expires_at + 1), username),
+        (account, codec.encode_identity("本地新名字")),
+    ]
+    assert (
+        len(
+            {
+                before,
+                *(
+                    codec.sign_named_context("unit-test", updated, name)
+                    for updated, name in claims
+                ),
+            }
+        )
+        == len(claims) + 1
+    )
+    assert codec.sign_named_context("unit-test", account, username) == before
+    assert before != codec.sign_context("unit-test", account)
