@@ -223,6 +223,56 @@ describe('旧包联动', () => {
       targetDashboardId: 'd1',
     })
   })
+  it('分页保留选择且覆盖前仍校验所有引用', async () => {
+    const wrapper = mountDialog()
+    const references = Array.from({ length: 17 }, (_, index) => `old-${index}`)
+    const payload = {
+      ...linked,
+      chromeJson: {
+        interactions: references.map((value) => ({
+          source: { nodeId: 'label' },
+          action: { type: 'show', targets: [value] },
+        })),
+      },
+    }
+    await wrapper.setProps({ open: true, payload })
+    const selects = () =>
+      wrapper
+        .findAllComponents(DtSelect)
+        .filter((item) => item.props('label') === '对应的包内节点')
+    function selectPage() {
+      for (const item of selects()) item.vm.$emit('update:modelValue', 'label')
+    }
+    expect(selects()).toHaveLength(8)
+    selectPage()
+    await clickText(wrapper, '下一页')
+    expect(selects()).toHaveLength(8)
+    selectPage()
+    await clickText(wrapper, '下一页')
+    expect(selects()).toHaveLength(1)
+    await clickText(wrapper, '覆盖已有大屏')
+    await clickText(wrapper, '覆盖导入')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    selectPage()
+    await clickText(wrapper, '上一页')
+    expect(
+      selects().every((item) => item.props('modelValue') === 'label'),
+    ).toBe(true)
+    await clickText(wrapper, '覆盖导入')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
+      interactionNodeMap: Object.fromEntries(
+        references.map((value) => [value, 'label']),
+      ),
+      targetDashboardId: 'd1',
+    })
+    await wrapper.setProps({ open: false })
+    await wrapper.setProps({ open: true })
+    expect(wrapper.text()).toContain('第 1 / 3 页')
+    expect(selects().every((item) => item.props('modelValue') === '')).toBe(
+      true,
+    )
+  })
+
   it('更换文件与关闭会清掉同一旧引用的先前选择，取消不会提交', async () => {
     const wrapper = mountDialog()
     await wrapper.setProps({ open: true, payload: linked })

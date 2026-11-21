@@ -1,13 +1,30 @@
 <script setup lang="ts">
 /** @fileoverview 确认旧联动涉及的规则，并为每个旧节点选择包内组件。 */
-import { DtNotice, DtSelect } from '@dt/ui'
+import { computed, ref, watch } from 'vue'
+import { DtButton, DtNotice, DtSelect } from '@dt/ui'
 import type { ImportInteractionReview } from '@/features/dashboard/importInteractions'
-defineProps<{
+const props = defineProps<{
   review: ImportInteractionReview | null
   choices: ReadonlyMap<string, string>
   disabled: boolean
 }>()
 const emit = defineEmits<{ choose: [reference: string, key: string] }>()
+
+const PAGE_SIZE = 8
+const page = ref(1)
+const pageCount = computed(() =>
+  Math.ceil((props.review?.references.length ?? 0) / PAGE_SIZE),
+)
+const visibleReferences = computed(() => {
+  const start = (page.value - 1) * PAGE_SIZE
+  return props.review?.references.slice(start, start + PAGE_SIZE)
+})
+watch(
+  () => props.review,
+  () => {
+    page.value = 1
+  },
+)
 </script>
 
 <template>
@@ -30,8 +47,34 @@ const emit = defineEmits<{ choose: [reference: string, key: string] }>()
     <p v-if="review.references.length" class="text-xs text-text-secondary">
       旧包缺少以下节点的对照。请按涉及的联动选择包内节点。
     </p>
+    <nav
+      v-if="pageCount > 1"
+      aria-label="联动节点分页"
+      class="flex flex-wrap items-center gap-2"
+    >
+      <DtButton
+        size="sm"
+        variant="ghost"
+        :disabled="disabled || page === 1"
+        @click="page--"
+      >
+        上一页
+      </DtButton>
+      <DtButton
+        size="sm"
+        variant="ghost"
+        :disabled="disabled || page === pageCount"
+        @click="page++"
+      >
+        下一页
+      </DtButton>
+      <span class="text-xs text-text-secondary" aria-live="polite">
+        第 {{ page }} / {{ pageCount }} 页 · 已选择 {{ choices.size }} /
+        {{ review.references.length }} 个
+      </span>
+    </nav>
     <div
-      v-for="item in review.references"
+      v-for="item in visibleReferences"
       :key="item.value"
       class="flex flex-col gap-1 rounded-md border border-border-subtle p-3"
     >
