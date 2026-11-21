@@ -101,6 +101,10 @@ async def test_replacement_preserves_name_identity_and_existing_reference(
         assert saved[key] == old[key]
     assert saved["checksum"] != old["checksum"]
     assert saved["size_bytes"] == len(NEW_BYTES)
+    asset_id = uuid.UUID(old["id"])
+    staging = keys.replacement_key(asset_id, uuid.UUID(upload_id))
+    assert await object_store.stat(staging) is None
+    assert await object_store.get_bytes(keys.model_key(asset_id)) == BYTES
     assert {v["status"] for v in saved["variants"]} == {"pending"}
     again = await app_client.post(
         f"{ASSETS_URL}/{old['id']}:replace", json=body
@@ -116,6 +120,26 @@ async def test_replacement_preserves_name_identity_and_existing_reference(
     assert key.startswith(f"models/{old['id']}/revisions/")
     assert key.endswith("/original")
     assert await object_store.get_bytes(key) == NEW_BYTES
+
+
+async def test_cleanup_failure_keeps_the_replacement_committed(
+    app_client: httpx.AsyncClient,
+    object_store: FakeObjectStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old = await make_asset(app_client, object_store)
+    upload_id = await prepare(app_client, object_store, old["id"])
+    staging = keys.replacement_key(uuid.UUID(old["id"]), uuid.UUID(upload_id))
+    remove = AsyncMock(side_effect=ObjectStoreError("unavailable"))
+    monkeypatch.setattr(object_store, "delete", remove)
+    url = f"{ASSETS_URL}/{old['id']}:replace"
+    body = {"upload_id": upload_id, "expected_checksum": old["checksum"]}
+
+    saved = await app_client.post(url, json=body)
+    assert saved.status_code == 200
+    remove.assert_awaited_once_with(staging)
+    assert await object_store.get_bytes(staging) == NEW_BYTES
+    assert data_of(await app_client.post(url, json=body)) == data_of(saved)
 
 
 async def test_upload_failure_leaves_the_original_model_usable(
@@ -186,6 +210,8 @@ async def test_stale_confirmation_does_not_overwrite_new_content(
         },
     )
     assert result.status_code == 409
+    failed_stage = keys.replacement_key(uuid.UUID(old["id"]), uuid.UUID(second))
+    assert await object_store.get_bytes(failed_stage) == NEW_BYTES
     assert data_of(
         await app_client.get(f"{ASSETS_URL}/{old['id']}")
     ) == data_of(first_result)
@@ -274,10 +300,17 @@ async def test_public_model_resolution_rejects_unknown_variants_and_assets(
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize(
+    ("should_change_content", "expected_status"),
+    [(False, 200), (True, 409)],
+    ids=["same-bytes", "changed-bytes"],
+)
 async def test_concurrent_confirmation_cannot_overwrite_a_published_version(
     app_client: httpx.AsyncClient,
     object_store: FakeObjectStore,
     monkeypatch: pytest.MonkeyPatch,
+    should_change_content: bool,
+    expected_status: int,
 ) -> None:
     old = await make_asset(app_client, object_store)
     upload_id = await prepare(app_client, object_store, old["id"])
@@ -293,7 +326,7 @@ async def test_concurrent_confirmation_cannot_overwrite_a_published_version(
         await copy(source, target, expected_etag=expected_etag)
 
     monkeypatch.setattr(object_store, "copy", delayed_copy)
-    latest = glb_bytes("fixture 2")
+    latest = glb_bytes("fixture 2") if should_change_content else NEW_BYTES
     assert len(latest) == len(NEW_BYTES)
     body = {"upload_id": upload_id, "expected_checksum": old["checksum"]}
     first = asyncio.create_task(
@@ -313,15 +346,29 @@ async def test_concurrent_confirmation_cannot_overwrite_a_published_version(
     finally:
         resume.set()
         obsolete = await first
-    assert obsolete.status_code == 409
+    assert obsolete.status_code == expected_status
+    if not should_change_content:
+        assert data_of(obsolete) == data_of(second)
+    await _assert_published_replacement(
+        app_client, object_store, old["id"], latest, second
+    )
+
+
+async def _assert_published_replacement(
+    app_client: httpx.AsyncClient,
+    object_store: FakeObjectStore,
+    asset_id: str,
+    content: bytes,
+    replacement: httpx.Response,
+) -> None:
     resolved = await app_client.get(
-        f"/api/v1/platform/public-assets/{old['id']}/original"
+        f"/api/v1/platform/public-assets/{asset_id}/original"
     )
     key = resolved.headers["location"].removeprefix("/oss/")
-    assert await object_store.get_bytes(key) == latest
-    assert data_of(
-        await app_client.get(f"{ASSETS_URL}/{old['id']}")
-    ) == data_of(second)
+    assert await object_store.get_bytes(key) == content
+    assert data_of(await app_client.get(f"{ASSETS_URL}/{asset_id}")) == data_of(
+        replacement
+    )
 
 
 async def test_copied_content_must_match_validation_before_publishing(

@@ -6,6 +6,7 @@ from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.db import after_commit
 from lib.objectstore import (
     ObjectChanged,
     ObjectNotFound,
@@ -98,21 +99,29 @@ async def presign_replacement(
     )
 
 
+async def _read_stage(store: ObjectStore, key: str) -> ObjectStat | None:
+    try:
+        return await store.stat(key)
+    except ObjectStoreError as error:
+        raise AssetStoreUnavailable("素材服务暂时不可用") from error
+
+
 async def _prepare(
-    store: ObjectStore, asset_id: uuid.UUID, upload_id: uuid.UUID
+    store: ObjectStore,
+    asset_id: uuid.UUID,
+    upload_id: uuid.UUID,
+    stat: ObjectStat,
 ) -> ContentWrite:
     revision = uuid7()
-    key = keys.replacement_key(asset_id, upload_id)
     try:
-        stat = await store.stat(key)
-        if stat is None:
-            raise AssetUploadMissing("没有收到替换文件，请重新上传")
         checked_upload_spec("model", stat.content_type, stat.size_bytes)
         if stat.size_bytes < MIN_UPLOAD_BYTES:
             raise AssetUploadMissing("替换文件为空，请重新上传")
         await check_upload_content(store, stat)
         await store.copy(
-            key, keys.revision_key(asset_id, revision), expected_etag=stat.etag
+            stat.key,
+            keys.revision_key(asset_id, revision),
+            expected_etag=stat.etag,
         )
         copied = await store.stat(keys.revision_key(asset_id, revision))
         if copied is None or copied != ObjectStat(
@@ -129,33 +138,81 @@ async def _prepare(
         raise AssetStoreUnavailable("素材服务暂时不可用") from error
 
 
+async def _replay(
+    session: AsyncSession,
+    asset_id: uuid.UUID,
+    upload_id: uuid.UUID,
+    *,
+    checksum: str | None = None,
+) -> AssetOut | None:
+    current = await crud.get(session, asset_id)
+    if current is None or current.content_upload_id != upload_id:
+        return None
+    if checksum is not None and current.checksum != checksum:
+        return None
+    return await read_asset(session, asset_id)
+
+
+async def _prepare_or_replay(
+    sessions: Sessions,
+    store: ObjectStore,
+    asset_id: uuid.UUID,
+    upload_id: uuid.UUID,
+) -> ContentWrite | AssetOut:
+    key = keys.replacement_key(asset_id, upload_id)
+    stat = await _read_stage(store, key)
+    try:
+        if stat is None:
+            raise AssetUploadMissing("没有收到替换文件，请重新上传")
+        return await _prepare(store, asset_id, upload_id, stat)
+    except AssetUploadMissing as error:
+        if stat is not None and not isinstance(error.__cause__, ObjectNotFound):
+            raise
+        # 并发确认可能已提交并删除暂存件。若已读过暂存元数据，还须核对同一版本。
+        async with sessions.session() as session:
+            saved = await _replay(
+                session,
+                asset_id,
+                upload_id,
+                checksum=stat.etag if stat else None,
+            )
+        if saved is None:
+            raise
+        return saved
+
+
 async def replace_content(
     sessions: Sessions,
     store: ObjectStore,
     asset_id: uuid.UUID,
     body: ReplaceUploadIn,
 ) -> AssetOut:
-    """校验并发布新版本，重复确认同一版本不再次修改。
+    """校验并发布新版本，成功提交后回收这次替换的暂存件。
 
-    Args: sessions, store, asset_id, body。"""
+    Args: sessions, store, asset_id, body。
+    """
     await _model(sessions, asset_id)
     async with sessions.session() as session:
-        current = await crud.get(session, asset_id)
-        if current is not None and current.content_upload_id == body.upload_id:
-            return await read_asset(session, asset_id)
-    prepared = await _prepare(store, asset_id, body.upload_id)
+        saved = await _replay(session, asset_id, body.upload_id)
+    if saved is not None:
+        return saved
+    prepared = await _prepare_or_replay(
+        sessions, store, asset_id, body.upload_id
+    )
+    if isinstance(prepared, AssetOut):
+        return prepared
     async with sessions.session() as session:
         if not await switch_content(
             session, asset_id, body.expected_checksum, prepared
         ):
-            current = await crud.get(session, asset_id)
-            if (
-                current is not None
-                and current.content_upload_id == body.upload_id
-            ):
-                return await read_asset(session, asset_id)
+            saved = await _replay(session, asset_id, body.upload_id)
+            if saved is not None:
+                return saved
             raise AssetReplaceConflict("模型已被其他上传更新，请刷新素材后再试")
-        return await request_recompression(session, asset_id)
+        result = await request_recompression(session, asset_id)
+        key = keys.replacement_key(asset_id, body.upload_id)
+        after_commit(session, lambda: store.delete(key))
+        return result
 
 
 async def resolve_model(
