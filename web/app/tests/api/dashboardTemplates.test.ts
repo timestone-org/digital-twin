@@ -187,3 +187,19 @@ describe('错误码', () => {
     expect(templates.TEMPLATE_NOT_FOUND_CODE).toBe(41015)
   })
 })
+
+it('读取模板传递取消信号，实例化只发送非空节点对照', async () => {
+  const controller = new AbortController()
+  await templates.getDashboardTemplate('t1', controller.signal)
+  expect(call()[1].signal).toBe(controller.signal)
+  await templates.instantiateDashboardTemplate('t1', {
+    targetProjectId: 'p',
+    interactionNodeMap: { x: 'a' },
+  })
+  expect(call()[1].body).toHaveProperty('interaction_node_map', { x: 'a' })
+  await templates.instantiateDashboardTemplate('t1', {
+    targetProjectId: 'p',
+    interactionNodeMap: {},
+  })
+  expect(call()[1].body).toEqual({ target_project_id: 'p' })
+})

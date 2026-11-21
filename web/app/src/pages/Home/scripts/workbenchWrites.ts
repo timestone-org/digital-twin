@@ -46,6 +46,9 @@ async function fromTemplate(
   const made = await instantiateDashboardTemplate(templateId, {
     targetProjectId: input.projectId,
     name: input.name === '' ? undefined : input.name,
+    ...(input.interactionNodeMap === undefined
+      ? {}
+      : { interactionNodeMap: input.interactionNodeMap }),
   })
   return {
     id: made.id,

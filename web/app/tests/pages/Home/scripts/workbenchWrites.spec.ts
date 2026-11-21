@@ -288,3 +288,22 @@ it('把新建和覆盖的包内联动选择交给同一导入入口', async () =
     )
   }
 })
+
+it('模板创建入口保留已确认的联动节点对照', async () => {
+  const spy = vi
+    .spyOn(templatesApi, 'instantiateDashboardTemplate')
+    .mockResolvedValue(imported('模板新屏'))
+  await createDashboardFrom({
+    startMode: 'template',
+    projectId: 'p1',
+    templateId: 't',
+    name: '',
+    designWidth: 1920,
+    designHeight: 1080,
+    interactionNodeMap: { x: 'a' },
+  })
+  expect(spy).toHaveBeenCalledWith(
+    't',
+    expect.objectContaining({ interactionNodeMap: { x: 'a' } }),
+  )
+})

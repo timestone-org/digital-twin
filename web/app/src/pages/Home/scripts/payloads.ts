@@ -25,6 +25,7 @@ export interface NewDashboardPayload {
   includePointBindings?: boolean | undefined
   /** `startMode === 'template'` 时必给。 */
   templateId?: string | undefined
+  interactionNodeMap?: Record<string, string> | undefined
 }
 
 /** 项目设置的出参。`themeJson` 为 `{}` 即回退内置默认主题。 */

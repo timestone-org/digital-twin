@@ -3,6 +3,7 @@
  * `NewDashboardPayload` 按起手方式带对字段，同名屏只提示不拦。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DtSelect } from '@dt/ui'
 import { flushPromises, mount } from '@vue/test-utils'
 import type { DashboardTemplateSummary, Page } from '@dt/contracts'
 
@@ -87,6 +88,22 @@ async function clickText(
 }
 
 beforeEach(() => {
+  vi.spyOn(templatesApi, 'getDashboardTemplate').mockImplementation((id) =>
+    Promise.resolve({
+      ...template(id, '光伏总览'),
+      payload: {
+        schemaVersion: 1,
+        name: '光伏总览',
+        description: null,
+        designWidth: 1920,
+        designHeight: 1080,
+        themeJson: {},
+        chromeJson: {},
+        nodes: [],
+      },
+    }),
+  )
+
   vi.spyOn(templatesApi, 'listDashboardTemplates').mockResolvedValue(
     templatePage([template('t1', '光伏总览')]),
   )
@@ -162,6 +179,7 @@ describe('三种起手方式', () => {
     expect(wrapper.emitted('submit')).toBeUndefined()
 
     await clickText(wrapper, '光伏总览')
+    await flushPromises()
     await clickText(wrapper, '创建大屏')
 
     expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
@@ -212,4 +230,125 @@ describe('关闭', () => {
 
     expect(wrapper.emitted('update:open')).toEqual([[false]])
   })
+})
+
+describe('模板里的旧联动', () => {
+  const old = '0195d258-1d43-7a6c-806c-092dddc12e1e'
+  const payload = {
+    schemaVersion: 1,
+    name: '历史模板',
+    description: null,
+    designWidth: 1920,
+    designHeight: 1080,
+    themeJson: {},
+    chromeJson: {
+      interactions: [
+        {
+          id: '弹出说明',
+          source: { nodeId: 'key' },
+          action: { type: 'openModal', target: old },
+        },
+      ],
+    },
+    nodes: [
+      {
+        clientKey: 'key',
+        parentClientKey: null,
+        moduleType: 'text',
+        configJson: { __label: '包内标题' },
+        bindings: [],
+        x: 0,
+        y: 0,
+        w: 100,
+        h: 50,
+        zIndex: 0,
+        isVisible: true,
+      },
+    ],
+  }
+  const detail = (id: string) => ({ ...template(id, '历史模板'), payload })
+  it('模板库入口必须先读取该模板并完成选择，取消不会提交', async () => {
+    const get = vi
+      .spyOn(templatesApi, 'getDashboardTemplate')
+      .mockResolvedValue(detail('t9'))
+    const wrapper = mountDialog(false)
+    await wrapper.setProps({
+      open: true,
+      presetTemplate: { id: 't9', name: '历史模板' },
+    })
+    await flushPromises()
+    expect(get).toHaveBeenCalledWith('t9', expect.any(AbortSignal))
+    await clickText(wrapper, '创建大屏')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    expect(wrapper.text()).toContain('弹出说明')
+    const selector = wrapper
+      .findAllComponents(DtSelect)
+      .find((item) => item.props('label') === '对应的包内节点')
+    selector?.vm.$emit('update:modelValue', 'key')
+    await wrapper.vm.$nextTick()
+    await clickText(wrapper, '创建大屏')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
+      templateId: 't9',
+      interactionNodeMap: { [old]: 'key' },
+    })
+    await wrapper.setProps({ open: false })
+    await wrapper.setProps({ open: true })
+    await flushPromises()
+    await clickText(wrapper, '取消')
+    expect(wrapper.emitted('submit')).toHaveLength(1)
+  })
+  it('切换模板丢弃迟到的旧详情，失败只提供重试，重试后才允许确认', async () => {
+    let release = () => {}
+    const get = vi
+      .spyOn(templatesApi, 'getDashboardTemplate')
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = () => resolve(detail('t9'))
+          }),
+      )
+      .mockRejectedValueOnce(new Error('详情暂不可用'))
+      .mockResolvedValueOnce({
+        ...detail('t1'),
+        payload: { ...payload, chromeJson: {} },
+      })
+    const wrapper = mountDialog(false)
+    await wrapper.setProps({
+      open: true,
+      presetTemplate: { id: 't9', name: '历史模板' },
+    })
+    await flushPromises()
+    await clickText(wrapper, '光伏总览')
+    await flushPromises()
+    release()
+    await flushPromises()
+    expect(get.mock.calls[0]?.[1]?.aborted).toBe(true)
+    expect(wrapper.text()).toContain('请求失败，请重试')
+    await clickText(wrapper, '创建大屏')
+    expect(wrapper.emitted('submit')).toBeUndefined()
+    await clickText(wrapper, '重试')
+    await flushPromises()
+    await clickText(wrapper, '创建大屏')
+    expect(wrapper.emitted('submit')?.[0]?.[0]).toMatchObject({
+      templateId: 't1',
+    })
+    expect(wrapper.emitted('submit')?.[0]?.[0]).not.toHaveProperty(
+      'interactionNodeMap',
+    )
+  })
+})
+
+it('关闭预选模板后再开空白大屏不会读取上次的模板', async () => {
+  const detail = vi.spyOn(templatesApi, 'getDashboardTemplate')
+  const wrapper = mountDialog(false)
+  await wrapper.setProps({
+    open: true,
+    presetTemplate: { id: 't9', name: '历史模板' },
+  })
+  await flushPromises()
+  await wrapper.setProps({ open: false, presetTemplate: null })
+  await wrapper.setProps({ open: true })
+  await flushPromises()
+  expect(wrapper.text()).toContain('按下面的设计尺寸开一张空屏')
+  expect(detail).toHaveBeenCalledTimes(1)
 })

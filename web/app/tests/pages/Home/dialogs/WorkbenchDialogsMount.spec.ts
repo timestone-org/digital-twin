@@ -46,6 +46,7 @@ vi.mock('@/api/projectThemes', () => ({
 
 vi.mock('@/api/dashboardTemplates', () => ({
   listDashboardTemplates: vi.fn(),
+  getDashboardTemplate: vi.fn(),
   createDashboardTemplate: vi.fn(),
   deleteDashboardTemplate: vi.fn(),
   instantiateDashboardTemplate: vi.fn(),

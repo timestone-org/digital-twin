@@ -39,6 +39,7 @@ export interface DashboardTemplateCreateInput {
 }
 
 export interface DashboardTemplateInstantiateInput {
+  interactionNodeMap?: Record<string, string> | undefined
   targetProjectId: string
   /** 缺省用模板名。 */
   name?: string | undefined
@@ -84,10 +85,11 @@ export async function createDashboardTemplate(
 
 export async function getDashboardTemplate(
   templateId: string,
+  signal?: AbortSignal,
 ): Promise<DashboardTemplateDetail> {
   const wire = await requestData<DashboardTemplateDetailWire>(
     `/dashboard-templates/${templateId}`,
-    onPlatform(),
+    onPlatform(signal === undefined ? {} : { signal }),
   )
   return toTemplateDetail(wire)
 }
@@ -114,6 +116,10 @@ export async function instantiateDashboardTemplate(
 ): Promise<DashboardImportResult> {
   const body: Record<string, unknown> = {
     target_project_id: input.targetProjectId,
+    ...(input.interactionNodeMap &&
+    Object.keys(input.interactionNodeMap).length > 0
+      ? { interaction_node_map: input.interactionNodeMap }
+      : {}),
   }
   if (input.name !== undefined) body.name = input.name
   const wire = await requestData<DashboardImportWire>(
