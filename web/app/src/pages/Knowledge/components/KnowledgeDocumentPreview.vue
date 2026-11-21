@@ -153,11 +153,16 @@ function save(): void {
   })
 }
 
+function cancelDownload(): void {
+  downloadRace.cancel()
+  isSaving.value = false
+}
+
 watch(
   () => [props.modelValue, props.document?.id ?? ''] as const,
   ([isOpen, documentId]) => {
     race.cancel()
-    downloadRace.cancel()
+    cancelDownload()
     if (!isOpen || documentId === '') {
       reset()
       return
@@ -216,6 +221,9 @@ onUnmounted(() => {
         label="下载原件"
         @click="save"
       />
+      <DtButton v-if="isSaving" variant="ghost" @click="cancelDownload"
+        >取消下载</DtButton
+      >
       <DtButton variant="ghost" @click="emit('update:modelValue', false)">
         关闭
       </DtButton>

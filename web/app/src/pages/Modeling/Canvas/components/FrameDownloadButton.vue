@@ -44,11 +44,13 @@ function save(): void {
   })
 }
 
-watch(identity, () => {
+function cancel(): void {
   race.cancel()
   isLoading.value = false
   failure.value = ''
-})
+}
+
+watch(identity, cancel)
 onScopeDispose(() => race.cancel())
 </script>
 
@@ -57,6 +59,9 @@ onScopeDispose(() => race.cancel())
     <DtButton variant="ghost" size="sm" :loading="isLoading" @click="save">
       {{ isLoading ? '下载中…' : '下载全量结果' }}
     </DtButton>
+    <DtButton v-if="isLoading" variant="ghost" size="sm" @click="cancel"
+      >取消下载</DtButton
+    >
     <DtNotice v-if="failure" intent="danger">{{ failure }}</DtNotice>
   </div>
 </template>

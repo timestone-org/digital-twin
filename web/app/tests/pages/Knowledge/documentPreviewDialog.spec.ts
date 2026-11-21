@@ -240,6 +240,38 @@ describe('原件预览弹窗', () => {
     expect(download?.attributes('aria-busy')).toBeUndefined()
   })
 
+  it('保留已显示的 PDF，并能单独取消正在取回的原件', async () => {
+    let finish: (value: Blob) => void = () => undefined
+    api.readDocumentRaw.mockImplementation(
+      () =>
+        new Promise<Blob>((done) => {
+          finish = done
+        }),
+    )
+    const wrapper = await render(
+      {
+        modelValue: true,
+        document: documentOf({ title: '冷却水系统图.docx' }),
+      },
+      true,
+    )
+    const click = async (label: string) => {
+      const button = wrapper
+        .findAll('button')
+        .find((item) => item.text().includes(label))
+      if (!button) throw new Error('缺少按钮 ' + label)
+      await button.trigger('click')
+    }
+    await click('下载原件')
+    await click('取消下载')
+    const signal: unknown = api.readDocumentRaw.mock.calls[0]?.[1]
+    expect(signal instanceof AbortSignal && signal.aborted).toBe(true)
+    finish(new Blob(['late']))
+    await flushPromises()
+    expect(wrapper.find('[data-test="preview-stage"]').exists()).toBe(true)
+    expect(clicked).toHaveLength(0)
+  })
+
   it('关着的时候一个字节都不取', async () => {
     await render({ modelValue: false, document: documentOf() })
 

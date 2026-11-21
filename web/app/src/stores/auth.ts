@@ -370,6 +370,8 @@ export const useAuthStore = defineStore('auth', () => {
 
   configureApiClient({
     getToken: () => accessToken.value,
+    getSessionIdentity: () =>
+      user.value ? `${sessionGeneration}:${user.value.id}` : null,
     onRefresh: refresh,
     onUnauthorized: (attemptedToken) => {
       if (embed.isEmbedded.value) {
