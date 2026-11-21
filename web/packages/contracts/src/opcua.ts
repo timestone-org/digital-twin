@@ -73,6 +73,7 @@ export type OpcuaDesiredState = (typeof OPCUA_DESIRED_STATES)[number]
 
 /** 服务器证书的展示面。私钥只在挂载卷上，永远不出现在契约里。 */
 export interface OpcuaCertificate {
+  is_download_supported?: boolean
   fingerprint: string | null
   subject: string | null
   expires_at: string | null

@@ -11,6 +11,7 @@ from __future__ import annotations
 import secrets
 import uuid
 from datetime import UTC, datetime
+from hashlib import sha256
 from typing import TYPE_CHECKING
 
 from cryptography import x509
@@ -27,11 +28,17 @@ from opcua_server.apps.instance.errors import (
     CredentialNotFound,
     CredentialUsernameTaken,
     InstanceNotFound,
+    ServerCertificateNotFound,
+    ServerCertificateUnavailable,
     TrustedCertificateDuplicate,
     TrustedCertificateInvalid,
     TrustedCertificateNotFound,
 )
-from opcua_server.apps.instance.models import Credential, TrustedCertificate
+from opcua_server.apps.instance.models import (
+    Credential,
+    Instance,
+    TrustedCertificate,
+)
 from opcua_server.apps.instance.runtime.supervisor import InstanceSupervisor
 from opcua_server.apps.instance.schemas import (
     CredentialCreatedOut,
@@ -103,6 +110,25 @@ class SecurityService:
             )
             for record in running.sessions()
         ]
+
+    async def download_server_certificate(
+        self, instance_id: uuid.UUID
+    ) -> bytes:
+        """返回与实例身份相符的 DER 公开证书。Args: instance_id。"""
+        async with self._database.session() as session:
+            row = await self._require_instance(session, instance_id)
+            fingerprint = row.certificate_fingerprint
+        if fingerprint is None:
+            raise ServerCertificateNotFound("实例尚未生成服务器证书")
+        try:
+            certificate = await self._supervisor.read_certificate_der(
+                instance_id
+            )
+        except (OSError, ValueError, x509.InvalidVersion) as error:
+            raise ServerCertificateUnavailable("服务器证书暂不可用") from error
+        if sha256(certificate).hexdigest() != fingerprint:
+            raise ServerCertificateUnavailable("服务器证书与实例登记暂不一致")
+        return certificate
 
     async def list_credentials(
         self, instance_id: uuid.UUID
@@ -210,9 +236,11 @@ class SecurityService:
     @staticmethod
     async def _require_instance(
         session: AsyncSession, instance_id: uuid.UUID
-    ) -> None:
-        if await instance_crud.get(session, instance_id) is None:
+    ) -> Instance:
+        instance = await instance_crud.get(session, instance_id)
+        if instance is None:
             raise InstanceNotFound("实例不存在")
+        return instance
 
 
 class _ParsedCertificate:

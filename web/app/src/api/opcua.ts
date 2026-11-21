@@ -26,7 +26,7 @@ import type {
 } from '@dt/contracts'
 
 import { OPCUA_BASE_URL } from '@/config/app'
-import { request, requestData } from './client'
+import { request, requestBytes, requestData } from './client'
 import { newIdempotencyKey } from './idempotency'
 
 export type OpcuaPageQuery = {
@@ -58,6 +58,17 @@ export async function listInstances(
 
 export async function getInstance(instanceId: string): Promise<OpcuaInstance> {
   return await opcua<OpcuaInstance>(`/instances/${instanceId}`)
+}
+
+/** 下载与实例证书指纹对应的公开 DER 证书。 */
+export function downloadServerCertificate(
+  instanceId: string,
+  signal: AbortSignal,
+): Promise<Blob> {
+  return requestBytes(`/instances/${instanceId}/server-certificates/current`, {
+    baseUrl: OPCUA_BASE_URL,
+    signal,
+  })
 }
 
 export async function getPortPool(): Promise<OpcuaPortPool> {

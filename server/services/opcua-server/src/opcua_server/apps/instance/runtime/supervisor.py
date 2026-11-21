@@ -62,6 +62,10 @@ class InstanceSupervisor:
         # 正在起、还没登记的实例也占上限的名额，否则并发起停能挤破上限
         self._starting: set[UUID] = set()
 
+    async def read_certificate_der(self, instance_id: UUID) -> bytes:
+        """读取已安装的公开证书。Args: instance_id。"""
+        return await self._pki.read_certificate_der(instance_id)
+
     @property
     def ports(self) -> PortAllocator:
         """端口分配表。API 层要靠它报「池里还剩几个」。"""

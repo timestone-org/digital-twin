@@ -1,7 +1,7 @@
 """上位机身份面：在线会话、实例凭据、信任证书。
 
 ⚠ 凭据与证书都归 `opcua:manage`——它们决定谁能连上这台服务器。
-会话只是查看，归 `opcua:view`。
+会话和服务器公钥证书归 `opcua:view`。
 """
 
 import uuid
@@ -50,6 +50,43 @@ async def list_sessions(
     Args: instance_id, container, _viewer。
     """
     return ok(await container.security.list_sessions(instance_id))
+
+
+_CERTIFICATE_TYPE = "application/pkix-cert"
+
+
+@router.get(
+    "/server-certificates/current",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {
+                _CERTIFICATE_TYPE: {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            }
+        },
+        404: {"description": "实例或服务器证书不存在"},
+        503: {"description": "当前服务器证书尚不可读取"},
+    },
+    summary="下载公开服务器证书",
+)
+async def read_server_certificate(
+    instance_id: uuid.UUID, container: ContainerDep, _viewer: ViewDep
+) -> Response:
+    """下载与登记指纹一致的 DER 证书。Args: instance_id, container, _viewer。"""
+    certificate = await container.security.download_server_certificate(
+        instance_id
+    )
+    filename = f"opcua-{instance_id}.der"
+    return Response(
+        content=certificate,
+        media_type=_CERTIFICATE_TYPE,
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
 
 
 @router.get(

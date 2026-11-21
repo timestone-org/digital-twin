@@ -58,6 +58,7 @@ class CertificateOut(OutputModel):
     fingerprint: str | None = None
     subject: str | None = None
     expires_at: Utc | None = None
+    is_download_supported: bool = True
 
 
 class InstanceOut(OutputModel):

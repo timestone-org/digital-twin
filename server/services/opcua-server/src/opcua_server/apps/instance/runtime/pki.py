@@ -47,6 +47,12 @@ class CertificateMaterial:
     not_valid_after: datetime
 
 
+def _public_der(path: Path) -> bytes:
+    """解析并序列化公开证书。Args: path。"""
+    certificate = x509.load_der_x509_certificate(path.read_bytes())
+    return certificate.public_bytes(serialization.Encoding.DER)
+
+
 class PkiStore:
     """按实例存取证书。目录来自 `OPCUA_PKI_DIR`，是部署期挂载卷。"""
 
@@ -93,6 +99,12 @@ class PkiStore:
             return existing
         return await asyncio.to_thread(
             self._generate, instance_id, application_uri, hostname
+        )
+
+    async def read_certificate_der(self, instance_id: UUID) -> bytes:
+        """读取当前公开证书的规范 DER。Args: instance_id。"""
+        return await asyncio.to_thread(
+            _public_der, self.certificate_path(instance_id)
         )
 
     async def material(self, instance_id: UUID) -> CertificateMaterial | None:

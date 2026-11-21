@@ -147,3 +147,17 @@ class NodeDeleteFailed(AppError):
 
     code = 52102
     http_status = 500
+
+
+class ServerCertificateNotFound(AppError):
+    """实例尚未签发服务器证书。"""
+
+    code = 42117
+    http_status = 404
+
+
+class ServerCertificateUnavailable(AppError):
+    """无法取得与当前实例登记一致的证书。"""
+
+    code = 52103
+    http_status = 503

@@ -669,6 +669,11 @@
             ],
             "title": "Fingerprint"
           },
+          "is_download_supported": {
+            "default": true,
+            "title": "Is Download Supported",
+            "type": "boolean"
+          },
           "subject": {
             "anyOf": [
               {
@@ -2735,6 +2740,57 @@
         "summary": "写节点值",
         "tags": [
           "node"
+        ]
+      }
+    },
+    "/api/v1/opcua/instances/{instance_id}/server-certificates/current": {
+      "get": {
+        "description": "下载与登记指纹一致的 DER 证书。Args: instance_id, container, _viewer。",
+        "operationId": "read_server_certificate_api_v1_opcua_instances__instance_id__server_certificates_current_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "instance_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Instance Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pkix-cert": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "实例或服务器证书不存在"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "description": "当前服务器证书尚不可读取"
+          }
+        },
+        "summary": "下载公开服务器证书",
+        "tags": [
+          "security"
         ]
       }
     },

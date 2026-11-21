@@ -93,6 +93,7 @@ const SHAPES: Record<string, Record<string, true>> = {
   } satisfies Keys<OpcuaInstanceUpdateInput>,
 
   CertificateOut: {
+    is_download_supported: true,
     fingerprint: true,
     subject: true,
     expires_at: true,
@@ -318,6 +319,10 @@ describe('前端封装覆盖了契约里的每一个操作', () => {
     }
     vi.spyOn(client, 'request').mockImplementation(record)
     vi.spyOn(client, 'requestData').mockImplementation(record)
+    vi.spyOn(client, 'requestBytes').mockImplementation((path, options) => {
+      seen.push(`${options?.method ?? 'GET'} ${path}`)
+      return Promise.resolve(new Blob())
+    })
 
     // 占位符直接用 openapi 的参数名，产出的路径即路径模板本身
     const instance = '{instance_id}'
@@ -330,6 +335,7 @@ describe('前端封装覆盖了契约里的每一个操作', () => {
     })
     await api.getPortPool()
     await api.getInstance(instance)
+    await api.downloadServerCertificate(instance, new AbortController().signal)
     await api.updateInstance(instance, {})
     await api.deleteInstance(instance)
     await api.actOnInstance(instance, 'start')
