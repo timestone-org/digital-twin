@@ -158,9 +158,11 @@ export async function deleteNode(
 export async function readNodeValue(
   instanceId: string,
   nodeId: string,
+  signal?: AbortSignal,
 ): Promise<OpcuaNodeValue> {
   return await opcua<OpcuaNodeValue>(
     `/instances/${instanceId}/nodes/${nodeId}/value`,
+    signal === undefined ? {} : { signal },
   )
 }
 
