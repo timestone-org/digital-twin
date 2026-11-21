@@ -18,9 +18,11 @@ const props = defineProps<{
   unit: string | null
 }>()
 
-const look = computed(() => formatSample(props.sample, props.unit))
+const look = computed(() =>
+  formatSample(props.sample, props.unit, undefined, props.stale),
+)
 const sampledAt = computed(() =>
-  props.sample?.state === 'ok'
+  props.sample !== undefined && props.sample.state !== 'error'
     ? `采样时间：${formatTimestampMs(props.sample.timestampMs)}`
     : undefined,
 )
@@ -30,7 +32,6 @@ const sampledAt = computed(() =>
   <div class="flex flex-col gap-0.5">
     <div class="flex items-center gap-1.5">
       <span class="font-mono">{{ look.text }}</span>
-      <DtTag v-if="stale && sample" intent="warning" size="sm">陈旧</DtTag>
       <DtTooltip v-if="look.reason" :content="look.reason">
         <DtTag :intent="look.intent" size="sm">{{ look.badge }}</DtTag>
       </DtTooltip>

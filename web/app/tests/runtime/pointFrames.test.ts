@@ -42,13 +42,15 @@ describe('一条条目', () => {
       value: 3,
       timestampMs: 1_700_000_000_000,
       quality: 'uncertain',
+      errorMessage: '数据源当前未在线',
     })
 
     expect(decoded?.sample).toEqual({
-      state: 'ok',
+      state: 'stale',
       value: 3,
       timestampMs: 1_700_000_000_000,
       quality: 'uncertain',
+      errorMessage: '数据源当前未在线',
     })
   })
 

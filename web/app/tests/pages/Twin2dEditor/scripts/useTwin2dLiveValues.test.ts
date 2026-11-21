@@ -190,6 +190,21 @@ describe('取不到的时候要说出口', () => {
     expect(live.tally()).toEqual({ bound: 2, received: 1 })
   })
 
+  it('陈旧快照会降低预览提示且仍算已收到读数', async () => {
+    const live = mountLive('d1')
+
+    emit('src-1:PT101', {
+      state: 'stale',
+      value: 3.5,
+      timestampMs: 1,
+      quality: 'good',
+    })
+    await live.wrapper.vm.$nextTick()
+
+    expect(live.state()).toBe('degraded')
+    expect(live.tally()).toEqual({ bound: 1, received: 1 })
+  })
+
   // ⚠ 快照缓存跨绑定改动是保留的（换点位表就清会让整屏的值闪一下），
   // 直接读缓存条目数会把已经不绑了的点位一起数进来，于是「已收到」比「已绑」还多
   it('改绑定之后，已经不绑了的点位不再算进已收到', async () => {

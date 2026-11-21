@@ -36,11 +36,16 @@ function slotOfSample(sample: PointSample): BindingSlot {
   if (sample.state === 'error') {
     return { state: 'error', message: sample.errorMessage }
   }
+  if (sample.quality === 'bad') {
+    return { state: 'error', message: '点位读数质量不可用' }
+  }
+  const isStale = sample.state === 'stale' || sample.quality === 'uncertain'
   return {
     state: 'ok',
     value: sample.value,
     // ⚠ 照实带上采样时刻：模块要显示「更新于」全靠它，而值有多旧不由这里判
     timestampMs: sample.timestampMs,
+    ...(isStale ? { isStale: true } : {}),
   }
 }
 

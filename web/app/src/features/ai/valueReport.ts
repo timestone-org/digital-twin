@@ -54,6 +54,7 @@ export interface ValueReportItem {
   /** 采样时刻，UTC RFC3339；没有读数时为 null。 */
   at: string | null
   status: ValueStatus
+  is_stale?: boolean
   /**
    * 这一档为什么是这一档，给模型看。
    * ⚠ 没有它的话，画布本来就不展开的序列类绑定（点位历史 / 台账）会被读成
@@ -105,7 +106,7 @@ const WAITING_NOTE = '已订阅，还没收到第一帧'
 /** 一条绑定此刻的结论，不含 `field_key` 与 `entity` 那两格。 */
 type Reading = Pick<
   ValueReportItem,
-  'value' | 'at' | 'status' | 'note' | 'series'
+  'value' | 'at' | 'status' | 'note' | 'series' | 'is_stale'
 >
 
 const UNBOUND: Reading = {
@@ -134,11 +135,30 @@ function pointReading(nodeKey: string, read: ReadPointSample): Reading {
       note: sample.errorMessage,
     }
   }
+  const at = atOf(sample.timestampMs)
+  if (sample.quality === 'bad') {
+    return {
+      value: null,
+      at,
+      status: 'unavailable',
+      note: ['点位读数质量不可用', sample.errorMessage]
+        .filter(Boolean)
+        .join('。'),
+    }
+  }
+  const isStale = sample.state === 'stale' || sample.quality === 'uncertain'
+  const note = [
+    sample.errorMessage,
+    sample.quality === 'uncertain' ? '点位读数质量存疑' : '',
+  ]
+    .filter(Boolean)
+    .join('。')
   return {
     value: sample.value,
-    at: atOf(sample.timestampMs),
+    at,
     status: 'has_value',
-    note: '',
+    ...(isStale ? { is_stale: true } : {}),
+    note: note || (isStale ? '点位读数为最后已知值' : ''),
   }
 }
 
