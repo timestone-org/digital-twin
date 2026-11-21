@@ -469,7 +469,15 @@ class NoAiComposeTests(unittest.TestCase):
         self,
     ) -> None:
         config = _render_compose(
-            COMPOSE, overrides={"OPCUA_PORT_POOL": "14840-14842"}
+            COMPOSE,
+            overrides={
+                "OPCUA_PORT_POOL": "14840-14842",
+                "OPCUA_ADVERTISED_HOST": "ua.example.test",
+            },
+        )
+        assert (
+            _read_environment(config, "opcua-server")["OPCUA_ADVERTISED_HOST"]
+            == "ua.example.test"
         )
         ports = _read_objects(
             _read_service(config, "opcua-server").get("ports")

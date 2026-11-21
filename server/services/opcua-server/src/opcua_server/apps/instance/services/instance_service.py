@@ -8,6 +8,7 @@
 """
 
 import asyncio
+import socket
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,7 +80,7 @@ class InstanceService:
         *,
         database: Database,
         supervisor: InstanceSupervisor,
-        advertised_host: str,
+        advertised_host: str | None,
         realtime: RealtimeClient,
     ) -> None:
         """按数据库与实例管理器装配。
@@ -88,7 +89,8 @@ class InstanceService:
         """
         self._database = database
         self._supervisor = supervisor
-        self._host = advertised_host
+        self._advertised_host = advertised_host
+        self._host = advertised_host or socket.gethostname()
         self._realtime = realtime
 
     async def list_instances(
@@ -338,6 +340,7 @@ class InstanceService:
         return InstanceSpec(
             instance_id=row.id,
             name=row.name,
+            advertised_host=self._advertised_host,
             port=row.port,
             namespace_uri=row.namespace_uri,
             endpoint_path=row.endpoint_path.removeprefix("/"),

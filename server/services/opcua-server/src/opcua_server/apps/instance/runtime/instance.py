@@ -26,6 +26,7 @@ from asyncua import Server, ua
 
 from lib.logging import get_logger
 from lib.utils.timeutils import Clock, to_utc, utcnow
+from opcua_server.apps.instance.endpoint import endpoint_url
 from opcua_server.apps.instance.errors import (
     InstanceAlreadyRunning,
     InstanceNotRunning,
@@ -112,10 +113,15 @@ class InstanceSpec:
     host: str = BIND_ALL
     nodes: tuple[NodeDefinition, ...] = field(default_factory=tuple)
     security: SecurityProfile = field(default_factory=SecurityProfile)
+    advertised_host: str | None = None
 
     def endpoint_url(self) -> str:
         """上位机要连的地址。"""
-        return f"opc.tcp://{self.host}:{self.port}/{self.endpoint_path}"
+        return endpoint_url(
+            self.advertised_host or self.host,
+            self.port,
+            f"/{self.endpoint_path}",
+        )
 
     def application_uri(self) -> str:
         """本实例的 ApplicationUri，证书 SAN 里要与它一致。"""
@@ -289,6 +295,10 @@ class RunningInstance:
         configure = cast(Any, server)
         await server.set_application_uri(self.spec.application_uri())
         configure.set_endpoint(self.spec.endpoint_url())
+        if self.spec.advertised_host is not None:
+            configure.socket_address = (self.spec.host, self.spec.port)
+            configure.set_match_discovery_endpoint_url(False)
+            configure.set_match_discovery_client_ip(False)
         configure.set_server_name(self.spec.name)
         await self._apply_certificate(server)
         configure.set_security_policy(_security_policies(self.spec.security))

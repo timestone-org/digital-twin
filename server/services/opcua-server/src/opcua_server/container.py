@@ -1,6 +1,5 @@
 """组合根：把配置拧成各个协作对象。装配只在这里发生，模块顶层不做副作用。"""
 
-import socket
 from dataclasses import dataclass
 
 from lib.auth import PasswordHasher
@@ -79,20 +78,10 @@ def _build_supervisor(
         pki=PkiStore(
             settings.pki_dir,
             valid_days=settings.cert_valid_days,
+            advertised_host=settings.advertised_host,
         ),
         max_instances=settings.max_instances,
     )
-
-
-def _advertised_host() -> str:
-    """展示给用户的 endpoint 主机名。
-
-    ⚠ 实例绑的是 `0.0.0.0`，那个地址拼进 endpoint 给不了人任何信息。这里取
-    主机名——它正是 asyncua 写进证书 SAN 的那个名字，两处一致，上位机据它
-    校验也对得上。真实的对外地址取决于端口映射与网络拓扑，属于部署关切；
-    需要覆盖时应当加一个 `OPCUA_ADVERTISED_HOST` 配置项，而不是在这里猜。
-    """
-    return socket.gethostname()
 
 
 def build_container(settings: Settings) -> Container:
@@ -124,7 +113,7 @@ def build_container(settings: Settings) -> Container:
         instances=InstanceService(
             database=database,
             supervisor=supervisor,
-            advertised_host=_advertised_host(),
+            advertised_host=settings.advertised_host,
             realtime=realtime,
         ),
         nodes=NodeService(database=database, supervisor=supervisor),

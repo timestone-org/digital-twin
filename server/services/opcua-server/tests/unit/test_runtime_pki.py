@@ -3,6 +3,7 @@
 import os
 import stat
 from datetime import UTC, datetime
+from ipaddress import ip_address
 from pathlib import Path
 from uuid import uuid4
 
@@ -205,3 +206,29 @@ async def test_a_stale_temporary_file_does_not_block_generation(
     )
     assert material.private_key_path.is_file()
     assert not stale.with_name(f"{stale.name}.tmp").exists()
+
+
+@pytest.mark.parametrize("host", ["192.0.2.16", "2001:db8::16"])
+async def test_new_certificates_include_the_public_ip_without_rotating_old_pins(
+    tmp_path: Path, host: str
+) -> None:
+    store = PkiStore(tmp_path, valid_days=30, advertised_host=host)
+    instance_id = uuid4()
+    first = await store.ensure(
+        instance_id, application_uri=APPLICATION_URI, hostname="container"
+    )
+    certificate = x509.load_der_x509_certificate(
+        first.certificate_path.read_bytes()
+    )
+    san = certificate.extensions.get_extension_for_class(
+        x509.SubjectAlternativeName
+    ).value
+    assert ip_address(host) in san.get_values_for_type(x509.IPAddress)
+    assert "container" in san.get_values_for_type(x509.DNSName)
+    other = PkiStore(
+        tmp_path, valid_days=30, advertised_host="new.example.test"
+    )
+    kept = await other.ensure(
+        instance_id, application_uri=APPLICATION_URI, hostname="container"
+    )
+    assert first.fingerprint_sha256 == kept.fingerprint_sha256

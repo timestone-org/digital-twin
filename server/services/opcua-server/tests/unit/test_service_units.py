@@ -11,6 +11,7 @@ from pydantic import BaseModel, SecretStr, ValidationError
 from lib.errors import Conflict
 from lib.idempotency import IdempotencyStore
 from lib.testing import InMemoryCache
+from opcua_server.apps.instance.endpoint import endpoint_url
 from opcua_server.apps.instance.errors import NodeNotFound
 from opcua_server.apps.instance.services.node_service import (
     NodeRuntimeSync,
@@ -241,3 +242,49 @@ async def test_deactivate_tolerates_a_node_absent_from_the_runtime(
     with caplog.at_level(logging.WARNING):
         await _sync(_Supervisor()).deactivate(uuid.uuid4(), "ghost")
     assert "opcua_node_absent_in_runtime" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "opc.tcp://plant:4840",
+        "label:4840",
+        "*",
+        "a..b",
+        "host/path",
+        "300.10.20.30",
+        "0.0.0.0",  # noqa: S104  # 仅为待拒绝的配置值。
+        "::",
+        "[plant]",
+        "admin@host",
+        "fe80::1%eth0",
+    ],
+)
+def test_advertised_host_rejects_unusable_authorities(raw: str) -> None:
+    with pytest.raises(ValueError, match="advertised_host"):
+        _settings(advertised_host=raw)
+
+
+@pytest.mark.parametrize(
+    ("raw", "canonical"),
+    [
+        ("", None),
+        ("Station.Example", "station.example"),
+        ("192.0.2.40", "192.0.2.40"),
+        ("[2001:db8::20]", "2001:db8::20"),
+    ],
+)
+def test_advertised_host_is_normalized(raw: str, canonical: str | None) -> None:
+    assert _settings(advertised_host=raw).advertised_host == canonical
+
+
+def test_configured_ipv6_host_produces_a_bracketed_native_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPCUA_ADVERTISED_HOST", "[2001:db8::45]")
+    configured = _settings().advertised_host
+    assert configured == "2001:db8::45"
+    assert (
+        endpoint_url(configured, 4840, "/station")
+        == "opc.tcp://[2001:db8::45]:4840/station"
+    )
