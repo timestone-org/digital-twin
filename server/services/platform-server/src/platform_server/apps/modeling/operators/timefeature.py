@@ -55,6 +55,11 @@ _SATURDAY = 5
 _FITTED_TZ = "tz_offset_minutes"
 
 
+def has_legacy_utc_offset(params: dict[str, object]) -> bool:
+    """判断历史步骤是否缺少冻结的业务时区偏移。Args: params。"""
+    return params.get(_FITTED_TZ) is None
+
+
 class TimeFeatureConfig(OperatorConfig):
     """时间特征的参数。"""
 

@@ -333,6 +333,29 @@ describe('模型库', () => {
     expect(modeling[other]).not.toHaveBeenCalled()
   })
 
+  it.each([
+    [true, true],
+    [false, false],
+    [undefined, false],
+  ])('按版本冻结信息显示历史 UTC 提示（%s）', async (flag, visible) => {
+    stub([version()], [])
+    signIn([PERMISSION_CODES.modelingView])
+    vi.spyOn(modeling, 'getModelingVersion').mockResolvedValue({
+      ...version(),
+      metrics: {},
+      fingerprint: {},
+      signature: {},
+      description: null,
+      ...(flag === undefined ? {} : { has_legacy_utc_time_features: flag }),
+    })
+    const wrapper = open()
+    await flushPromises()
+    await wrapper.get('button[aria-label="详情"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text().includes('按 UTC 计算时间特征')).toBe(visible)
+    expect(wrapper.text().includes('重新训练并发布新版本')).toBe(visible)
+  })
+
   it('不可用的版本要说出原因，不是只标一个「不可用」', async () => {
     stub(
       [

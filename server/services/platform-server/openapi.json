@@ -15178,6 +15178,11 @@
             "title": "Fingerprint",
             "type": "object"
           },
+          "has_legacy_utc_time_features": {
+            "default": false,
+            "title": "Has Legacy Utc Time Features",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",

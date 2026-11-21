@@ -20,6 +20,10 @@ from platform_server.apps.modeling.operators import (
     registry,
 )
 from platform_server.apps.modeling.operators.frame import numbers_of
+from platform_server.apps.modeling.operators.timefeature import (
+    TimeFeature,
+    has_legacy_utc_offset,
+)
 from platform_server.apps.modeling.services.input_defaults import (
     leading_input_defaults,
 )
@@ -257,6 +261,16 @@ def _entry_keys_of(serving: dict[str, Any]) -> tuple[str, ...]:
             for item in as_list(serving.get(_FIELD_ENTRY))
         )
     raise OperatorError("这个模型版本的可服务表示读不懂")
+
+
+def has_legacy_utc_time_features(serving: dict[str, object]) -> bool:
+    """识别运行时会采用 UTC 缺省值的时间特征步骤。Args: serving。"""
+    steps = (as_dict(raw) for raw in as_list(serving.get(_FIELD_STEPS)))
+    return any(
+        has_legacy_utc_offset(as_dict(step.get(_FIELD_FITTED)))
+        for step in steps
+        if step.get(_FIELD_OPERATOR) == TimeFeature.CODE
+    )
 
 
 def _step_of(raw: Any) -> _Step:

@@ -330,6 +330,7 @@ export interface ModelingSignature {
 export interface ModelingVersion extends ModelingVersionSummary {
   /** ⚠ 不叫 `schema`：那个名字在后端会与 `BaseModel.schema` 撞并当场告警。 */
   signature: ModelingSignature | Record<string, never>
+  has_legacy_utc_time_features?: boolean
   metrics: Record<string, number | null>
   fingerprint: Record<string, unknown>
   description: string | null
