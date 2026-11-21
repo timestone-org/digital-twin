@@ -21,12 +21,11 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ai_assistant.app import build_app
-from ai_assistant.container import IDEMPOTENCY_NAMESPACE, Container
+from ai_assistant.container import Container
 from ai_assistant.deps import get_session
 from ai_assistant.settings import Settings
 from lib.config import load_settings
 from lib.db import run_after_commit_hooks
-from lib.idempotency import IdempotencyStore
 from lib.testing import InMemoryCache
 
 HeaderFactory = Callable[..., dict[str, str]]
@@ -87,9 +86,7 @@ def _wire(
     application.dependency_overrides[get_session] = _session_override(maker)
     application.state.container = replace(
         built,
-        idempotency=IdempotencyStore(
-            cache=InMemoryCache(), namespace=IDEMPOTENCY_NAMESPACE
-        ),
+        idempotency=replace(built.idempotency, cache=InMemoryCache()),
     )
     return maker
 

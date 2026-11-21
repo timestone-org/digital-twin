@@ -227,8 +227,8 @@ def build_container(settings: Settings) -> Container:
         ),
         database=_build_database(settings),
         cache=cache,
-        idempotency=IdempotencyStore(
-            cache=cache, namespace=IDEMPOTENCY_NAMESPACE
+        idempotency=IdempotencyStore.for_database_writes(
+            cache, IDEMPOTENCY_NAMESPACE
         ),
         # ⚠ 目录一定在（`_build_catalog` 不会给 `None`），故模型面总是装得出来
         model=_build_model(settings, registry, is_catalog_on=True),
