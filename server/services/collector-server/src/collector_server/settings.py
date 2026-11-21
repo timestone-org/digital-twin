@@ -11,7 +11,7 @@ from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from collectwire.http import http_origin
-from lib.config import AppSettings, PostgresSettings, RedisSettings
+from lib.config import HttpAppSettings, PostgresSettings, RedisSettings
 
 SERVICE_NAME = "collector-server"
 # 只挂探针。业务面在 platform（配置面）与 Redis（快照、命令总线）
@@ -40,7 +40,7 @@ class MigrationSettings(PostgresSettings):
     postgres_schema: str = DB_SCHEMA
 
 
-class Settings(AppSettings, PostgresSettings, RedisSettings):
+class Settings(HttpAppSettings, PostgresSettings, RedisSettings):
     """进程启动时构造一次并冻结。"""
 
     model_config = SettingsConfigDict(
