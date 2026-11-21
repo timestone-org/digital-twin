@@ -6,6 +6,7 @@
 
 import hmac
 from collections.abc import AsyncIterator, Awaitable, Callable
+from ipaddress import ip_address
 from typing import Annotated
 from uuid import UUID
 
@@ -100,12 +101,14 @@ async def get_identity(
 async def get_operation(
     request: Request,
     identity: Annotated[Identity, Depends(get_identity)],
+    container: Annotated[Container, Depends(get_container)],
 ) -> Operation:
     """一次写操作的调用者与来源 IP。
 
-    Args: request, identity。
+    Args: request, identity, container。
     """
-    return Operation(operator=identity, source_ip=_client_ip(request))
+    edge_key = container.settings.edge_service_key.get_secret_value()
+    return Operation(operator=identity, source_ip=_client_ip(request, edge_key))
 
 
 def require(
@@ -149,7 +152,19 @@ async def require_service_key(
         raise ServiceKeyInvalid("服务级密钥不符")
 
 
-def _client_ip(request: Request) -> str | None:
+def _client_ip(request: Request, edge_key: str) -> str | None:
+    """验证边缘来源地址，直连使用连接地址。Args: request, edge_key。"""
+    address = request.headers.get("X-Edge-Source-IP")
+    supplied_key = request.headers.get("X-Edge-Audit-Key")
+    if (
+        address
+        and supplied_key
+        and hmac.compare_digest(edge_key.encode(), supplied_key.encode())
+    ):
+        try:
+            return str(ip_address(address))
+        except ValueError:
+            pass
     return request.client.host if request.client else None
 
 
