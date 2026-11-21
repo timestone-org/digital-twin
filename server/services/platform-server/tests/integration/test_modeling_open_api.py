@@ -10,8 +10,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from unit.database_fakes import MakerSessions
 
-from integration.dataset_helpers import TABLES
+from integration.dataset_helpers import TABLES, create_column
 from integration.modeling_helpers import (
+    ENERGY,
     HTTP_CREATED,
     HTTP_NO_CONTENT,
     HTTP_OK,
@@ -20,10 +21,13 @@ from integration.modeling_helpers import (
     code_of,
     create_pipeline,
     data_of,
+    edge,
     linear_graph,
+    node,
 )
 from integration.test_modeling_api import _run_pipeline, _seed_ledger
 from integration.test_modeling_formula_seam import _trained_version
+from platform_server.apps.dataset.models import DatasetRecord
 from platform_server.apps.modeling.models import (
     ModelingCallLog,
     ModelingModelVersion,
@@ -103,6 +107,91 @@ async def test_an_account_gets_the_hand_computed_answer(
     answer = data_of(response)
     assert answer["predictions"][0] == pytest.approx(EXPECTED, rel=1e-6)
     assert answer["model"]["code"] == deployment["code"]
+
+
+CATEGORY = "duty_mode"
+CATEGORY_EFFECT = 90.0
+TEXT_MODEL = "open-text"
+
+
+async def _train_text_model(
+    client: httpx.AsyncClient, session: AsyncSession, sessions: MakerSessions
+) -> str:
+    table_id = await _seed_ledger(client, session, TEXT_MODEL)
+    await create_column(
+        client, table_id, key=CATEGORY, name="工况", data_type="string"
+    )
+    records = await session.scalars(
+        select(DatasetRecord)
+        .where(DatasetRecord.table_id == uuid.UUID(table_id))
+        .order_by(DatasetRecord.ts)
+    )
+    for index, record in enumerate(records):
+        target = record.values_json[ENERGY]
+        assert isinstance(target, (int, float))
+        record.values_json = {
+            **record.values_json,
+            CATEGORY: "生产" if index % 2 else "待机",
+            ENERGY: target + (CATEGORY_EFFECT if index % 2 else 0),
+        }
+    await session.commit()
+
+    graph = linear_graph(TEXT_MODEL)
+    graph["nodes"][0]["config"]["columns"].append(CATEGORY)
+    graph["nodes"].insert(1, node("category", "one_hot", columns=[CATEGORY]))
+    graph["edges"][:1] = [
+        edge("source-category", "s", "frame", "category", "frame"),
+        edge("category-fill", "category", "frame", "f", "frame"),
+    ]
+    pipeline = await create_pipeline(client, TEXT_MODEL, graph)
+    run = await _run_pipeline(client, sessions, pipeline["id"])
+    assert run["status"] == "succeeded"
+    return str(run["published_version_id"])
+
+
+async def test_prediction_uses_the_frozen_text_categories(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+) -> None:
+    version = await _train_text_model(app_client, db_session, worker_sessions)
+    created = await app_client.post(
+        DEPLOYMENTS,
+        json={
+            "code": TEXT_MODEL,
+            "name": "工况模型",
+            "model_version_id": version,
+        },
+    )
+    assert created.status_code == HTTP_CREATED, created.text
+    signature = await app_client.get(f"{OPEN}/{TEXT_MODEL}")
+    assert signature.status_code == HTTP_OK
+    inputs = data_of(signature)["inputs"]
+    assert {item["key"]: item["dtype"] for item in inputs}[CATEGORY] == "string"
+
+    url = f"{OPEN}/{TEXT_MODEL}:predict"
+    row = {TEMPERATURE: SAMPLE_TEMPERATURE, LOAD: SAMPLE_LOAD}
+    response = await app_client.post(
+        url,
+        json={
+            "rows": [
+                {**row, CATEGORY: category}
+                for category in ("生产", "待机", "新工况", 0, " 生产 ", None)
+            ]
+        },
+    )
+    assert response.status_code == HTTP_OK, response.text
+    scores = data_of(response)["predictions"]
+    assert scores[:2] == pytest.approx([EXPECTED + CATEGORY_EFFECT, EXPECTED])
+    assert scores[2] == pytest.approx(scores[3])
+    assert scores[2] == pytest.approx(scores[4])
+    assert scores[2] != pytest.approx(scores[0])
+    assert scores[5] is None
+
+    for invalid in (row, {**row, CATEGORY: "生产", LOAD: "430"}):
+        refused = await app_client.post(url, json={"rows": [invalid]})
+        assert refused.status_code == HTTP_BAD_REQUEST
+        assert code_of(refused) == PREDICT_REQUEST_INVALID
 
 
 async def test_the_signature_comes_back_without_training_stats(

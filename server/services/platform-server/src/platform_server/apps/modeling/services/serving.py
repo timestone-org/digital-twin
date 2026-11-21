@@ -20,7 +20,11 @@ from platform_server.apps.modeling.operators import (
     registry,
 )
 from platform_server.apps.modeling.operators.anomaly import TASK_ANOMALY
-from platform_server.apps.modeling.operators.frame import numbers_of
+from platform_server.apps.modeling.operators.frame import (
+    DTYPE_NUMBER,
+    DTYPE_STRING,
+    numbers_of,
+)
 from platform_server.apps.modeling.operators.timefeature import (
     TimeFeature,
     has_legacy_utc_offset,
@@ -54,6 +58,9 @@ _FIELD_FITTED = "fitted"
 _FIELD_EXPECTED = "expected_input_columns"
 # 建模那一步产出的那一列的名字，只在编译出来的链路内部用
 PREDICTION_KEY = "__prediction__"
+
+type PredictionValue = float | str | None
+type PredictionRow = tuple[Sequence[PredictionValue], datetime | None]
 
 
 @runtime_checkable
@@ -117,9 +124,7 @@ class CompiledModel:
         """
         return self.needs_estimator
 
-    def predict_many(
-        self, rows: list[tuple[list[float | None], datetime | None]]
-    ) -> list[float | None]:
+    def predict_many(self, rows: Sequence[PredictionRow]) -> list[float | None]:
         """整批按冻结缺省规则计算，保留输入顺序；Args: rows。"""
         answers: list[float | None] = [None] * len(rows)
         resolved = [(self._arguments(args, at), at) for args, at in rows]
@@ -163,20 +168,22 @@ class CompiledModel:
         return _calculate(self._steps[0], frame)
 
     def _arguments(
-        self, args: list[float | None], at: datetime | None
-    ) -> list[float] | None:
+        self, args: Sequence[PredictionValue], at: datetime | None
+    ) -> list[float | str] | None:
         """按入口顺序应用冻结缺省值，未覆盖缺值不计算；Args: args, at。"""
         self._refuse_bad_shape(args, at)
-        values: list[float] = []
+        values: list[float | str] = []
         for key, value in zip(self._features, args, strict=True):
             resolved = self._input_defaults.get(key) if value is None else value
             if resolved is None:
                 return None
-            values.append(float(resolved))
+            values.append(
+                resolved if isinstance(resolved, str) else float(resolved)
+            )
         return values
 
     def _refuse_bad_shape(
-        self, args: list[float | None], at: datetime | None
+        self, args: Sequence[PredictionValue], at: datetime | None
     ) -> None:
         """实参个数与时刻这两条硬要求。
 
@@ -354,7 +361,7 @@ def _calculate(step: _Step, frame: Frame) -> list[dict[str, object]]:
 
 
 def _one_row(
-    keys: tuple[str, ...], values: list[float], at: datetime | None = None
+    keys: tuple[str, ...], values: list[float | str], at: datetime | None = None
 ) -> Frame:
     """推理时的那一行。带上时刻，时间特征才造得出列。
 
@@ -365,7 +372,7 @@ def _one_row(
 
 def _rows(
     keys: tuple[str, ...],
-    values: Sequence[Sequence[float | None]],
+    values: Sequence[Sequence[PredictionValue]],
     index: tuple[int, ...] | None = None,
 ) -> Frame:
     """推理时的那几行。
@@ -374,9 +381,20 @@ def _rows(
     只改了一半，而两条路算出来的数会从某一天起对不上。
     Args: keys, values, index。
     """
+    text_positions = {
+        index
+        for row in values
+        for index, value in enumerate(row)
+        if isinstance(value, str)
+    }
     return Frame(
         columns=tuple(
-            FrameColumn(key=key, name=key, dtype="number") for key in keys
+            FrameColumn(
+                key=key,
+                name=key,
+                dtype=DTYPE_STRING if index in text_positions else DTYPE_NUMBER,
+            )
+            for index, key in enumerate(keys)
         ),
         rows=tuple(tuple(row) for row in values),
         index=index,

@@ -2,7 +2,6 @@
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
 from functools import lru_cache
 
 from lib.errors import AppError
@@ -16,7 +15,10 @@ from platform_server.apps.modeling.services.artifact_store import (
     ArtifactRejected,
     load,
 )
-from platform_server.apps.modeling.services.serving import compile_model
+from platform_server.apps.modeling.services.serving import (
+    PredictionRow,
+    compile_model,
+)
 
 type Prediction = list[float | None]
 
@@ -42,7 +44,7 @@ class ScoreRows:
     """无需数据库连接或网络凭据的预测批次。"""
 
     serving: dict[str, object]
-    rows: list[tuple[list[float | None], datetime | None]]
+    rows: list[PredictionRow]
 
 
 @dataclass(frozen=True)

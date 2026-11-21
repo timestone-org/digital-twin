@@ -37,6 +37,7 @@ from platform_server.apps.modeling.models import (
 from platform_server.apps.modeling.operators import (
     CHANNEL_BINARY,
 )
+from platform_server.apps.modeling.operators.frame import DTYPE_STRING
 from platform_server.apps.modeling.protocols import ModelTask
 from platform_server.apps.modeling.schemas import (
     OpenModelInfoOut,
@@ -57,6 +58,10 @@ from platform_server.apps.modeling.services.inference_task import (
     ScoreRows,
 )
 from platform_server.apps.modeling.services.jsonshape import as_dict, as_list
+from platform_server.apps.modeling.services.serving import (
+    PredictionRow,
+    PredictionValue,
+)
 from platform_server.apps.modeling.services.serving_contract import invoke_url
 from platform_server.apps.modeling.services.sessions import Sessions
 
@@ -222,8 +227,10 @@ async def predict(
             f"这次给了 {len(payload.rows)} 行"
         )
     entry = _entry_of(resolved.version)
+    is_text_allowed = resolved.version.task in ("regression", "classification")
     rows = [
-        _as_args(row, entry, index) for index, row in enumerate(payload.rows)
+        _as_args(row, entry, index, is_text_allowed=is_text_allowed)
+        for index, row in enumerate(payload.rows)
     ]
     try:
         identity = await _artifact_identity(deps, resolved.version)
@@ -290,20 +297,32 @@ def _entry_of(version: ModelVersion) -> list[dict[str, object]]:
 
 
 def _as_args(
-    row: OpenModelRow, entry: list[dict[str, object]], index: int
-) -> tuple[list[float | None], datetime | None]:
+    row: OpenModelRow,
+    entry: list[dict[str, object]],
+    index: int,
+    *,
+    is_text_allowed: bool,
+) -> PredictionRow:
     """把一行请求摆成「按序的实参 + 这一行的时刻」。
 
     ⚠ 实参**按入口契约的顺序**取，不按请求里键的顺序：JSON 对象无序，
     按请求顺序取就是把甲的值喂给乙，而结果看着完全正常（D5）。
     Args: row, entry, index。
     """
-    args: list[float | None] = []
+    args: list[PredictionValue] = []
     for column in entry:
         key = str(column.get("key") or "")
         if key not in row and column.get("is_required"):
             raise PredictRequestInvalid(f"第 {index + 1} 行缺少「{key}」")
-        args.append(_as_number(row.get(key), key, index))
+        value = row.get(key)
+        if (
+            is_text_allowed
+            and column.get("dtype") == DTYPE_STRING
+            and isinstance(value, str)
+        ):
+            args.append(value)
+        else:
+            args.append(_as_number(value, key, index))
     return args, _row_moment(row, index)
 
 
