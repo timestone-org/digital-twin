@@ -39,12 +39,10 @@ def import_node_references(
     chrome: dict[str, Any],
     node_ids: Mapping[str, uuid.UUID],
     choices: Mapping[str, str] | None,
-    *,
-    should_keep_unmapped: bool,
 ) -> dict[str, Any]:
     """按本次导入分配的 ID 重建引用，补选仅对包内节点有效。
 
-    Args: chrome, node_ids, choices, should_keep_unmapped。
+    Args: chrome, node_ids, choices。
     """
 
     selected: set[str] = set()
@@ -56,8 +54,6 @@ def import_node_references(
             if choices is not None and value in choices:
                 selected.add(value)
                 return _local_id(choices[value], node_ids)
-            if should_keep_unmapped and choices is None:
-                return value
             raise _ReferenceError(
                 "interaction_node_mapping_required",
                 f"请为旧联动引用「{value}」选择包内节点",

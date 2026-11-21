@@ -29,9 +29,7 @@ def test_tagged_keys_round_trip_without_changing_extensions_or_the_source() -> (
     rule = portable["interactions"][0]
     assert rule["source"]["nodeId"] == {"client_key": str(node)}
     assert rule["action"] == original["interactions"][0]["action"]
-    bound = import_node_references(
-        portable, {str(node): target}, None, should_keep_unmapped=True
-    )
+    bound = import_node_references(portable, {str(node): target}, None)
     assert bound["interactions"][0]["source"]["nodeId"] == str(target)
     assert original["interactions"][0]["source"]["nodeId"] == str(node)
     assert bound["chrome"] == original["chrome"]
@@ -51,15 +49,11 @@ def test_uuid_shaped_legacy_keys_require_a_choice_even_when_a_key_matches(
     doc = {"interactions": [{"source": {"nodeId": value}}]}
     target = uuid.uuid4()
     with pytest.raises(ExportPayloadInvalid) as error:
-        import_node_references(
-            doc, {value: target}, {}, should_keep_unmapped=True
-        )
+        import_node_references(doc, {value: target}, {})
     assert [d.code for d in error.value.details] == [
         "interaction_node_mapping_required"
     ]
-    chosen = import_node_references(
-        doc, {"panel": target}, {value: "panel"}, should_keep_unmapped=True
-    )
+    chosen = import_node_references(doc, {"panel": target}, {value: "panel"})
     assert chosen["interactions"][0]["source"]["nodeId"] == str(target)
 
 
@@ -68,16 +62,13 @@ def test_unique_plain_key_and_unknown_choice() -> None:
     chrome = {
         "interactions": [{"action": {"type": "openModal", "target": "panel"}}]
     }
-    bound = import_node_references(
-        chrome, {"panel": target}, {}, should_keep_unmapped=True
-    )
+    bound = import_node_references(chrome, {"panel": target}, {})
     assert bound["interactions"][0]["action"]["target"] == str(target)
     with pytest.raises(ExportPayloadInvalid) as error:
         import_node_references(
             chrome,
             {"panel": target},
             {"panel": "other"},
-            should_keep_unmapped=True,
         )
     assert error.value.details[0].code == "interaction_node_choice_unused"
 
@@ -99,9 +90,7 @@ def test_all_bad_references_report_their_field_paths() -> None:
         ]
     }
     with pytest.raises(ExportPayloadInvalid) as error:
-        import_node_references(
-            chrome, {"panel": uuid.uuid4()}, {}, should_keep_unmapped=True
-        )
+        import_node_references(chrome, {"panel": uuid.uuid4()}, {})
     assert [(d.field, d.code) for d in error.value.details] == [
         (
             "chrome_json.interactions[0].source.nodeId",
@@ -136,7 +125,7 @@ def test_choices_only_apply_to_ambiguous_references(
     chrome = {"interactions": [{"source": {"nodeId": "panel"}}]}
     keys = {"panel": uuid.uuid4(), "other": uuid.uuid4()}
     with pytest.raises(ExportPayloadInvalid) as error:
-        import_node_references(chrome, keys, extra, should_keep_unmapped=True)
+        import_node_references(chrome, keys, extra)
     assert error.value.details[0].field.startswith("interaction_node_map")
 
 
@@ -157,7 +146,7 @@ def test_malformed_local_action_fields_fail_before_import(
 ) -> None:
     chrome = {"interactions": [{"action": action}]}
     with pytest.raises(ExportPayloadInvalid) as error:
-        import_node_references(chrome, {}, {}, should_keep_unmapped=True)
+        import_node_references(chrome, {}, {})
     assert (
         error.value.details[0].field
         == "chrome_json.interactions[0].action." + path

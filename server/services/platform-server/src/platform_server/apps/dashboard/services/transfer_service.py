@@ -102,21 +102,16 @@ async def export_dashboard(
     *,
     dashboard_id: uuid.UUID,
     options: ExportOptions | None = None,
-    should_export_node_keys: bool = False,
 ) -> DashboardExportOut:
     """导出大屏文档。
 
-    Args: session, dashboard_id, options, should_export_node_keys。
+    Args: session, dashboard_id, options。
     """
 
     dashboard = await require_dashboard(session, dashboard_id)
     state = await load_state(session, dashboard.id)
     keys = derived_client_keys(state.nodes)
-    chrome = (
-        export_node_references(dashboard.chrome_json, keys)
-        if should_export_node_keys
-        else dashboard.chrome_json
-    )
+    chrome = export_node_references(dashboard.chrome_json, keys)
     document = DashboardExportOut(
         schema_version=dashboard.schema_version,
         name=dashboard.name,
@@ -172,7 +167,6 @@ async def import_dashboard(
         document.chrome_json,
         node_ids,
         payload.interaction_node_map,
-        should_keep_unmapped=True,
     )
     document = document.model_copy(update={"chrome_json": chrome})
     unresolved = await _unresolved_bindings(planned, context=context)
@@ -208,9 +202,7 @@ async def duplicate_dashboard(
     Args: session, dashboard_id, payload, context。
     """
     source = await require_dashboard(session, dashboard_id)
-    document = await export_dashboard(
-        session, dashboard_id=source.id, should_export_node_keys=True
-    )
+    document = await export_dashboard(session, dashboard_id=source.id)
     copied = await import_dashboard(
         session,
         DashboardImportIn(

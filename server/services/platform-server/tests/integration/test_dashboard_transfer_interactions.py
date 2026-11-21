@@ -201,3 +201,63 @@ async def test_a_stored_legacy_template_uses_confirmed_node_choices(
     )
     assert response.status_code == 201
     check_copy(data_of(response), src)
+
+
+async def test_public_export_and_new_template_store_portable_node_keys(
+    app_client: httpx.AsyncClient,
+) -> None:
+    src = await source_with_rules(app_client)
+    expected = chrome(
+        {"client_key": "control"}, {"client_key": "panel"}, src.external
+    )
+    exported = await export_of(app_client, src.screen)
+    assert exported["chrome_json"] == expected
+    saved = await app_client.post(
+        TEMPLATES,
+        json={
+            "source_dashboard_id": src.screen,
+            "name": "按包内节点联动的模板",
+        },
+    )
+    assert saved.status_code == 201
+    template = data_of(saved)
+    detail = data_of(await app_client.get(f"{TEMPLATES}/{template['id']}"))
+    assert detail["payload"]["chrome_json"] == expected
+    made = await app_client.post(
+        f"{TEMPLATES}/{template['id']}:instantiate",
+        json={"target_project_id": src.project},
+    )
+    assert made.status_code == 201
+    check_copy(data_of(made), src)
+
+
+async def test_missing_choices_report_affected_fields_and_preserve_the_screen(
+    app_client: httpx.AsyncClient,
+) -> None:
+    src = await source_with_rules(app_client)
+    package = await export_of(app_client, src.screen)
+    package["chrome_json"] = chrome(src.control, src.panel, src.external)
+    response = await import_package(
+        app_client,
+        {
+            "project_id": src.project,
+            "payload": package,
+            "target_dashboard_id": src.screen,
+        },
+    )
+    assert response.status_code == 400
+    issues = response.json()["details"]
+    assert {part["code"] for part in issues} == {
+        "interaction_node_mapping_required"
+    }
+    assert {part["field"] for part in issues} >= {
+        "chrome_json.interactions[0].source.nodeId",
+        "chrome_json.interactions[0].action.targets[0]",
+        "chrome_json.interactions[3].action.groups[0].targets[0]",
+        "chrome_json.interactions[4].action.target",
+    }
+    original = data_of(await app_client.get(f"{DASHBOARDS_URL}/{src.screen}"))
+    assert {n["id"] for n in original["nodes"]} == {src.panel, src.control}
+    assert original["chrome_json"] == chrome(
+        src.control, src.panel, src.external
+    )
