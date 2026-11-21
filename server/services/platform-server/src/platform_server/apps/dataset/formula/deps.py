@@ -68,8 +68,8 @@ class ComputePlan:
 
     @property
     def is_empty(self) -> bool:
-        """这张表一列公式都没有。"""
-        return not self.order
+        """既没有可求值的公式，也没有需要写入行的编译错误。"""
+        return not self.order and not self.failures
 
     @property
     def prev_refs(self) -> set[PrevRef]:

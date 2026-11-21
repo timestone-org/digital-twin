@@ -54,6 +54,14 @@ def test_the_order_is_reproducible_across_runs() -> None:
     assert first == second == ["丙", "乙", "甲"]
 
 
+def test_a_plan_with_only_invalid_columns_still_has_diagnostics() -> None:
+    plan = plan_of(("甲", "{不存在}"), ("乙", "{missing.读数}"))
+
+    assert not plan.order
+    assert set(plan.failures) == {"甲", "乙"}
+    assert not plan.is_empty
+
+
 def test_a_self_reference_is_a_cycle() -> None:
     # ⚠ 自环不豁免
     with pytest.raises(FormulaError, match="循环引用：甲"):
