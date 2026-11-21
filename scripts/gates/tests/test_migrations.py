@@ -199,5 +199,92 @@ class ConstraintCheckTests(_GateCase):
         assert self._run(gate.check_constraint_on_existing_table, path) == []
 
 
+class RoutineDefinitionTests(_GateCase):
+    """延迟执行的函数定义与当场执行的迁移语句。"""
+
+    def _check(self, sql: str) -> list[_report.Violation]:
+        path = self._revision(f"    op.execute({sql!r})\n")
+        return self._run(gate.check_no_backfill_in_migration, path)
+
+    def test_stored_bodies_are_schema(self) -> None:
+        statements = (
+            "CREATE FUNCTION k.touch() RETURNS pg_catalog.trigger "
+            "LANGUAGE plpgsql "
+            "AS $$ BEGIN UPDATE k.t SET n=1; RETURN NEW; END $$;",
+            "/* outer /* nested */ comment */ CREATE OR REPLACE FUNCTION "
+            '"k"."touch"(note text DEFAULT \'AS $other$\') '
+            "RETURNS pg_catalog.trigger AS $fn$ BEGIN PERFORM "
+            "$inner$quoting; here$inner$; "
+            "DELETE FROM k.t; RETURN NEW; END $fn$ LANGUAGE plpgsql;",
+            "CREATE FUNCTION k.touch() RETURNS pg_catalog.trigger AS "
+            "'BEGIN PERFORM ''embedded;quote''; DELETE FROM k.t; END' "
+            "LANGUAGE plpgsql;",
+        )
+        for statement in statements:
+            with self.subTest(statement=statement):
+                assert self._check(statement) == []
+
+    def test_only_the_exact_builtin_trigger_type_qualifies(self) -> None:
+        for spelling in (
+            "pg_catalog.trigger",
+            '"pg_catalog".trigger',
+            'pg_catalog."trigger"',
+            '"pg_catalog"."trigger"',
+        ):
+            sql = self._routine(spelling)
+            with self.subTest(qualified=spelling):
+                assert self._check(sql) == []
+        for spelling in (
+            "trigger",
+            '"trigger"',
+            "app.trigger",
+            '"PG_CATALOG"."trigger"',
+            'pg_catalog."Trigger"',
+        ):
+            with self.subTest(unresolved=spelling):
+                assert len(self._check(self._routine(spelling))) == 1
+
+    @staticmethod
+    def _routine(type_name: str) -> str:
+        return " ".join(
+            (
+                "CREATE FUNCTION example.change() RETURNS",
+                type_name,
+                "LANGUAGE plpgsql AS $body$ BEGIN UPDATE sample SET n=1;",
+                "END $body$;",
+            )
+        )
+
+    def test_immediate_writes_remain_visible(self) -> None:
+        fn = (
+            "CREATE FUNCTION k.touch() RETURNS pg_catalog.trigger "
+            "LANGUAGE plpgsql "
+            "AS $Body$ BEGIN RETURN NEW; END $Body$;"
+        )
+        statements = (
+            " ".join((fn, "UPDATE k.live SET n=1")),
+            " ".join(
+                (fn, "/* nested /* ; */ note */ INSERT INTO k.live(n) SELECT 1")
+            ),
+            " ".join(
+                (fn, "-- a comment with a quoted ';'\n DELETE FROM k.live")
+            ),
+            " ".join(("UPDATE k.live SET n=1;", fn)),
+            "CREATE FUNCTION k.ordinary() RETURNS integer AS $$BEGIN "
+            "UPDATE k.live SET n=1; RETURN 0; END$$ LANGUAGE plpgsql; "
+            "SELECT k.ordinary();",
+            "DO $outer$ BEGIN EXECUTE $inner$DELETE FROM k.live$inner$; "
+            "END $outer$;",
+            'SELECT "CREATE FUNCTION"; UPDATE k.live SET n=1;',
+            "SELECT 'CREATE FUNCTION k.x() RETURNS int AS $$ignored$$'; "
+            "DELETE FROM k.live;",
+            "CREATE FUNCTION k.x() RETURNS pg_catalog.trigger AS $a$ "
+            "BEGIN UPDATE k.live SET n=1; END $A$;",
+        )
+        for statement in statements:
+            with self.subTest(statement=statement):
+                assert len(self._check(statement)) == 1
+
+
 if __name__ == "__main__":
     unittest.main()
