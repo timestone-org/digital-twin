@@ -5,6 +5,7 @@
 """
 
 import asyncio
+from collections.abc import Iterable
 from typing import Any
 from uuid import uuid4
 
@@ -63,7 +64,10 @@ class FakeFetcher:
 
     async def fetch(self) -> Any:
         self.calls += 1
-        return self.plans[min(self.calls - 1, len(self.plans) - 1)]
+        plan = self.plans[min(self.calls - 1, len(self.plans) - 1)]
+        if isinstance(plan, Exception):
+            raise plan
+        return plan
 
 
 class FakeSession:
@@ -73,6 +77,7 @@ class FakeSession:
         self.source = source
         self.source_id = source.source_id
         self.applied: list[Any] = []
+        self.invalidated: list[str] = []
         self.is_online = True
         self.is_subscribing = True
         self.is_stopped = False
@@ -90,6 +95,10 @@ class FakeSession:
     def revoke(self) -> None:
         self.is_online = False
         self.is_stopped = True
+
+    def invalidate_points(self, point_codes: Iterable[str]) -> None:
+        assert not self.is_stopped
+        self.invalidated.extend(point_codes)
 
     async def report_stopped(self) -> None:
         self.reported_stopped += 1
@@ -335,6 +344,7 @@ async def test_changing_the_endpoint_rebuilds_the_session(
     await supervisor.tick()
     await supervisor.tick()
     assert built[0].is_stopped is True
+    assert built[0].invalidated == ["outlet_temp"]
     assert len(built) == 2
     await supervisor.stop()
 

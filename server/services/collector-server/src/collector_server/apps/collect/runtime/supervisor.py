@@ -5,7 +5,7 @@
 
 import asyncio
 import contextlib
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -15,14 +15,14 @@ from collector_server.apps.collect.plan.store import PlanStore
 from collector_server.apps.collect.runtime.session import SourceSession
 from collector_server.clock import Clock, utc_now_ms
 from collector_server.lease import Lease
-from collectwire import PlanSource
+from collectwire import COLLECT_LEASE_KEY, PlanSource
 from lib.logging import get_logger
 
 _logger = get_logger("collect.supervisor")
 
 # 单活租约的键。⚠ 全系统只有这一个采集主，键名写死在这里而不是配置里：
 # 让它可配等于让两套配置各选一个主
-LEASE_KEY = "collect:leader"
+LEASE_KEY = COLLECT_LEASE_KEY
 # 租约存活期与续期周期。⚠ 续期必须远快于 TTL：一次网络抖动不该丢主，
 # 而丢主意味着现场设备上要重建一整轮会话
 LEASE_TTL_S = 15
@@ -39,11 +39,20 @@ SessionBuilder = Callable[[PlanSource], SourceSession]
 
 
 @dataclass(frozen=True)
+class SnapshotLifecycle:
+    """采集租约丢失与正常关停时的快照收尾。"""
+
+    discard: Callable[[], None]
+    flush: Callable[[], Awaitable[None]]
+
+
+@dataclass(frozen=True)
 class SupervisorOptions:
     """主循环的节奏。"""
 
     plan_refresh_interval_s: float
     lease_renew_interval_s: float = LEASE_RENEW_INTERVAL_S
+    snapshot: SnapshotLifecycle | None = None
 
 
 class CollectSupervisor:
@@ -73,8 +82,10 @@ class CollectSupervisor:
         self._tasks: dict[UUID, asyncio.Task[None]] = {}
         self._loop_task: asyncio.Task[None] | None = None
         self._stopped = asyncio.Event()
+        self._wakeup = asyncio.Event()
         self._is_leader = False
         self._planned_at_ms = 0
+        self._needs_convergence = False
 
     @property
     def is_leader(self) -> bool:
@@ -116,6 +127,10 @@ class CollectSupervisor:
         self._stopped.clear()
         self._loop_task = asyncio.create_task(self.run())
 
+    def request_plan_refresh(self) -> None:
+        """唤醒主循环以便拉取最新采集计划。"""
+        self._wakeup.set()
+
     async def stop(self) -> None:
         """关停：心跳停 → 拆订阅/轮询 → 让租约。
 
@@ -125,13 +140,23 @@ class CollectSupervisor:
         双份会话便宜。
         """
         self._stopped.set()
+        self._wakeup.set()
         await self._stop_loop()
-        # 此刻还持有租约，运行态那一行仍归我们写
-        await self._stand_down(is_reported=self._is_leader)
+        if not self._is_leader:
+            await self._stand_down(is_reported=False)
+            return
+        await self._work_under_lease(self._drain())
         if self._is_leader:
             await self._lease.release()
             self._is_leader = False
             _logger.info("lease_released", "已让出采集租约")
+
+    async def _drain(self) -> None:
+        """收完会话的尾窗再让租约。"""
+        await self._stand_down(is_reported=True)
+        snapshot = self._options.snapshot
+        if self._is_leader and snapshot is not None:
+            await snapshot.flush()
 
     async def run(self) -> None:
         """主循环：续约 → 比对计划 → 收敛。
@@ -152,25 +177,36 @@ class CollectSupervisor:
 
     async def tick(self) -> None:
         """跑一拍。"""
+        is_requested = self._wakeup.is_set()
+        self._wakeup.clear()
         was_leader = self._is_leader
         if not await self._hold_lease():
             if was_leader:
                 await self._stand_down(is_reported=False)
             return
-        is_changed = not was_leader
-        if self._is_plan_due():
-            is_changed = await self._plan.refresh() or is_changed
-        if is_changed:
-            await self._converge_under_lease()
+        if self._is_plan_due(is_forced=is_requested or not was_leader):
+            await self._work_under_lease(
+                self._refresh_and_converge(is_new_leader=not was_leader)
+            )
 
-    async def _converge_under_lease(self) -> None:
-        """收敛，期间照常续约。
+    async def _refresh_and_converge(self, *, is_new_leader: bool) -> None:
+        """拉取计划，对齐仍由当前副本持有的会话。Args: is_new_leader。"""
+        is_changed = await self._plan.refresh()
+        if is_changed or is_new_leader:
+            self._needs_convergence = True
+        if self._is_leader and self._needs_convergence:
+            self._needs_convergence = not await self.converge()
 
-        ⚠ 收敛可能很久（逐条拆会话、等首次订阅），只在两拍之间续约的话，
-        租约会在我们还握着现场会话时过期，热备随即接手。续不上就撤销全部
-        会话、等收敛在下一个检查点停手，再整体拆掉。
+    async def _work_under_lease(
+        self, work: Coroutine[object, object, None]
+    ) -> None:
+        """拉计划、收敛和关停期间照常续约。
+
+        ⚠ 只在两拍之间续约，热备可能在旧主还握着现场会话时接手。
+        续不上先同步撤销读数出口，再等待在途工作停止并拆除会话。
+        Args: work。
         """
-        task = asyncio.create_task(self.converge())
+        task = asyncio.create_task(work)
         try:
             while not task.done():
                 await asyncio.wait(
@@ -182,36 +218,38 @@ class CollectSupervisor:
                     break
             await task
         finally:
+            if not task.done():
+                await _cancel(task)
             if not self._is_leader:
                 await self._stand_down(is_reported=False)
 
-    async def converge(self) -> None:
-        """让活着的会话与计划一致。"""
+    async def converge(self) -> bool:
+        """让活着的会话与计划一致，返回是否全部完成。"""
         plan = self._plan.current
         if plan is None:
-            # ⚠ 拿不到计划就空转，且每一拍都响亮：不许拿旧计划顶上（ADR-0001）
-            _logger.error(
-                "plan_missing", "还没有采集计划，采集空转中，未建立任何会话"
-            )
-            return
+            await self._stand_down(is_reported=True)
+            return True
         wanted = {source.source_id: source for source in plan.sources}
         for source_id in list(self._sessions):
             if not self._is_leader:
-                return
+                return False
             if source_id not in wanted:
                 await self._drop(source_id, is_reported=True)
+        is_complete = True
         for source in wanted.values():
             if not self._is_leader:
-                return
+                return False
             try:
                 await self._ensure(source)
             except Exception as error:
+                is_complete = False
                 _logger.error(
                     "source_converge_failed",
                     "数据源会话收敛失败，其余数据源继续处理",
                     source_id=str(source.source_id),
                     error_type=type(error).__name__,
                 )
+        return is_complete
 
     async def _ensure(self, source: PlanSource) -> None:
         """按计划里的一个数据源收敛出一条会话。
@@ -228,17 +266,31 @@ class CollectSupervisor:
         ) != without_points(source)
         if is_rebuilt:
             # 连接参数变了：整条重建，光换点位救不回来
+            running.invalidate_points(
+                point.point_code for point in (applied or source).points
+            )
             await self._drop(source.source_id, is_reported=True)
             await self._launch(source)
             return
-        self._applied[source.source_id] = source
-        await running.apply(source)
+        if applied != source:
+            try:
+                await running.apply(source)
+            except Exception:
+                # 原生订阅可能已部分成功，继续在旧会话重试会重复创建监视项。
+                running.invalidate_points(
+                    point.point_code for point in source.points
+                )
+                await self._drop(source.source_id, is_reported=True)
+                raise
+            self._applied[source.source_id] = source
 
     async def _launch(self, source: PlanSource) -> None:
         """起一条会话。
 
         Args: source。
         """
+        if not self._is_leader or self._stopped.is_set():
+            return
         session = self._builder(source)
         self._sessions[source.source_id] = session
         self._applied[source.source_id] = source
@@ -303,6 +355,9 @@ class CollectSupervisor:
             if await self._lease.renew():
                 return True
             self._is_leader = False
+            snapshot = self._options.snapshot
+            if snapshot is not None:
+                snapshot.discard()
             _logger.error("lease_lost", "租约续期失败，立刻停止采集并让位")
             return False
         acquired = await self._lease.acquire()
@@ -311,11 +366,11 @@ class CollectSupervisor:
         self._is_leader = acquired
         return acquired
 
-    def _is_plan_due(self) -> bool:
-        """到该重拉计划的时候了吗。"""
+    def _is_plan_due(self, *, is_forced: bool = False) -> bool:
+        """按刷新周期判断是否重拉计划。Args: is_forced。"""
         now_ms = self._clock()
         due_ms = int(self._refresh_interval_s() * MS_PER_S)
-        if now_ms - self._planned_at_ms < due_ms:
+        if not is_forced and now_ms - self._planned_at_ms < due_ms:
             return False
         self._planned_at_ms = now_ms
         return True
@@ -344,7 +399,7 @@ class CollectSupervisor:
         Args: delay_s。
         """
         with contextlib.suppress(TimeoutError):
-            await asyncio.wait_for(self._stopped.wait(), timeout=delay_s)
+            await asyncio.wait_for(self._wakeup.wait(), timeout=delay_s)
 
 
 async def _cancel(task: asyncio.Task[None] | None) -> None:

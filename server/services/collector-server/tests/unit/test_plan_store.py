@@ -53,16 +53,15 @@ async def test_a_new_version_is_a_change(build_plan: Any) -> None:
     assert store.current.version == "v2"
 
 
-async def test_a_failed_fetch_keeps_the_plan_that_is_already_running(
+async def test_a_failed_fetch_invalidates_the_plan_that_was_running(
     build_plan: Any,
 ) -> None:
     store = PlanStore(
         fetcher=ScriptedFetcher([build_plan(), PlanUnavailable("拉不到")])
     )
     await store.refresh()
-    assert await store.refresh() is False
-    assert store.current is not None
-    assert store.current.version == "v1"
+    assert await store.refresh() is True
+    assert store.current is None
 
 
 async def test_failures_are_counted_until_one_succeeds(build_plan: Any) -> None:

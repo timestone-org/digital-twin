@@ -7,7 +7,7 @@
 import ast
 import inspect
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from collector_server.apps.collect.archive.buffer import ArchiveBuffer
 from collector_server.apps.collect.drivers.opcua.notifier import (
@@ -49,7 +49,20 @@ def test_the_sink_handed_to_a_driver_is_the_plain_recorder() -> None:
         async def write_many(self, *_args: object, **_kwargs: object) -> None:
             return None
 
-        async def drop(self, *_args: object) -> None:
+        lease_token: str | None = None
+
+        async def drop(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        async def touch(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+        async def retain_fields(
+            self,
+            _source_id: UUID,
+            _point_codes: frozenset[str],
+            **_kwargs: object,
+        ) -> None:
             return None
 
         async def ping(self) -> bool:

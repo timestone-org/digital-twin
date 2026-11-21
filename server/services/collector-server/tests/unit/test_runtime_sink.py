@@ -30,6 +30,8 @@ class ExplodingStore:
     而那类异常一旦逃出 flush，整条快照循环就此停摆而进程仍然绿着。
     """
 
+    lease_token: str | None = "test-epoch"
+
     def __init__(self) -> None:
         self.writes: list[tuple[UUID, dict[str, str]]] = []
         self.touched: list[UUID] = []
@@ -38,8 +40,14 @@ class ExplodingStore:
         self.settled = asyncio.Event()
 
     async def write_many(
-        self, batch: Mapping[UUID, Mapping[str, str]], *, ttl_s: int
+        self,
+        batch: Mapping[UUID, Mapping[str, str]],
+        *,
+        ttl_s: int,
+        lease_token: str | None = None,
     ) -> None:
+        if lease_token != self.lease_token:
+            return
         if not self.exploded.is_set():
             self.exploded.set()
             raise RuntimeError("Redis 客户端炸了")
@@ -48,13 +56,23 @@ class ExplodingStore:
             self.writes.append((source_id, dict(fields)))
         self.settled.set()
 
-    async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
+    async def touch(
+        self,
+        source_ids: Sequence[UUID],
+        *,
+        ttl_s: int,
+        lease_token: str | None = None,
+    ) -> None:
+        if lease_token != self.lease_token:
+            return
         self.ttl_s = ttl_s
         self.touched.extend(source_ids)
 
 
 class RecordingStore:
     """记下每一次写入的假快照面。"""
+
+    lease_token: str | None = "test-epoch"
 
     def __init__(
         self,
@@ -69,6 +87,8 @@ class RecordingStore:
         self.batches: list[tuple[UUID, ...]] = []
         self.dropped: list[UUID] = []
         self.touched: list[tuple[UUID, ...]] = []
+        self.reconciled: list[tuple[UUID, frozenset[str]]] = []
+        self.retain_failures = 0
         self.failures = failures
         self.drop_failures = drop_failures
         self.touch_failures = touch_failures
@@ -77,8 +97,14 @@ class RecordingStore:
         )
 
     async def write_many(
-        self, batch: Mapping[UUID, Mapping[str, str]], *, ttl_s: int
+        self,
+        batch: Mapping[UUID, Mapping[str, str]],
+        *,
+        ttl_s: int,
+        lease_token: str | None = None,
     ) -> None:
+        if lease_token != self.lease_token:
+            return
         if self.failures > 0:
             self.failures -= 1
             raise DependencyUnavailable("缓存服务暂时不可用")
@@ -88,18 +114,44 @@ class RecordingStore:
         for source_id, fields in batch.items():
             self.writes.append((source_id, dict(fields)))
 
-    async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
+    async def touch(
+        self,
+        source_ids: Sequence[UUID],
+        *,
+        ttl_s: int,
+        lease_token: str | None = None,
+    ) -> None:
+        if lease_token != self.lease_token:
+            return
         if self.touch_failures > 0:
             self.touch_failures -= 1
             raise RuntimeError("Redis 客户端炸了")
         self.ttl_s = ttl_s
         self.touched.append(tuple(source_ids))
 
-    async def drop(self, source_id: UUID) -> None:
+    async def drop(
+        self, source_id: UUID, *, lease_token: str | None = None
+    ) -> None:
+        if lease_token != self.lease_token:
+            return
         if self.drop_failures > 0:
             self.drop_failures -= 1
             raise self.drop_error
         self.dropped.append(source_id)
+
+    async def retain_fields(
+        self,
+        source_id: UUID,
+        point_codes: frozenset[str],
+        *,
+        lease_token: str | None = None,
+    ) -> None:
+        if lease_token != self.lease_token:
+            return
+        self.reconciled.append((source_id, point_codes))
+        if self.retain_failures > 0:
+            self.retain_failures -= 1
+            raise DependencyUnavailable("缓存服务暂时不可用")
 
     async def ping(self) -> bool:
         return True
@@ -110,6 +162,8 @@ class RecordingStore:
 
 class BlockingStore:
     """写入会卡在半路的假快照面，用来看清删键与写键的先后。"""
+
+    lease_token: str | None = "test-epoch"
 
     def __init__(self) -> None:
         self.calls: list[tuple[str, UUID]] = []
@@ -124,8 +178,14 @@ class BlockingStore:
         return [name for name, _ in self.calls]
 
     async def write_many(
-        self, batch: Mapping[UUID, Mapping[str, str]], *, ttl_s: int
+        self,
+        batch: Mapping[UUID, Mapping[str, str]],
+        *,
+        ttl_s: int,
+        lease_token: str | None = None,
     ) -> None:
+        if lease_token != self.lease_token:
+            return
         self.entered.set()
         await self.released.wait()
         self.ttl_s = ttl_s
@@ -133,18 +193,52 @@ class BlockingStore:
             self.written = dict(fields)
             self.calls.append(("write", source_id))
 
-    async def touch(self, source_ids: Sequence[UUID], *, ttl_s: int) -> None:
+    async def touch(
+        self,
+        source_ids: Sequence[UUID],
+        *,
+        ttl_s: int,
+        lease_token: str | None = None,
+    ) -> None:
+        if lease_token != self.lease_token:
+            return
         self.ttl_s = ttl_s
         self.calls.extend(("touch", source_id) for source_id in source_ids)
 
-    async def drop(self, source_id: UUID) -> None:
+    async def drop(
+        self, source_id: UUID, *, lease_token: str | None = None
+    ) -> None:
+        if lease_token != self.lease_token:
+            return
         self.calls.append(("drop", source_id))
+
+    async def retain_fields(
+        self,
+        source_id: UUID,
+        point_codes: frozenset[str],
+        *,
+        lease_token: str | None = None,
+    ) -> None:
+        if lease_token != self.lease_token:
+            return
+        del source_id, point_codes
 
     async def ping(self) -> bool:
         return True
 
     async def close(self) -> None:
         return None
+
+
+class Liveness:
+    """快照续期所需的租约与数据源在线状态。"""
+
+    def __init__(self, *online: UUID) -> None:
+        self.is_leader = True
+        self.online = set(online)
+
+    def is_online(self, source_id: UUID) -> bool:
+        return source_id in self.online
 
 
 def test_later_value_wins_inside_one_window() -> None:
@@ -193,6 +287,29 @@ async def test_flush_writes_every_source_that_has_readings() -> None:
     assert sorted(source_id for source_id, _ in store.writes) == sorted(
         [first, second]
     )
+
+
+@pytest.mark.parametrize("is_recovered", [False, True])
+async def test_point_invalidation_survives_one_failed_snapshot_write(
+    is_recovered: bool,
+) -> None:
+    store = RecordingStore()
+    source_id = uuid4()
+    sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60)
+    record = sink.sink_for(source_id)
+    record("temp", 1.0, TS_MS, "good")
+    await sink.flush_once()
+
+    store.failures = 1
+    sink.invalidate_point(source_id, "temp")
+    await sink.flush_once()
+    if is_recovered:
+        record("temp", 2.0, TS_MS + 10, "good")
+    await sink.flush_once()
+
+    value = json.loads(store.writes[-1][1]["temp"])
+    expected = (2.0, "good") if is_recovered else (None, "bad")
+    assert (value["value"], value["quality"]) == expected
 
 
 async def test_one_flush_writes_one_batch_whatever_the_source_count() -> None:
@@ -305,13 +422,13 @@ async def test_a_source_still_in_the_plan_keeps_its_snapshot(
         store=store, interval_ms=50, ttl_s=60, plan=build_plan_view(plan)
     )
     source_id = plan.sources[0].source_id
-    sink.sink_for(source_id)("temp", 1.0, TS_MS, "good")
+    sink.sink_for(source_id)("outlet_temp", 1.0, TS_MS, "good")
     await sink.flush_once()
     assert store.dropped == []
     assert [written for written, _ in store.writes] == [source_id]
 
 
-async def test_without_a_plan_no_snapshot_is_cleared(
+async def test_without_a_plan_the_snapshot_is_left_to_expire(
     build_plan_view: Any,
 ) -> None:
     store = RecordingStore()
@@ -321,9 +438,81 @@ async def test_without_a_plan_no_snapshot_is_cleared(
     source_id = uuid4()
     sink.sink_for(source_id)("temp", 1.0, TS_MS, "good")
     await sink.flush_once()
+    await sink.flush_once()
     # 拉不到计划时「计划里没有它」说的是我们不知道，不是它不该被采
     assert store.dropped == []
     assert [written for written, _ in store.writes] == [source_id]
+    assert store.touched == []
+
+
+async def test_a_standby_leaves_snapshot_maintenance_to_the_leader(
+    build_plan: Any, build_plan_view: Any
+) -> None:
+    store = RecordingStore()
+    plan = build_plan()
+    view = build_plan_view(plan)
+    sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60, plan=view)
+    source_id = plan.sources[0].source_id
+    liveness = Liveness(source_id)
+    sink.bind_liveness(liveness)
+    sink.sink_for(source_id)("outlet_temp", 1.0, TS_MS, "good")
+    await sink.flush_once()
+
+    liveness.is_leader = False
+    await sink.flush_once()
+    view.replace(build_plan(version="v2", sources=()))
+    await sink.flush_once()
+    assert store.touched == []
+    assert store.dropped == []
+
+    liveness.is_leader = True
+    await sink.flush_once()
+    assert store.dropped == [source_id]
+
+
+async def test_field_cleanup_retries_until_succeeded_and_after_takeover(
+    build_plan: Any, build_plan_view: Any
+) -> None:
+    store = RecordingStore()
+    store.retain_failures = 1
+    plan = build_plan()
+    view = build_plan_view(plan)
+    sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60, plan=view)
+    source_id = plan.sources[0].source_id
+    liveness = Liveness(source_id)
+    sink.bind_liveness(liveness)
+    sink.sink_for(source_id)
+
+    await sink.flush_once()
+    await sink.flush_once()
+    view.replace(build_plan(version="v2"))
+    await sink.flush_once()
+    assert store.reconciled == [(source_id, frozenset({"outlet_temp"}))] * 2
+
+    liveness.is_leader = False
+    await sink.flush_once()
+    liveness.is_leader = True
+    await sink.flush_once()
+    assert store.reconciled == [(source_id, frozenset({"outlet_temp"}))] * 3
+
+
+async def test_a_disconnected_sources_snapshot_can_expire() -> None:
+    store = RecordingStore()
+    sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60)
+    online, disconnected = uuid4(), uuid4()
+    liveness = Liveness(online, disconnected)
+    sink.bind_liveness(liveness)
+    sink.sink_for(online)("temp", 1.0, TS_MS, "good")
+    sink.sink_for(disconnected)("temp", 2.0, TS_MS, "good")
+    await sink.flush_once()
+
+    liveness.online.remove(disconnected)
+    await sink.flush_once()
+    assert store.touched == [(online,)]
+
+    liveness.online.clear()
+    await sink.flush_once()
+    assert store.touched == [(online,)]
 
 
 async def test_a_drop_never_lands_while_a_write_is_in_flight(
@@ -333,7 +522,7 @@ async def test_a_drop_never_lands_while_a_write_is_in_flight(
     plan = build_plan()
     view = build_plan_view(plan)
     sink = SnapshotSink(store=store, interval_ms=50, ttl_s=60, plan=view)
-    sink.sink_for(plan.sources[0].source_id)("temp", 1.0, TS_MS, "good")
+    sink.sink_for(plan.sources[0].source_id)("outlet_temp", 1.0, TS_MS, "good")
     writing = asyncio.create_task(sink.flush_once())
     await asyncio.wait_for(store.entered.wait(), timeout=WAIT_S)
     view.replace(build_plan(version="v2", sources=()))
