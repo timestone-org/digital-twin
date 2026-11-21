@@ -48,6 +48,26 @@ describe('读数的三档', () => {
     expect(look.badge).toBeNull()
   })
 
+  it('数据源未在线时给最后读数加陈旧标签', () => {
+    const look = formatSample(
+      {
+        state: 'stale',
+        value: 12,
+        timestampMs: AT_MS,
+        quality: 'good',
+        errorMessage: '数据源当前未在线',
+      },
+      '℃',
+      AT_MS,
+    )
+    expect(look).toMatchObject({
+      text: '12 ℃',
+      badge: '陈旧',
+      intent: 'warning',
+      reason: '数据源当前未在线',
+    })
+  })
+
   it('⚠ 不是今天的采样带上月日，三天前的值不会看着像刚刚', () => {
     const threeDaysAgo = new Date(2026, 7, 13, 14, 3, 22).getTime()
     const now = new Date(2026, 7, 16, 10, 0, 0).getTime()
@@ -193,5 +213,27 @@ describe('配了却没订上的点位', () => {
 
   it('没在采时不谈差额——那时候一个都没订上，说它没有意义', () => {
     expect(missingPoints(10, { ...online, state: 'offline' })).toBeNull()
+  })
+})
+
+describe('陈旧读数的质量', () => {
+  it.each([
+    ['bad', '质量不可用'],
+    ['uncertain', '质量存疑'],
+  ] as const)('保留 %s 的质量提示', (quality, label) => {
+    const look = formatSample(
+      {
+        state: 'stale',
+        value: 12,
+        timestampMs: AT_MS,
+        quality,
+        errorMessage: '数据源离线',
+      },
+      '℃',
+      AT_MS,
+    )
+    expect(look.badge).toContain('陈旧')
+    expect(look.badge).toContain(label)
+    expect(look.reason).toBe('数据源离线')
   })
 })

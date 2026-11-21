@@ -33,20 +33,19 @@ const auth = useAuthStore()
 const canManage = computed(() =>
   auth.can([PERMISSION_CODES.collectManage], 'all'),
 )
-const look = computed(() => formatSample(props.sample, null))
-const status = computed(() =>
-  props.stale && props.sample ? '陈旧' : (look.value.badge ?? '正常'),
+const look = computed(() =>
+  formatSample(props.sample, null, undefined, props.stale),
 )
-const tone = computed(() =>
-  props.stale && props.sample ? 'warning' : look.value.intent,
-)
+const status = computed(() => look.value.badge ?? '正常')
 const unit = computed(() =>
-  props.sample?.state === 'ok' && typeof props.sample.value === 'number'
+  props.sample !== undefined &&
+  props.sample.state !== 'error' &&
+  typeof props.sample.value === 'number'
     ? props.point.unit
     : null,
 )
 const fullTime = computed(() =>
-  props.sample?.state === 'ok'
+  props.sample !== undefined && props.sample.state !== 'error'
     ? formatTimestampMs(props.sample.timestampMs)
     : '',
 )
@@ -87,7 +86,9 @@ const fullTime = computed(() =>
         <span v-if="unit" class="point-card__unit">{{ unit }}</span>
       </div>
       <div class="point-card__sample">
-        <span class="point-card__status" :data-tone="tone">{{ status }}</span>
+        <span class="point-card__status" :data-tone="look.intent">{{
+          status
+        }}</span>
         <span
           v-if="look.at"
           class="point-card__time"

@@ -19,13 +19,11 @@ export const POINT_QUALITIES = ['good', 'uncertain', 'bad'] as const
 export type PointQuality = (typeof POINT_QUALITIES)[number]
 
 /**
- * 一次读数的两档结论，与 publisher 推送条目的 `state` 逐字一致。
- * `ok` 有值、`error` 取不到。
- * ⚠ 没有「值太旧」这一档：订阅只在值变化时回调，一个一天变一次的点位按时刻
- * 判就会每天有 23 小时被降档，而它的值一直是对的。采集停了则整个快照到期，
- * 落进 `error`。
+ * 点位读数的状态，与 publisher 推送条目一致。
+ * `ok` 有当前快照，`stale` 有最后读数，`error` 取不到。
+ * ⚠ 采样时刻不用于判断陈旧：在线的订阅点位可能长期保持稳定。
  */
-export const POINT_STATES = ['ok', 'error'] as const
+export const POINT_STATES = ['ok', 'stale', 'error'] as const
 export type PointState = (typeof POINT_STATES)[number]
 
 /**
@@ -35,12 +33,14 @@ export type PointState = (typeof POINT_STATES)[number]
  * 唯一依据（runtime-resilience §9）。
  */
 export interface PointReadingSample {
-  state: 'ok'
+  state: 'ok' | 'stale'
   /** ⚠ `0` / `false` / `''` 都是合法读数，不许当成「还没有值」。 */
   value: unknown
   /** 采样时刻，UTC 毫秒。 */
   timestampMs: number
   quality: PointQuality
+  /** 最后读数被标为陈旧的原因。 */
+  errorMessage?: string
 }
 
 /** 取不到，且说得出为什么。 */

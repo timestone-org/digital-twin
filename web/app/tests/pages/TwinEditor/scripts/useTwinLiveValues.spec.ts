@@ -134,6 +134,28 @@ describe('缝回场景', () => {
     expect(values()?.anchors).toEqual({ a1: { value: 7 } })
   })
 
+  it('视口无法标注单个旧值时，移除该实时信息牌的读数', async () => {
+    const { wrapper, values } = mountLive()
+
+    emit('ns=2;s=F', {
+      state: 'ok',
+      value: 3.5,
+      timestampMs: 1,
+      quality: 'good',
+    })
+    await wrapper.vm.$nextTick()
+    expect(values()?.panels).toEqual({ 'p1::flow': { value: 3.5 } })
+
+    emit('ns=2;s=F', {
+      state: 'stale',
+      value: 3.5,
+      timestampMs: 1,
+      quality: 'good',
+    })
+    await wrapper.vm.$nextTick()
+    expect(values()?.panels).toEqual({})
+  })
+
   // ⚠ 没有首帧时绝不拿 0 冒充：牌面显示占位符才看得出「这个点还没来数」
   it('一帧都没收到时五路都是空表', () => {
     const { values } = mountLive()

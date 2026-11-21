@@ -14,21 +14,28 @@ const live = useLivePoint(toRef(props, 'point'), toRef(props, 'enabled'))
 const decimals = ref<number | undefined>(2)
 const value = computed(() => {
   const sample = live.sample.value
-  return sample?.state === 'ok'
+  return sample !== undefined && sample.state !== 'error'
     ? formatLiveValue(sample.value, decimals.value)
     : '—'
 })
 const sampledAt = computed(() => {
   const sample = live.sample.value
-  return sample?.state === 'ok' ? formatTimestampMs(sample.timestampMs) : '—'
+  return sample !== undefined && sample.state !== 'error'
+    ? formatTimestampMs(sample.timestampMs)
+    : '—'
 })
 const quality = computed(() => {
   const sample = live.sample.value
-  if (sample?.state === 'error') return sample.errorMessage
-  if (sample?.state !== 'ok') return ''
+  if (sample === undefined) return ''
+  if (sample.state === 'error') return sample.errorMessage
   return { good: '质量正常', uncertain: '质量存疑', bad: '质量不可用' }[
     sample.quality
   ]
+})
+const readingStatus = computed(() => {
+  if (live.sample.value?.state === 'stale') return '读数已陈旧'
+  if (!live.isLive.value) return '等待最新读数'
+  return live.sample.value?.state === 'error' ? '暂无读数' : '持续接收'
 })
 const status = computed(() => {
   if (!props.enabled)
@@ -37,9 +44,7 @@ const status = computed(() => {
   if (live.error.value) return '数据不可用'
   if (live.isLoading.value) return '正在读取点位'
   if (!live.isConnected.value) return '连接中断 · 数据可能过期'
-  if (!live.isLive.value) return '等待最新读数'
-  if (live.sample.value?.state === 'error') return '暂无读数'
-  return '持续接收'
+  return readingStatus.value
 })
 </script>
 
@@ -55,7 +60,10 @@ const status = computed(() => {
       <div class="chat-live-point__reading">
         <div
           class="chat-live-point__value"
-          :class="{ 'chat-live-point__value--stale': !live.isLive.value }"
+          :class="{
+            'chat-live-point__value--stale':
+              !live.isLive.value || live.sample.value?.state === 'stale',
+          }"
         >
           {{ value }} <span>{{ live.current.value.unit }}</span>
         </div>

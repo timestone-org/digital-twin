@@ -57,13 +57,9 @@ const detailSample = computed(() =>
     ? undefined
     : live.samples.value.get(detail.value.node_key),
 )
-/** 这个点位的读数是否不可信：推送断了、它自己久没收到，或者数据源不在线。 */
+/** 通道中断或缺少心跳时保留最后读数；来源状态随每帧送达。 */
 function isStale(nodeKey: string): boolean {
-  return (
-    !live.isConnected.value ||
-    live.staleKeys.value.has(nodeKey) ||
-    props.source.runtime.state !== 'online'
-  )
+  return !live.isConnected.value || live.staleKeys.value.has(nodeKey)
 }
 const detailStale = computed(
   () => detail.value !== null && isStale(detail.value.node_key),

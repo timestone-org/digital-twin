@@ -267,3 +267,27 @@ it('常量绑定同样过定值变换', () => {
   })
   expect(report([bound]).items[0]?.value).toBe(6)
 })
+
+describe('点位质量与连接状态', () => {
+  it('坏质量读数保留采样时刻且无法作为当前值', () => {
+    const found = report([binding('a')], () => ({ ...READING, quality: 'bad' }))
+    expect(found.items[0]).toMatchObject({
+      status: 'unavailable',
+      value: null,
+      at: '2026-08-28T01:02:03.000Z',
+    })
+  })
+  it('陈旧读数保留数值、采样时刻与原因', () => {
+    const found = report([binding('a')], () => ({
+      ...READING,
+      state: 'stale',
+      errorMessage: '采集源离线',
+    }))
+    expect(found.items[0]).toMatchObject({
+      value: 42,
+      is_stale: true,
+      at: '2026-08-28T01:02:03.000Z',
+      note: '采集源离线',
+    })
+  })
+})
