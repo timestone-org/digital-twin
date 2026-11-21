@@ -6,7 +6,7 @@
 """
 
 import uuid
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, tzinfo
 from typing import Any
 
@@ -31,10 +31,7 @@ from platform_server.apps.dataset.formula import (
 from platform_server.apps.dataset.models import DatasetRecord
 from platform_server.apps.dataset.services import analysis_provider
 from platform_server.apps.dataset.services.effective import to_snapshot
-from platform_server.apps.dataset.services.sessions import (
-    BorrowedSessions,
-    Sessions,
-)
+from platform_server.apps.dataset.services.sessions import Sessions
 
 MAX_FORMULA_HISTORY_ROWS = 200_000
 
@@ -49,7 +46,9 @@ class ComputeScope:
     #: 业务时区。⚠ 月/年窗口按它的日历回推，换成 UTC 会让东八区凌晨那几个
     #: 小时的行静默落进上一个月
     timezone: tzinfo
-    models: dict[str, AnalysisModel | AnalysisUnavailable] | None = None
+    models: dict[str, AnalysisModel | AnalysisUnavailable] = field(
+        default_factory=dict[str, AnalysisModel | AnalysisUnavailable]
+    )
 
     @property
     def max_prev(self) -> int:
@@ -128,7 +127,7 @@ async def load_history(
     Args: session, scope, target。
     """
     cache = HistoryCache(tz=scope.timezone)
-    cache.models = await load_models(session, scope)
+    cache.models = scope.models
     if not scope.plan.needs_history:
         return cache
     span = RowSpan(table_id=target.table_id, start=target.ts, end=target.ts)
@@ -149,20 +148,6 @@ async def prepare_models(
         sessions, frozenset(scope.plan.model_refs)
     )
     return replace(scope, models=models)
-
-
-async def load_models(
-    session: AsyncSession, scope: ComputeScope
-) -> dict[str, AnalysisModel | AnalysisUnavailable]:
-    """把这张表用到的模型定义装出来。一次重算装一次，全批复用。
-
-    Args: session, scope。
-    """
-    if scope.models is not None:
-        return scope.models
-    return await analysis_provider.load_models(
-        BorrowedSessions(session), frozenset(scope.plan.model_refs)
-    )
 
 
 async def load_whole_stats(

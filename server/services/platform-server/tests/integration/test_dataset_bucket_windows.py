@@ -91,7 +91,7 @@ async def tick(
     """
     archive, dirty = collaborators
     outcome = await collect_table(
-        context.session,
+        context.sessions,
         RunContext(ReadOnlyHistorySource(archive.database), dirty, ZONE),
         table_id=uuid.UUID(table_id),
         now=now,

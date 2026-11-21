@@ -200,14 +200,13 @@ class DatasetCollector:
         """
         try:
             async with asyncio.timeout(knobs.table_timeout_s):
-                async with self._context.database.session() as session:
-                    return await collect_table(
-                        session,
-                        self._run_context(),
-                        table_id=table_id,
-                        now=now,
-                        limits=knobs.limits,
-                    )
+                return await collect_table(
+                    self._context.database,
+                    self._run_context(),
+                    table_id=table_id,
+                    now=now,
+                    limits=knobs.limits,
+                )
         except Exception as error:
             _logger.error(
                 "dataset_collect_table_failed",

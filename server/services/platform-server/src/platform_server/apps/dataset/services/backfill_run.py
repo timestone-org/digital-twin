@@ -16,8 +16,6 @@ import uuid
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from lib.errors import AppError
 from lib.logging import get_logger
 from lib.utils.timeutils import utcnow
@@ -61,7 +59,10 @@ from platform_server.apps.dataset.services.record_compute import (
     build_scope,
     recompute_range,
 )
-from platform_server.apps.dataset.services.record_history import ComputeScope
+from platform_server.apps.dataset.services.record_history import (
+    ComputeScope,
+    prepare_models,
+)
 from platform_server.apps.dataset.services.sessions import Sessions
 from platform_server.apps.dataset.services.table_service import require_table
 
@@ -294,10 +295,10 @@ async def _recompute_window(
     Args: context, plan, state, columns。
     """
     table_id = uuid.UUID(state.table_id)
+    scope = await _compile(context.sessions, columns, plan.timezone, state)
+    if scope is None:
+        return None
     async with context.sessions.session() as session:
-        scope = await _compile(session, columns, plan.timezone, state)
-        if scope is None:
-            return None
         return await recompute_range(
             session,
             scope,
@@ -350,7 +351,7 @@ async def _load_scope(
 
 
 async def _compile(
-    session: AsyncSession,
+    sessions: Sessions,
     columns: list[DatasetColumn],
     timezone: str,
     state: BackfillJobState,
@@ -362,13 +363,16 @@ async def _compile(
     Args: session, columns, timezone, state。
     """
     try:
-        scope = await build_scope(
-            session, columns=columns, timezone=ZoneInfo(timezone)
-        )
+        async with sessions.session() as read:
+            scope = await build_scope(
+                read, columns=columns, timezone=ZoneInfo(timezone)
+            )
     except FormulaError as error:
         state.notes.append(f"公式编译不过，本次没有重算：{error}")
         return None
-    return None if scope.plan.is_empty else scope
+    return (
+        None if scope.plan.is_empty else await prepare_models(sessions, scope)
+    )
 
 
 def _advance(state: BackfillJobState, batch: BackfillBatch, rows: int) -> None:

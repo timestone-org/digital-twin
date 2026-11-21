@@ -64,7 +64,7 @@ class SpyRuns:
 
     async def collect_table(
         self,
-        _session: object,
+        sessions: SpySessions,
         _context: object,
         *,
         table_id: uuid.UUID,
@@ -72,7 +72,8 @@ class SpyRuns:
         limits: RunLimits,
     ) -> RunOutcome:
         del now
-        self.seen.append(table_id)
+        async with sessions.session():
+            self.seen.append(table_id)
         self.touched.set()
         if table_id in self.failures:
             raise RuntimeError("这张表算不动")

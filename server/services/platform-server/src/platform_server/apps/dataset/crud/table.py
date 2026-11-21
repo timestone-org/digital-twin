@@ -41,6 +41,12 @@ class TableCrud(CrudBase[DatasetTable]):
     def __init__(self) -> None:
         super().__init__(DatasetTable)
 
+    async def lock_for_collection(
+        self, session: AsyncSession, table_id: uuid.UUID
+    ) -> DatasetTable | None:
+        """结算已读取的时间桶前锁定当前水位。Args: session, table_id。"""
+        return await session.get(DatasetTable, table_id, with_for_update=True)
+
     async def get_by_code(
         self, session: AsyncSession, code: str
     ) -> DatasetTable | None:

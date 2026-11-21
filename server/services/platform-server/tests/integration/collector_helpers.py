@@ -61,7 +61,7 @@ async def run_pass(
     """
     dirty_log, writer = runner
     outcome = await collect_table(
-        context.session,
+        context.sessions,
         RunContext(
             history=ReadOnlyHistorySource(database=writer.database),
             dirty=dirty_log,

@@ -42,10 +42,16 @@ from platform_server.apps.dataset.services.dirty import (
     DatasetDirtyLog,
     mark_dirty,
 )
+from platform_server.apps.dataset.services.presenters import to_column_out
 from platform_server.apps.dataset.services.record_compute import (
     build_scope,
     recompute_range,
 )
+from platform_server.apps.dataset.services.record_history import (
+    ComputeScope,
+    prepare_models,
+)
+from platform_server.apps.dataset.services.sessions import Sessions
 from timeseries import InvalidNodeKey, split_node_key
 
 _logger = get_logger("platform.dataset.collect")
@@ -91,108 +97,133 @@ class RunOutcome:
     is_awaiting_columns: bool
 
 
+@dataclass(frozen=True)
+class _Plan:
+    """单表本拍的配置快照、桶范围与公式。"""
+
+    table: DatasetTable
+    columns: list[DatasetColumn]
+    points: list[PointColumn]
+    window: BucketWindow
+    formulas: ComputeScope | None
+
+
 async def collect_table(
-    session: AsyncSession,
+    sessions: Sessions,
     context: RunContext,
     *,
     table_id: uuid.UUID,
     now: datetime,
     limits: RunLimits,
 ) -> RunOutcome | None:
-    """把一张台账算到最后一个已关闭的桶为止；表已不在给 None。
+    """采集已关闭的桶。
 
-    Args: session, context, table_id, now, limits。
-    """
+    Args: sessions, context, table_id, now, limits。"""
+    async with sessions.session() as read:
+        plan = await _plan(read, table_id, context.timezone, now, limits)
+    if not isinstance(plan, _Plan):
+        return plan
+    cells = await aggregate_cells(
+        context.history, columns=plan.points, window=plan.window
+    )
+    rows = collected_rows(table_id, cells, manual_defaults(plan.columns))
+    formulas = plan.formulas
+    if rows and formulas is not None:
+        formulas = await prepare_models(sessions, formulas)
+    async with sessions.session() as write:
+        return await _save(write, context, plan, rows, formulas)
+
+
+async def _plan(
+    session: AsyncSession,
+    table_id: uuid.UUID,
+    timezone: str,
+    now: datetime,
+    limits: RunLimits,
+) -> _Plan | RunOutcome | None:
     table = await table_crud.get(session, table_id)
     if table is None:
         return None
-    columns = await column_crud.list_by_table(session, table.id)
+    columns = await column_crud.list_by_table(session, table_id)
     points = point_columns(table, columns)
     if not points:
-        # ⚠ 水位一格都不推：等有人把点位列配上之后要能从原地接着算。推了就是把
-        # 这段时间**永久跳过**——它此后只能靠回填补，而回填要人显式触发
         return _awaiting(table)
-    window = _window_of(
-        table, now=now, timezone=context.timezone, limits=limits
-    )
+    window = _window_of(table, now=now, timezone=timezone, limits=limits)
     if window is None:
         return _awaiting(table, is_awaiting_columns=False)
-    written = await _write_window(
-        session, context, table, (columns, points, window)
-    )
-    if written is None:
-        return None
-    table.last_collected_ts = window.starts[-1]
-    return RunOutcome(
-        table_code=table.code,
-        buckets=len(window.starts),
-        written=written,
-        watermark=window.starts[-1],
-        is_awaiting_columns=False,
-    )
+    formulas = None
+    if any(column.source == FORMULA_SOURCE for column in columns):
+        formulas = await build_scope(
+            session, columns=columns, timezone=ZoneInfo(timezone)
+        )
+    return _Plan(table, columns, points, window, formulas)
 
 
-async def _write_window(
+async def _save(
     session: AsyncSession,
     context: RunContext,
-    table: DatasetTable,
-    scope: tuple[list[DatasetColumn], list[PointColumn], BucketWindow],
-) -> int | None:
-    """折算这一段已关闭的桶，删除先完成时结束本轮。
-
-    ⚠ 打包传 `scope` 不是为了好看：形参上限是 5，而这一步天然要会话、协作者、
-    表、列定义、点位列与桶序列六件。
-    Args: session, context, table, scope（列定义 / 点位列 / 桶序列）。
-    """
-    columns, points, window = scope
-    cells = await aggregate_cells(
-        context.history, columns=points, window=window
-    )
-    if (
-        await table_crud.get_locked(session, table.id, is_deleting=False)
-        is None
-    ):
+    plan: _Plan,
+    rows: list[CollectedRow],
+    formulas: ComputeScope | None,
+) -> RunOutcome | None:
+    table = await table_crud.lock_for_collection(session, plan.table.id)
+    if table is None:
         return None
-    rows = collected_rows(table.id, cells, manual_defaults(columns))
-    if not rows:
-        return 0
-    await record_crud.upsert_collected(
-        session,
-        table_id=table.id,
-        rows=rows,
-        manual_keys=manual_keys(columns),
+    columns = await column_crud.list_by_table(session, table.id)
+    if _schedule(table) != _schedule(plan.table) or not _same_columns(
+        columns, plan.columns
+    ):
+        return _awaiting(table, is_awaiting_columns=False)
+    if rows:
+        await record_crud.upsert_collected(
+            session,
+            table_id=table.id,
+            rows=rows,
+            manual_keys=manual_keys(columns),
+        )
+        if formulas is not None and not formulas.plan.is_empty:
+            await _recompute(session, table, plan.window, formulas)
+        mark_dirty(session, context.dirty, table.code)
+    table.last_collected_ts = plan.window.starts[-1]
+    return RunOutcome(
+        table.code,
+        len(plan.window.starts),
+        len(rows),
+        table.last_collected_ts,
+        False,
     )
-    await _recompute(session, context, table, columns, window)
-    mark_dirty(session, context.dirty, table.code)
-    return len(rows)
+
+
+def _schedule(table: DatasetTable) -> tuple[str, bool, int, datetime | None]:
+    return (
+        table.collect_mode,
+        table.is_enabled,
+        table.collect_interval_ms,
+        table.last_collected_ts,
+    )
+
+
+def _same_columns(
+    current: Sequence[DatasetColumn], planned: Sequence[DatasetColumn]
+) -> bool:
+    return [to_column_out(column) for column in current] == [
+        to_column_out(column) for column in planned
+    ]
 
 
 async def _recompute(
     session: AsyncSession,
-    context: RunContext,
     table: DatasetTable,
-    columns: list[DatasetColumn],
     window: BucketWindow,
+    formulas: ComputeScope,
 ) -> None:
-    """重算刚写过的那一段的公式列。
+    """重算本拍公式，历史超限时保存原始桶。
 
-    ⚠ 不重算的话，表格会同时显示「这一拍新采的原始值」与「按上一拍的值算出来
-    的公式值」，而两者都不带任何标记。
-    ⚠ 先看有没有公式列再编计划：编一次计划要额外问两趟库（全部台账编码与
-    `{编码: id}`），一张没有公式列的表每一拍白问两趟。
-    Args: session, context, table, columns, window。
-    """
-    if not any(column.source == FORMULA_SOURCE for column in columns):
-        return
+    Args: session, table, window, formulas。"""
     try:
-        plan = await build_scope(
-            session, columns=columns, timezone=ZoneInfo(context.timezone)
-        )
-        if plan.plan.is_empty:
-            return
         await recompute_range(
             session,
-            plan,
+            formulas,
             table_id=table.id,
             window=RecordWindow(
                 table_id=table.id,
@@ -201,8 +232,6 @@ async def _recompute(
             ),
         )
     except DatasetRecordInvalid as error:
-        # ⚠ 公式历史触顶在写公式值之前就抛：吞掉它，原始行与水位照常提交，
-        # 否则整张表从此一行也采不进去；公式列留待手动重算
         _logger.warning(
             "dataset_collect_recompute_skipped",
             "公式列本拍未重算，原始采集照常写入",

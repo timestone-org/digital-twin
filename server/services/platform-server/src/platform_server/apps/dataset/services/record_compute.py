@@ -52,7 +52,6 @@ from platform_server.apps.dataset.services.record_history import (
     load_external_rows,
     load_formula_rows,
     load_history,
-    load_models,
     load_whole_stats,
 )
 
@@ -226,7 +225,7 @@ async def _run_passes(
         seeds=await _seed_rows(session, scope, table_id, span.start),
         externals=await load_external_rows(session, scope, span),
         # ⚠ 模型定义整批装一次：漏了这一处的症状是「单行试算对、全表重算全空」
-        models=await load_models(session, scope),
+        models=scope.models,
     )
     await _collect_predictions(session, scope, targets, batch)
     failed = 0
