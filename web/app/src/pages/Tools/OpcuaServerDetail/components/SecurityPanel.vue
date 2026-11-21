@@ -36,6 +36,7 @@ import * as opcua from '@/api/opcua'
 import PermGuard from '@/components/PermGuard.vue'
 import { describeError } from '@/composables/useAsyncList'
 import IssuedPasswordDialog from './IssuedPasswordDialog.vue'
+import ServerCertificateCard from './ServerCertificateCard.vue'
 
 const props = defineProps<{ instance: OpcuaInstance }>()
 
@@ -153,6 +154,11 @@ onMounted(() => {
 
 <template>
   <div class="flex flex-col gap-4">
+    <ServerCertificateCard
+      :instance-id="instance.id"
+      :certificate="instance.certificate"
+    />
+
     <DtNotice v-if="error" intent="danger" icon="alert-triangle">
       {{ error }}
     </DtNotice>

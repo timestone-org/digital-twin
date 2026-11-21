@@ -12,6 +12,7 @@ import type { OpcuaInstance, OpcuaNode } from '@dt/contracts'
 import * as opcuaApi from '@/api/opcua'
 import NodeExplorer from '@/pages/Tools/OpcuaServerDetail/components/NodeExplorer.vue'
 import SecurityPanel from '@/pages/Tools/OpcuaServerDetail/components/SecurityPanel.vue'
+import * as downloads from '@/utils/downloadJson'
 import SessionsPanel from '@/pages/Tools/OpcuaServerDetail/components/SessionsPanel.vue'
 import { useAuthStore } from '@/stores/auth'
 import type * as RealtimeChannel from '@/composables/useRealtimeChannel'
@@ -253,6 +254,56 @@ describe('在线会话', () => {
 })
 
 describe('安全', () => {
+  it('显示服务器 SHA-256 指纹，候选服务可下载 DER 文件', async () => {
+    vi.spyOn(opcuaApi, 'listCredentials').mockResolvedValue([])
+    vi.spyOn(opcuaApi, 'listTrustedCertificates').mockResolvedValue([])
+    const fingerprint = 'a1'.repeat(32)
+    const blob = new Blob(['certificate'], { type: 'application/pkix-cert' })
+    const fetch = vi
+      .spyOn(opcuaApi, 'downloadServerCertificate')
+      .mockResolvedValue(blob)
+    const save = vi
+      .spyOn(downloads, 'downloadBytes')
+      .mockImplementation(() => {})
+    const wrapper = mount(SecurityPanel, {
+      props: {
+        instance: instance({
+          certificate: {
+            fingerprint,
+            subject: 'CN=local',
+            expires_at: null,
+            is_download_supported: true,
+          },
+        }),
+      },
+    })
+    expect(wrapper.text()).toContain('SHA-256 指纹')
+    expect(wrapper.text()).toContain(fingerprint)
+    await wrapper
+      .get('[data-test="download-server-certificate"]')
+      .trigger('click')
+    await flushPromises()
+    expect(fetch).toHaveBeenCalledWith('i1', expect.any(AbortSignal))
+    expect(save).toHaveBeenCalledWith(blob, 'opcua-i1.der')
+  })
+
+  it('仍能显示旧实例指纹，保留不支持下载的兼容状态', () => {
+    vi.spyOn(opcuaApi, 'listCredentials').mockResolvedValue([])
+    vi.spyOn(opcuaApi, 'listTrustedCertificates').mockResolvedValue([])
+    const fingerprint = 'b2'.repeat(32)
+    const wrapper = mount(SecurityPanel, {
+      props: {
+        instance: instance({
+          certificate: { fingerprint, subject: 'CN=legacy', expires_at: null },
+        }),
+      },
+    })
+    expect(wrapper.text()).toContain(fingerprint)
+    expect(
+      wrapper.find('[data-test="download-server-certificate"]').exists(),
+    ).toBe(false)
+  })
+
   it('⚠ 新建凭据后明文口令用弹窗摆出来，并说清只此一次', async () => {
     vi.spyOn(opcuaApi, 'listCredentials').mockResolvedValue([])
     vi.spyOn(opcuaApi, 'listTrustedCertificates').mockResolvedValue([])
