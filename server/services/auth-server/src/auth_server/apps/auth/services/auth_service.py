@@ -89,7 +89,7 @@ class AuthService:
             raise InvalidCredentials("用户名或密码错误")
         if not user.is_active:
             raise AccountDisabled("账号已停用，请联系管理员")
-        await self._on_login_success(session, user, password, login_key)
+        user = await self._on_login_success(session, user, password, login_key)
         identity = await load_identity(session, user)
         return self._session_out(identity)
 
@@ -100,12 +100,13 @@ class AuthService:
 
         Args: session, refresh_token。
         """
-        user_id = await self.tokens.consume_refresh(
+        grant = await self.tokens.consume_refresh_grant(
             refresh_token, now=self.clock()
         )
-        identity = await load_identity_by_id(session, user_id)
+        identity = await load_identity_by_id(session, grant.user_id)
         if identity is None:
             raise TokenInvalid("令牌对应的账号不存在")
+        grant.require_generation(identity.user.refresh_generation)
         if not identity.user.is_active:
             raise AccountDisabled("账号已停用，请联系管理员")
         return self._session_out(identity)
@@ -210,29 +211,54 @@ class AuthService:
             payload.current_password, user.hashed_password
         ):
             raise CurrentPasswordIncorrect("当前密码不正确")
-        user.hashed_password = await self.hasher.hash(payload.new_password)
-        await session.flush()
+        changed = await user_crud.rotate_password(
+            session,
+            user,
+            await self.hasher.hash(payload.new_password),
+        )
+        if not changed:
+            raise CurrentPasswordIncorrect("当前密码已变更，请重新登录")
         _logger.info("password_changed", "", user_id=str(user.id))
 
     async def _on_login_success(
-        self,
-        session: AsyncSession,
-        user: User,
-        password: str,
-        login_key: str,
-    ) -> None:
-        # 计数按登录入参走，同一账号的用户名键和邮箱键都可能积着失败次数
+        self, session: AsyncSession, user: User, password: str, login_key: str
+    ) -> User:
         for key in {login_key, user.username.lower(), user.email.lower()}:
             await self.login_limiter.reset(key)
-        user.last_login_at = self.clock()
-        # 升过散列参数的旧口令在这一刻顺带重算，用户无感
-        if self.hasher.needs_rehash(user.hashed_password):
-            user.hashed_password = await self.hasher.hash(password)
-        await session.flush()
-        _logger.info("login_succeeded", "", user_id=str(user.id))
+        generation = user.refresh_generation
+        upgraded = (
+            await self.hasher.hash(password)
+            if self.hasher.needs_rehash(user.hashed_password)
+            else None
+        )
+        confirmed = await user_crud.record_verified_login(
+            session, user, self.clock(), upgraded
+        )
+        if confirmed is None:
+            # 同一口令可能被另一登录按新参数重新散列，重新核对再签发。
+            current = await user_crud.get_with_role(
+                session, user.id, should_refresh=True
+            )
+            if current is None or current.refresh_generation != generation:
+                raise InvalidCredentials("用户名或密码错误")
+            if not current.is_active:
+                raise AccountDisabled("账号已停用，请联系管理员")
+            if not await self.hasher.verify(password, current.hashed_password):
+                raise InvalidCredentials("用户名或密码错误")
+            confirmed = await user_crud.record_verified_login(
+                session, current, self.clock(), None
+            )
+            if confirmed is None:
+                raise InvalidCredentials("登录期间凭据已更新，请重新登录")
+        _logger.info("login_succeeded", "", user_id=str(confirmed.id))
+        return confirmed
 
     def _session_out(self, identity: Identity) -> SessionOut:
-        pair = self.tokens.issue_pair(identity.user.id, now=self.clock())
+        pair = self.tokens.issue_pair(
+            identity.user.id,
+            generation=identity.user.refresh_generation,
+            now=self.clock(),
+        )
         return SessionOut(
             token=_to_token_out(pair), user=to_user_detail(identity)
         )

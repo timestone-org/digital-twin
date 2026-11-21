@@ -5,6 +5,7 @@
 """
 
 import uuid
+from datetime import datetime
 from typing import cast
 
 import pytest
@@ -46,7 +47,7 @@ USER = User(
 
 
 class FakeSession:
-    """登录路径只会 flush 一次，别的调用都该是缺陷。"""
+    """限流用例的会话替身，凭据读写通过 CRUD 注入。"""
 
     async def flush(self) -> None:
         return None
@@ -92,7 +93,16 @@ def known_account(monkeypatch: pytest.MonkeyPatch) -> None:
     def session_out(_self: AuthService, _identity: Identity) -> SessionOut:
         return cast("SessionOut", None)
 
+    async def record_login(
+        _session: AsyncSession,
+        user: User,
+        _at: datetime,
+        _upgraded_hash: str | None,
+    ) -> User:
+        return user
+
     monkeypatch.setattr(user_crud, "get_by_login", find_user)
+    monkeypatch.setattr(user_crud, "record_verified_login", record_login)
     monkeypatch.setattr(auth_module, "load_identity", identity_of)
     monkeypatch.setattr(AuthService, "_session_out", session_out)
 

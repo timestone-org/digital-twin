@@ -60,6 +60,13 @@ def postgres_available(settings: Settings) -> bool:
 
 
 @pytest.fixture
+def _database_required(postgres_available: bool) -> None:
+    """真实事务用例需要测试数据库。Args: postgres_available。"""
+    if not postgres_available:
+        pytest.skip("本机连不到测试 Postgres")
+
+
+@pytest.fixture
 async def container(settings: Settings) -> AsyncIterator[Container]:
     """真库 + 假缓存的容器。"""
     built = build_container(settings)
@@ -81,11 +88,9 @@ async def container(settings: Settings) -> AsyncIterator[Container]:
 
 @pytest.fixture
 async def app_client(
-    settings: Settings, postgres_available: bool
+    settings: Settings, _database_required: None
 ) -> AsyncIterator[httpx.AsyncClient]:
     """整装应用的客户端。每条用例一个回滚事务，用完不留痕。"""
-    if not postgres_available:
-        pytest.skip("本机连不到 Postgres")
     application = build_app(settings)
     built: Container = application.state.container
     swapped = _with_test_doubles(built)

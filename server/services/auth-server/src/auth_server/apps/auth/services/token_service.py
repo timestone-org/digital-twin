@@ -22,6 +22,7 @@ REFRESH_TYPE = "refresh"
 SESSION_KIND_CLAIM = "session_kind"
 EMBED_SESSION_KIND = "embed"
 EMBED_ACCESS_TTL_S = 300
+_REFRESH_GENERATION_CLAIM = "refresh_generation"
 _REVOKED_PREFIX = "auth:refresh:revoked:"
 _REVOKED_MARK = "true"
 _BEARER_PREFIX = "bearer "
@@ -49,6 +50,19 @@ class TokenPair:
 
 
 @dataclass(frozen=True)
+class RefreshGrant:
+    """刷新令牌代表的账号与改密代次。"""
+
+    user_id: uuid.UUID
+    generation: str | None
+
+    def require_generation(self, current: uuid.UUID | None) -> None:
+        """核对账号当前的刷新代次。Args: current。"""
+        if self.generation != (str(current) if current is not None else None):
+            raise TokenInvalid("密码已变更，请重新登录")
+
+
+@dataclass(frozen=True)
 class AccessToken:
     """一枚访问令牌与它的有效期。"""
 
@@ -66,11 +80,15 @@ class TokenService:
     refresh_ttl_s: int
 
     def issue_pair(
-        self, user_id: uuid.UUID, *, now: datetime | None = None
+        self,
+        user_id: uuid.UUID,
+        *,
+        generation: uuid.UUID | None = None,
+        now: datetime | None = None,
     ) -> TokenPair:
         """为一个用户签发一对新令牌。
 
-        Args: user_id, now。
+        Args: user_id, generation, now。
         """
         moment = now or utcnow()
         access, _ = self.codec.issue(
@@ -83,6 +101,11 @@ class TokenService:
             subject=str(user_id),
             token_type=REFRESH_TYPE,
             ttl_s=self.refresh_ttl_s,
+            extra=(
+                {_REFRESH_GENERATION_CLAIM: str(generation)}
+                if generation is not None
+                else None
+            ),
             now=moment,
         )
         return TokenPair(
@@ -127,6 +150,12 @@ class TokenService:
 
         Args: token, now。
         """
+        return (await self.consume_refresh_grant(token, now=now)).user_id
+
+    async def consume_refresh_grant(
+        self, token: str, *, now: datetime | None = None
+    ) -> RefreshGrant:
+        """一次性消费令牌并返回已签名的刷新凭据。Args: token, now。"""
         try:
             claims = self.codec.decode(token, expected_type=REFRESH_TYPE)
         except TokenError as error:
@@ -142,7 +171,10 @@ class TokenService:
                 "刷新令牌已失效，请重新登录",
                 context={"token_id": claims.token_id},
             )
-        return _subject_uuid(claims)
+        generation = claims.extra.get(_REFRESH_GENERATION_CLAIM)
+        if generation is not None and not isinstance(generation, str):
+            raise TokenInvalid("刷新令牌的账号代次无效")
+        return RefreshGrant(_subject_uuid(claims), generation)
 
     async def revoke_refresh(
         self, token: str, *, now: datetime | None = None

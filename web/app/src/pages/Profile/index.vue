@@ -155,7 +155,11 @@ async function onChangePassword(): Promise<void> {
       passwords.value.next,
     )
     passwords.value = { current: '', next: '', confirm: '' }
-    passwordState.value = { busy: false, note: '密码已修改', ok: true }
+    passwordState.value = {
+      busy: false,
+      note: '密码已修改。此前登录的设备需在当前会话到期后重新登录。',
+      ok: true,
+    }
   } catch (caught) {
     passwordState.value = {
       busy: false,

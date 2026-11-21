@@ -447,3 +447,92 @@ async def test_route_rule_list_supports_filtering(
     items = response.json()["data"]["items"]
     assert items
     assert all("sessions" in item["path_pattern"] for item in items)
+
+
+async def _login_tokens(
+    client: httpx.AsyncClient, username: str, password: str
+) -> dict[str, str]:
+    signed = await client.post(
+        f"{API_PREFIX}/sessions",
+        json={"username": username, "password": password},
+    )
+    assert signed.status_code == httpx.codes.CREATED
+    return signed.json()["data"]["token"]
+
+
+async def _renew(
+    client: httpx.AsyncClient, tokens: dict[str, str]
+) -> httpx.Response:
+    return await client.post(
+        f"{API_PREFIX}/sessions:refresh",
+        json={"refresh_token": tokens["refresh_token"]},
+    )
+
+
+@pytest.mark.parametrize("is_admin_reset", [False, True], ids=["self", "admin"])
+async def test_password_change_ends_only_the_target_refresh_sessions(
+    app_client: httpx.AsyncClient, is_admin_reset: bool
+) -> None:
+    name = "renewal-admin-target" if is_admin_reset else "renewal-self-target"
+    user = await new_user(app_client, name)
+    first = await _login_tokens(app_client, name, NEW_PASSWORD)
+    second = await _login_tokens(app_client, name, NEW_PASSWORD)
+    control = await _login_tokens(app_client, "admin", SEED_PASSWORD)
+    new_pass = "ChangedForTest125"
+    if is_admin_reset:
+        path = f"{API_PREFIX}/users/{user['id']}:reset-password"
+        body = {"new_password": new_pass}
+        access = control["access_token"]
+    else:
+        path = f"{API_PREFIX}/users/me:change-password"
+        body = {"current_password": NEW_PASSWORD, "new_password": new_pass}
+        access = first["access_token"]
+    result = await app_client.post(
+        path, json=body, headers={"Authorization": "Bearer " + access}
+    )
+    assert result.status_code == httpx.codes.NO_CONTENT
+    for original in (first, second):
+        denied = await _renew(app_client, original)
+        assert denied.status_code == httpx.codes.UNAUTHORIZED
+    assert (await _renew(app_client, control)).is_success
+    after = await _login_tokens(app_client, name, new_pass)
+    assert (await _renew(app_client, after)).is_success
+
+
+async def test_unsuccessful_password_change_preserves_renewal(
+    app_client: httpx.AsyncClient,
+) -> None:
+    name = "renewal-rejected-update"
+    await new_user(app_client, name)
+    tokens = await _login_tokens(app_client, name, NEW_PASSWORD)
+    result = await app_client.post(
+        f"{API_PREFIX}/users/me:change-password",
+        json={
+            "current_password": "WrongPassword125",
+            "new_password": "ChangedForTest125",
+        },
+        headers={"Authorization": "Bearer " + tokens["access_token"]},
+    )
+    assert result.status_code == httpx.codes.BAD_REQUEST
+    assert (await _renew(app_client, tokens)).is_success
+
+
+async def test_two_resets_revoke_each_distinct_generation(
+    app_client: httpx.AsyncClient,
+) -> None:
+    name = "renewal-two-resets"
+    user = await new_user(app_client, name)
+    tokens = await _login_tokens(app_client, name, NEW_PASSWORD)
+    headers = await admin(app_client)
+    for password in ("FirstResetFixture125", "SecondResetFixture125"):
+        result = await app_client.post(
+            f"{API_PREFIX}/users/{user['id']}:reset-password",
+            json={"new_password": password},
+            headers=headers,
+        )
+        assert result.status_code == httpx.codes.NO_CONTENT
+        assert (
+            await _renew(app_client, tokens)
+        ).status_code == httpx.codes.UNAUTHORIZED
+        tokens = await _login_tokens(app_client, name, password)
+    assert (await _renew(app_client, tokens)).is_success
