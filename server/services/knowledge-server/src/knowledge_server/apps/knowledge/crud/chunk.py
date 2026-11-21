@@ -2,12 +2,16 @@
 
 import uuid
 from collections.abc import Sequence
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
+from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import Integer, String, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from knowledge_server.apps.knowledge.models import KnowledgeChunk
+from knowledge_server.apps.knowledge.models import (
+    KnowledgeChunk,
+    KnowledgeDocument,
+)
 from knowledge_server.apps.knowledge.services.chunking import Chunk
 
 
@@ -76,3 +80,47 @@ async def count_chunks(session: AsyncSession, base_id: uuid.UUID) -> int:
         .where(KnowledgeChunk.base_id == base_id)
     )
     return int(found.scalar_one())
+
+
+@dataclass(frozen=True)
+class ChunkSlice:
+    """原文窗口与引用定位。"""
+
+    title: str
+    heading: str
+    locator: dict[str, Any]
+    text: str
+    total_chars: int
+
+
+async def read_slice(
+    session: AsyncSession,
+    base_id: uuid.UUID,
+    chunk_id: uuid.UUID,
+    offset: int,
+    limit: int,
+) -> ChunkSlice | None:
+    """从指定知识库中读取一块原文的字符窗口。
+
+    Args: session, base_id, chunk_id, offset, limit。
+    """
+    result = await session.execute(
+        select(
+            KnowledgeDocument.title,
+            KnowledgeChunk.heading_path,
+            KnowledgeChunk.locator_json,
+            func.substr(KnowledgeChunk.text, offset + 1, limit, type_=String),
+            func.char_length(KnowledgeChunk.text, type_=Integer),
+        )
+        .join(
+            KnowledgeDocument,
+            KnowledgeDocument.id == KnowledgeChunk.document_id,
+        )
+        .where(
+            KnowledgeChunk.id == chunk_id,
+            KnowledgeChunk.base_id == base_id,
+            KnowledgeDocument.base_id == base_id,
+        )
+    )
+    row = result.tuples().one_or_none()
+    return ChunkSlice(*row) if row is not None else None
