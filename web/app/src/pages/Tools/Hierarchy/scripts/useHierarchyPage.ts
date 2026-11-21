@@ -22,7 +22,7 @@ export function useHierarchyPage() {
     newTitle: state.newTitle,
     useSample: state.useSample,
     safe: controller.safe,
-    initialize: controller.initialize,
+    initialize: state.initialize,
     open: controller.open,
     reload: controller.reload,
     create: controller.create,
