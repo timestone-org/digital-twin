@@ -21,7 +21,7 @@ from langchain_core.messages import AIMessage
 from sqlalchemy import update
 
 from knowledge_server.apps.chat.crud import session_crud
-from knowledge_server.apps.chat.models import ChatSession
+from knowledge_server.apps.chat.models import ChatMessage, ChatSession
 from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.tools.client import (
     ASK_TOOL,
@@ -322,3 +322,75 @@ async def test_a_failed_turn_leaves_its_reason_and_a_good_one_clears_it(
 
     cleared = (await db_stack.client.get(f"{URL}/{session_id}")).json()["data"]
     assert cleared["last_error"] is None
+
+
+async def test_retained_failed_question_is_visible_but_not_used_on_resume(
+    db_stack: DbStack,
+) -> None:
+    model = ScriptedChat(
+        script=[
+            asks(ASK_TOOL, "retained-pending", question="哪台", options=[]),
+            AIMessage(content="已确认设备"),
+        ]
+    )
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+    await _advance(db_stack.client, session_id, user_text="先确认设备")
+    async with db_stack.sessions() as session:
+        session.add(
+            ChatMessage(
+                session_id=uuid.UUID(session_id),
+                seq=3,
+                role="user",
+                content_json={"text": "失败的旁边提问", "turn_failed": True},
+            )
+        )
+        await session.commit()
+
+    detail = await db_stack.client.get(f"{URL}/{session_id}")
+    saved = detail.json()["data"]["messages"][-1]
+    assert saved["content_json"]["text"] == "失败的旁边提问"
+    listed = await db_stack.client.get(URL)
+    assert session_id in [row["id"] for row in listed.json()["data"]["items"]]
+
+    events = await _advance(
+        db_stack.client,
+        session_id,
+        tool_results=[{"call_id": "retained-pending", "output": "一号"}],
+    )
+
+    assert events[-1][0] == "turn.done"
+    fed = [str(message.content) for message in model.seen[-1]]
+    assert "失败的旁边提问" not in fed
+    assert "先确认设备" in fed
+
+
+async def test_a_compatible_reader_can_complete_a_retained_question(
+    db_stack: DbStack,
+) -> None:
+    session_id = await _new_session(db_stack.client)
+    async with db_stack.sessions() as session:
+        session.add(
+            ChatMessage(
+                session_id=uuid.UUID(session_id),
+                seq=1,
+                role="user",
+                content_json={"text": "首轮问题", "turn_failed": True},
+            )
+        )
+        await session.commit()
+
+    before = (await db_stack.client.get(f"{URL}/{session_id}")).json()["data"]
+    model = ScriptedChat(reply=AIMessage(content="已查询"))
+    _install(db_stack, model)
+
+    assert (await _advance(db_stack.client, session_id, user_text="首轮问题"))[
+        -1
+    ][0] == "turn.done"
+
+    after = (await db_stack.client.get(f"{URL}/{session_id}")).json()["data"]
+    question, answer = after["messages"]
+    assert question["id"] == before["messages"][0]["id"]
+    assert question["content_json"] == {"text": "首轮问题"}
+    assert answer["role"] == "assistant"
+    assert [one.content for one in model.seen[0]].count("首轮问题") == 1

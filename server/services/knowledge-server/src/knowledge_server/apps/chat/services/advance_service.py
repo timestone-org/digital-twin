@@ -250,7 +250,9 @@ async def load_context(
 
     Args: session, chat_session_id。
     """
-    rows = await session_crud.messages_of(session, chat_session_id)
+    rows = await session_crud.messages_of(
+        session, chat_session_id, is_context_read=True
+    )
     row = await session.get(ChatSession, chat_session_id)
     return LoadedContext(
         rows=[_history_row(one) for one in rows],

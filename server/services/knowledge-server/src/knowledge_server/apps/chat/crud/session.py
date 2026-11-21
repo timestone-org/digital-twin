@@ -9,17 +9,24 @@ from collections.abc import Sequence
 
 from sqlalchemy import Select, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import ColumnElement
 
 from knowledge_server.apps.chat.models import (
     ChatMessage,
     ChatSession,
     ChatStep,
 )
+from knowledge_server.apps.chat.models.message import FAILED_QUESTION_KEY
 from lib.db import CrudBase
 
 # ⚠ 末位必须是唯一列：只按 `updated_at` 排的话，同一毫秒更新的两行在两次翻页
 # 之间可以换位置，于是分页会静默重复某一行、同时漏掉另一行
 DEFAULT_ORDER = (ChatSession.updated_at.desc(), ChatSession.id.asc())
+
+
+def _for_context() -> ColumnElement[bool]:
+    """排除只供回放显示的失败提问。"""
+    return ~ChatMessage.content_json.contains({FAILED_QUESTION_KEY: True})
 
 
 class SessionCrud(CrudBase[ChatSession]):
@@ -104,33 +111,49 @@ class SessionCrud(CrudBase[ChatSession]):
         )
         return int(found.scalar_one())
 
-    async def last_message_id(
+    async def last_message(
+        self, session: AsyncSession, chat_session_id: uuid.UUID
+    ) -> ChatMessage | None:
+        """读取物理末尾消息。调用方持有会话行锁。"""
+        return await session.scalar(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == chat_session_id)
+            .order_by(ChatMessage.seq.desc())
+            .limit(1)
+        )
+
+    async def last_context_message_id(
         self, session: AsyncSession, chat_session_id: uuid.UUID
     ) -> uuid.UUID | None:
-        """这次对话最后一条消息的 id；还没有消息时是 `None`。
+        """用于继续回合的最后一条消息的 id。
 
         Args: session, chat_session_id。
         """
         found = await session.execute(
             select(ChatMessage.id)
-            .where(ChatMessage.session_id == chat_session_id)
+            .where(ChatMessage.session_id == chat_session_id, _for_context())
             .order_by(ChatMessage.seq.desc())
             .limit(1)
         )
         return found.scalar_one_or_none()
 
     async def messages_of(
-        self, session: AsyncSession, chat_session_id: uuid.UUID
+        self,
+        session: AsyncSession,
+        chat_session_id: uuid.UUID,
+        *,
+        is_context_read: bool = False,
     ) -> list[ChatMessage]:
-        """一次对话的全部消息，按会话内序号升序。
+        """一次对话的消息，按会话内序号升序。
 
-        Args: session, chat_session_id。
+        Args: session, chat_session_id, is_context_read（是否用于模型和待续）。
         """
-        rows = await session.execute(
-            select(ChatMessage)
-            .where(ChatMessage.session_id == chat_session_id)
-            .order_by(ChatMessage.seq.asc())
+        statement = select(ChatMessage).where(
+            ChatMessage.session_id == chat_session_id
         )
+        if is_context_read:
+            statement = statement.where(_for_context())
+        rows = await session.execute(statement.order_by(ChatMessage.seq.asc()))
         return list(rows.scalars().all())
 
     async def steps_of(

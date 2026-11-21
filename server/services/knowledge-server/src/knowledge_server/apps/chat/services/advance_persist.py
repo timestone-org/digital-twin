@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.chat.crud import session_crud
 from knowledge_server.apps.chat.models import ChatMessage, ChatStep
+from knowledge_server.apps.chat.models.message import FAILED_QUESTION_KEY
 from knowledge_server.apps.chat.services.citations import CARRIED_KEY
 from lib.logging import get_logger
 from llmcore.memory import history
@@ -62,24 +63,54 @@ async def persist(
     async with sessions() as session:
         await session_crud.lock_session(session, chat_session_id)
         await session_crud.touch_session(session, chat_session_id)
-        seq = await session_crud.max_seq(session, chat_session_id)
-        written: list[ChatMessage] = []
-        for message in [*record.incoming, *record.outcome.messages]:
-            seq += 1
-            role, body = history.to_content(message)
-            row = ChatMessage(
-                session_id=chat_session_id,
-                seq=seq,
-                role=role,
-                content_json=body,
-            )
-            session.add(row)
-            written.append(row)
+        last = await session_crud.last_message(session, chat_session_id)
+        written = _write_messages(session, chat_session_id, last, record)
         # ⚠ 先 flush 拿到主键再挂步骤，且**必须自己攥着这些行**：flush 之后
         # 它们就从 `session.new` 里出去了
         await session.flush()
         _attach_steps(session, written, record)
         _attach_citations(written, record.citations)
+
+
+def _write_messages(
+    session: AsyncSession,
+    chat_session_id: uuid.UUID,
+    last: ChatMessage | None,
+    record: TurnRecord,
+) -> list[ChatMessage]:
+    incoming = [*record.incoming, *record.outcome.messages]
+    seq = last.seq if last is not None else 0
+    written: list[ChatMessage] = []
+    for message in incoming:
+        role, body = history.to_content(message)
+        if (
+            not written
+            and last is not None
+            and _same_failed_question(last, role, body)
+        ):
+            last.content_json = body
+            written.append(last)
+            continue
+        seq += 1
+        row = ChatMessage(
+            session_id=chat_session_id,
+            seq=seq,
+            role=role,
+            content_json=body,
+        )
+        session.add(row)
+        written.append(row)
+    return written
+
+
+def _same_failed_question(
+    row: ChatMessage, role: str, body: dict[str, Any]
+) -> bool:
+    return (
+        role == row.role == "user"
+        and row.content_json.get(FAILED_QUESTION_KEY) is True
+        and row.content_json.get("text") == body.get("text")
+    )
 
 
 def _attach_citations(

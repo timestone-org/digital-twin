@@ -56,10 +56,13 @@ class _Transaction:
             await self.database.row_lock.acquire()
             self.holds_lock = True
         await asyncio.sleep(0)
-        rows = list(self.database.committed)
-        top = max((row.seq for row in rows), default=0)
-        found = SimpleNamespace(all=lambda: rows)
-        return SimpleNamespace(scalars=lambda: found, scalar_one=lambda: top)
+        return SimpleNamespace()
+
+    async def scalar(self, _statement: ClauseElement) -> ChatMessage | None:
+        await asyncio.sleep(0)
+        return max(
+            self.database.committed, key=lambda row: row.seq, default=None
+        )
 
     def add(self, row: ChatMessage) -> None:
         self.pending.append(row)
