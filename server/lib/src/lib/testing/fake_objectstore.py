@@ -5,9 +5,11 @@
 """
 
 import asyncio
+from hashlib import sha256
 from pathlib import Path
 
 from lib.objectstore.base import (
+    ObjectChanged,
     ObjectNotFound,
     ObjectStat,
     PresignedPost,
@@ -31,11 +33,25 @@ class FakeObjectStore:
     ) -> None:
         self.objects[key] = (data, content_type)
 
+    async def put_if_absent(
+        self, key: str, data: bytes, *, content_type: str
+    ) -> bool:
+        """仅在键不存在时写入。Args: key, data, content_type。"""
+        if key in self.objects:
+            return False
+        self.objects[key] = (data, content_type)
+        return True
+
     async def get_bytes(self, key: str) -> bytes:
-        found = self.objects.get(key)
-        if found is None:
-            raise ObjectNotFound(f"对象不存在：{key}")
-        return found[0]
+        return self._current(key, None)[0]
+
+    async def read_prefix(
+        self, key: str, *, max_bytes: int, expected_etag: str
+    ) -> bytes:
+        """读取指定版本的前缀。Args: key, max_bytes, expected_etag。"""
+        if max_bytes <= 0:
+            raise ValueError("前缀长度必须为正数")
+        return self._current(key, expected_etag)[0][:max_bytes]
 
     async def download_to(self, key: str, path: Path) -> None:
         found = self.objects.get(key)
@@ -58,14 +74,32 @@ class FakeObjectStore:
             key=key,
             size_bytes=len(data),
             content_type=content_type,
-            etag=f"fake-{len(data)}",
+            etag=sha256(data).hexdigest(),
         )
 
-    async def copy(self, source_key: str, target_key: str) -> None:
-        found = self.objects.get(source_key)
+    async def copy(
+        self,
+        source_key: str,
+        target_key: str,
+        *,
+        expected_etag: str | None = None,
+    ) -> None:
+        """在同一版本上复制。Args: source_key, target_key, expected_etag。"""
+        self.objects[target_key] = self._current(source_key, expected_etag)
+
+    def _current(
+        self, key: str, expected_etag: str | None
+    ) -> tuple[bytes, str]:
+        """取当前对象并核对条件。Args: key, expected_etag。"""
+        found = self.objects.get(key)
         if found is None:
-            raise ObjectNotFound(f"对象不存在：{source_key}")
-        self.objects[target_key] = found
+            raise ObjectNotFound(f"对象不存在：{key}")
+        if (
+            expected_etag is not None
+            and sha256(found[0]).hexdigest() != expected_etag
+        ):
+            raise ObjectChanged("对象版本已变化")
+        return found
 
     async def delete(self, key: str) -> None:
         self.objects.pop(key, None)

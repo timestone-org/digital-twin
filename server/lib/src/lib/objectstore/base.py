@@ -28,6 +28,10 @@ class ObjectNotFound(ObjectStoreError):
     """要读的键不存在。"""
 
 
+class ObjectChanged(ObjectStoreError):
+    """对象版本不再符合调用条件。"""
+
+
 @dataclass(frozen=True)
 class ObjectStat:
     """一个对象的元信息。"""
@@ -70,8 +74,20 @@ class ObjectStore(Protocol):
         """写一个对象，已存在即覆盖。"""
         ...
 
+    async def put_if_absent(
+        self, key: str, data: bytes, *, content_type: str
+    ) -> bool:
+        """仅在键不存在时写入，返回本次是否创建对象。"""
+        ...
+
     async def get_bytes(self, key: str) -> bytes:
         """读一个对象；不存在抛 `ObjectNotFound`。"""
+        ...
+
+    async def read_prefix(
+        self, key: str, *, max_bytes: int, expected_etag: str
+    ) -> bytes:
+        """按对象版本读取有界前缀。"""
         ...
 
     async def download_to(self, key: str, path: Path) -> None:
@@ -88,8 +104,14 @@ class ObjectStore(Protocol):
         """取元信息；不存在给 None。"""
         ...
 
-    async def copy(self, source_key: str, target_key: str) -> None:
-        """服务端内复制，字节不经过本进程；源不存在抛 `ObjectNotFound`。"""
+    async def copy(
+        self,
+        source_key: str,
+        target_key: str,
+        *,
+        expected_etag: str | None = None,
+    ) -> None:
+        """服务端内复制，可核对源对象版本。"""
         ...
 
     async def delete(self, key: str) -> None:
