@@ -11,6 +11,7 @@ from knowledge_server.apps.knowledge.models.knowledge_base import (
     NAME_MAX_LENGTH,
     STRATEGIES,
 )
+from knowledge_server.apps.knowledge.schemas.reembedding import VectorStatus
 
 
 class KnowledgeBaseIn(BaseModel):
@@ -56,6 +57,7 @@ class KnowledgeBaseOut(BaseModel):
     # 「这个库还没建索引」，不是返回空表
     embedding_model: str | None
     dimensions: int | None
+    vector_status: VectorStatus = "unindexed"
     owner_id: str
     document_count: int
     created_at: datetime

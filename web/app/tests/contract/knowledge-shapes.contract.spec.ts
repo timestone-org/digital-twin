@@ -43,6 +43,7 @@ import {
   KNOWLEDGE_SOURCE_KINDS,
   KNOWLEDGE_STRATEGIES,
   KNOWLEDGE_VECTOR_LANES,
+  KNOWLEDGE_VECTOR_STATUSES,
 } from '@dt/contracts'
 
 interface OpenApiSchema {
@@ -105,6 +106,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     retrieval_strategy: true,
     embedding_model: true,
     dimensions: true,
+    vector_status: true,
     owner_id: true,
     document_count: true,
     created_at: true,
@@ -328,5 +330,14 @@ describe('知识库线形与 openapi 一致', () => {
   it('两路索引的档位名互不重复', () => {
     const names = [...KNOWLEDGE_VECTOR_LANES, ...KNOWLEDGE_KEYWORD_LANES]
     expect(new Set(names).size).toBe(names.length)
+  })
+})
+
+it('知识库报告完整的已发布向量状态，各状态与服务 OpenAPI 相符', () => {
+  const fields = schemas['KnowledgeBaseOut']?.properties
+  expect(fields?.['vector_status']).toMatchObject({
+    type: 'string',
+    default: 'unindexed',
+    enum: [...KNOWLEDGE_VECTOR_STATUSES],
   })
 })

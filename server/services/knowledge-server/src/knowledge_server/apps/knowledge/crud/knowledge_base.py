@@ -5,7 +5,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -145,3 +145,20 @@ async def delete_base(session: AsyncSession, base_id: uuid.UUID) -> int:
     # cast 的理由 —— DML 的 execute 运行期返回 CursorResult，而 AsyncSession
     # 的静态签名只承诺 Result，`rowcount` 在后者上不存在
     return max(0, cast("CursorResult[Any]", done).rowcount)
+
+
+async def unverified_vectors(
+    session: AsyncSession, bases: list[uuid.UUID]
+) -> set[uuid.UUID]:
+    """一次探测缺少历史模型名的库是否确有原索引。Args: session, bases。"""
+    if not bases:
+        return set()
+    rows = await session.scalars(
+        text("""
+        SELECT ids.base FROM unnest(CAST(:bases AS uuid[])) ids(base)
+        WHERE EXISTS (SELECT FROM knowledge.kb_chunk_embeddings e
+                      WHERE e.base_id=ids.base)
+    """),
+        {"bases": bases},
+    )
+    return set(rows)

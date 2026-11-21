@@ -254,6 +254,25 @@ schema `knowledge`，域前缀 `kb_`（database-standard §1）。
 的向量算不出有意义的余弦，而表现只是「召回忽然变差了」——没有任何一处会报错。
 换嵌入模型 = 建一个新库或整库重嵌，界面上要明说这件事。
 
+整库重嵌由管理员显式触发。预览返回当前目标模型、维数、空间摘要、库内容修订和文档/分块数。
+启动请求绑定该空间与修订，携带独立幂等键。任务在后台分批写入目标代次；确认所有原文块
+都有目标空间的向量、内容修订未变时，才在短事务中切换。
+
+| 操作 | 路径（前缀 `/api/v1/knowledge`） |
+| --- | --- |
+| 预览 | `POST /knowledge-bases/{id}/reembeddings:preview` |
+| 启动 | `POST /knowledge-bases/{id}/reembeddings` |
+| 进度或历史 | `GET /knowledge-bases/{id}/reembeddings`、`GET /knowledge-bases/{id}/reembeddings/{job_id}` |
+| 取消 | `POST /knowledge-bases/{id}/reembeddings/{job_id}:cancel` |
+
+这四项需要 `knowledge:manage`。旧向量没有能证明请求来源的标识时，界面显示待核验。
+已发布模型仍在目录中启用时沿用其准确身份；无法调用时保留可访问的原文和明确标识的关键词检索。
+单文档重解析和来源同步不会触发整库付费操作。部署向量列的维数仍由迁移固定。
+启动和取消都在提交后返回。提交应答意外丢失时，服务用第二个短事务核对已经持久化的任务和状态。
+核查暂不可用时会返回 503。管理员可查询原任务或用原幂等键重发启动请求。
+[知识库代次与切换条件](../server/services/knowledge-server/docs/adr/0002-知识库整库重嵌成功后切换代次.md)
+
+
 ⚠ **`content_hash` 是摄取的幂等键。** 同一份文件传两次不该解两遍、更不该在检索里
 出现两份。判据是内容哈希而不是文件名——文件名一改就当成新文档，是最常见的重复来源。
 

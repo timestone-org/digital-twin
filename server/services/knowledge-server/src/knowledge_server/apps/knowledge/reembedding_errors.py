@@ -1,6 +1,6 @@
 """整库重嵌管理面的拒绝原因。"""
 
-from lib.errors import Conflict, NotFound
+from lib.errors import Conflict, DependencyUnavailable, NotFound
 
 
 class PreviewChanged(Conflict):
@@ -21,3 +21,9 @@ class ReembeddingNotFound(NotFound):
 
 class ReembeddingKeyConflict(Conflict):
     code = 42334
+
+
+class ReceiptUnconfirmed(DependencyUnavailable):
+    code = 52335
+    is_outcome_unknown = True
+    is_retryable = False

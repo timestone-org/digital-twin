@@ -27,6 +27,13 @@ from knowledge_server.apps.knowledge.schemas import (
 from knowledge_server.apps.knowledge.schemas.source_config import (
     validate_source_config,
 )
+from knowledge_server.apps.knowledge.services.embedding import (
+    Embedder,
+    NullEmbedder,
+)
+from knowledge_server.apps.knowledge.services.embedding.space import (
+    status as vector_status,
+)
 from knowledge_server.apps.knowledge.services.sources import (
     UPLOAD_KIND,
     base_prefix,
@@ -37,6 +44,7 @@ from lib.web import Page, PageParams
 
 # 建库时自动建出来的那一路来源叫什么
 UPLOAD_SOURCE_NAME = "文件上传"
+_NO_EMBEDDER = NullEmbedder()
 
 
 @dataclass(frozen=True)
@@ -94,7 +102,7 @@ async def brief_bases(
                 name=one.name,
                 description=one.description,
                 strategy=one.retrieval_strategy,
-                is_indexed=one.embedding_model is not None,
+                is_indexed=one.embedding_space_id is not None,
             )
             for one in rows
         ],
@@ -120,6 +128,7 @@ async def base_page(
     rows: Sequence[KnowledgeBase],
     params: PageParams,
     total: int,
+    embedder: Embedder = _NO_EMBEDDER,
 ) -> Page[KnowledgeBaseOut]:
     """一页库连各自的文档数。
 
@@ -135,18 +144,36 @@ async def base_page(
     counts = await crud.document.counts_by_base(
         session, [one.id for one in rows]
     )
+    unverified = await crud.knowledge_base.unverified_vectors(
+        session,
+        [
+            row.id
+            for row in rows
+            if row.embedding_space_id is None
+            and row.embedding_model is None
+            and counts.get(row.id, 0) > 0
+        ],
+    )
     return Page[KnowledgeBaseOut](
-        items=[base_out(one, counts.get(one.id, 0)) for one in rows],
+        items=[
+            base_out(one, counts.get(one.id, 0), embedder, one.id in unverified)
+            for one in rows
+        ],
         page=params.page,
         size=params.size,
         total=total,
     )
 
 
-def base_out(row: KnowledgeBase, document_count: int) -> KnowledgeBaseOut:
+def base_out(
+    row: KnowledgeBase,
+    document_count: int,
+    embedder: Embedder = _NO_EMBEDDER,
+    has_legacy_vectors: bool = False,
+) -> KnowledgeBaseOut:
     """一行库摊成出参。
 
-    Args: row, document_count。
+    Args: row, document_count, embedder, has_legacy_vectors。
     """
     return KnowledgeBaseOut(
         id=row.id,
@@ -155,6 +182,13 @@ def base_out(row: KnowledgeBase, document_count: int) -> KnowledgeBaseOut:
         retrieval_strategy=row.retrieval_strategy,
         embedding_model=row.embedding_model,
         dimensions=row.dimensions,
+        vector_status=(
+            "legacy_unverified"
+            if has_legacy_vectors
+            else (
+                vector_status(row, embedder) if document_count else "unindexed"
+            )
+        ),
         owner_id=row.owner_id,
         document_count=document_count,
         created_at=row.created_at,

@@ -9,6 +9,7 @@ from knowledge_server.apps.knowledge.api import (
     capabilities,
     chunks,
     documents,
+    reembeddings,
     search,
     sources,
 )
@@ -16,6 +17,7 @@ from knowledge_server.apps.knowledge.api import (
 ROUTERS = (
     capabilities.router,
     bases.router,
+    reembeddings.router,
     sources.router,
     documents.router,
     search.router,

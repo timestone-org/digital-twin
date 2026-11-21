@@ -107,7 +107,7 @@ class ReembeddingSteps:
         try:
             await self.refresh()
         except Exception:
-            await self._fail(work, FAILED_BATCH)
+            await self._fail(work, "未能核实最新的模型目录，已保留当前索引")
             return
         batch = await self._read(work)
         if not batch:

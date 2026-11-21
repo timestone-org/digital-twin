@@ -5,6 +5,7 @@
  * 换成驼峰就要多一份映射，而映射写错时 typecheck 与 lint 双双放行。
  */
 import { ERROR_CODES } from './envelope'
+import type { KnowledgeVectorStatus } from './knowledgeEmbedding'
 
 /** 检索策略。与后端注册表的名字逐字一致，未登记的值后端一律 400。 */
 export const KNOWLEDGE_STRATEGIES = ['naive', 'hybrid', 'agentic'] as const
@@ -121,6 +122,7 @@ export interface KnowledgeBase {
    */
   embedding_model: string | null
   dimensions: number | null
+  vector_status?: KnowledgeVectorStatus
   owner_id: string
   document_count: number
   created_at: string

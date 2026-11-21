@@ -13,6 +13,10 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from knowledge_server.apps.knowledge.services.assembly import index_pair
+from knowledge_server.apps.knowledge.services.embedding import (
+    NullEmbedder,
+    SnapshotEmbedder,
+)
 from knowledge_server.apps.knowledge.services.embedding.catalog import (
     close_embedding,
 )
@@ -24,6 +28,10 @@ from knowledge_server.apps.knowledge.services.ingest_worker import (
     IngestConsumer,
 )
 from knowledge_server.apps.knowledge.services.parse_pool import RecyclingPool
+from knowledge_server.apps.knowledge.services.reembedding_worker import (
+    ReembeddingConsumer,
+    ReembeddingSteps,
+)
 from knowledge_server.container import Container, build_container
 from knowledge_server.schema import read_schema_facts
 from knowledge_server.settings import Settings
@@ -81,11 +89,36 @@ def build_runtime(container: Container, wait: Wait) -> WorkerRuntime:
     """
     pool = RecyclingPool()
     return WorkerRuntime(
-        consumers=(_ingest_consumer(container, pool),),
+        consumers=(
+            _ingest_consumer(container, pool),
+            ReembeddingConsumer(
+                ReembeddingSteps(
+                    container.database.session,
+                    (
+                        container.embedder
+                        if isinstance(container.embedder, SnapshotEmbedder)
+                        else NullEmbedder()
+                    ),
+                    _refresh_for_reembedding(container),
+                    container.settings.embedding_batch_size,
+                )
+            ),
+        ),
         container=container,
         wait=wait,
         pool=pool,
     )
+
+
+def _refresh_for_reembedding(
+    container: Container,
+) -> Callable[[], Awaitable[object]]:
+    """每次构建批次核对当前目录。Args: container。"""
+
+    async def refresh() -> object:
+        return await container.catalog.confirm_current()
+
+    return refresh
 
 
 def _ingest_consumer(

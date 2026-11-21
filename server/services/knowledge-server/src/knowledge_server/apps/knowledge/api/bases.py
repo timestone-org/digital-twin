@@ -77,7 +77,10 @@ async def create(
 
 @router.get("", response_model=ApiResponse[Page[KnowledgeBaseOut]])
 async def list_all(
-    session: SessionDep, _viewer: UseDep, params: PageDep
+    session: SessionDep,
+    _viewer: UseDep,
+    params: PageDep,
+    container: ContainerDep,
 ) -> ApiResponse[Page[KnowledgeBaseOut]]:
     """列一页知识库。
 
@@ -86,20 +89,29 @@ async def list_all(
     rows, total = await crud.knowledge_base.list_bases(
         session, offset=params.offset, limit=params.size
     )
-    return ok(await library_service.base_page(session, rows, params, total))
+    return ok(
+        await library_service.base_page(
+            session, rows, params, total, container.embedder
+        )
+    )
 
 
 @router.get("/{base_id}", response_model=ApiResponse[KnowledgeBaseOut])
 async def get_one(
-    session: SessionDep, _viewer: UseDep, base_id: uuid.UUID
+    session: SessionDep,
+    _viewer: UseDep,
+    base_id: uuid.UUID,
+    container: ContainerDep,
 ) -> ApiResponse[KnowledgeBaseOut]:
     """取一个知识库。
 
     Args: session, _viewer, base_id。
     """
     row = await library_service.read_base(session, base_id)
-    counts = await crud.document.counts_by_base(session, [row.id])
-    return ok(library_service.base_out(row, counts.get(row.id, 0)))
+    page = await library_service.base_page(
+        session, [row], PageParams(page=1, size=1), 1, container.embedder
+    )
+    return ok(page.items[0])
 
 
 @router.delete("/{base_id}", status_code=status.HTTP_204_NO_CONTENT)
