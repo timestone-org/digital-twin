@@ -105,7 +105,10 @@ async def test_budget_summary_is_persisted_and_http_history_remains_complete(
     original = await _seed_history(db_stack, session_id, is_long_request=False)
 
     streamed = await advance(
-        db_stack.client, session_id, user_text="继续完成当前要求。"
+        db_stack.client,
+        session_id,
+        client_tools=["dashboard.read_canvas"],
+        user_text="继续完成当前要求。",
     )
 
     assert streamed[-1] == ("turn.done", {"reply": "已按既定要求完成。"})
@@ -144,7 +147,10 @@ async def test_runtime_compression_streams_state_without_erasing_user_history(
     original = await _seed_history(db_stack, session_id, is_long_request=True)
 
     streamed = await advance(
-        db_stack.client, session_id, user_text="当前要求：不要修改用户数据。"
+        db_stack.client,
+        session_id,
+        client_tools=["dashboard.read_canvas"],
+        user_text="当前要求：不要修改用户数据。",
     )
 
     usage = [

@@ -9,10 +9,12 @@ from typing import TYPE_CHECKING
 
 from langchain_core.messages import BaseMessage
 
+from ai_assistant.apps.chat.errors import ChatContextTooLarge
 from ai_assistant.apps.chat.services.context_model import ContextModel
 from ai_assistant.apps.chat.services.model_retry import RetryingModel
 from llmcore.output.payloads import ContextPayload
 from llmcore.ports import ModelChoice
+from llmcore.turn.budget import ToolBatchTooLarge
 from llmcore.turn.loop import TurnDeps, TurnEvent, stream_turn
 
 if TYPE_CHECKING:
@@ -31,7 +33,11 @@ def context_model(
     return ContextModel(
         model=RetryingModel(deps.model),
         summarizer=deps.summarizer(choice.profile),
-        max_tokens=deps.context_tokens,
+        max_tokens=(
+            (deps.vision_context_tokens or deps.context_tokens)
+            if choice.kind == "vision"
+            else deps.context_tokens
+        ),
         report=report,
         pinned_text=pinned_text,
     )
@@ -67,6 +73,8 @@ async def _pump(
     try:
         async for item in stream_turn(deps, messages):
             queue.put_nowait(item)
+    except ToolBatchTooLarge as error:
+        queue.put_nowait(ChatContextTooLarge(error.message))
     except Exception as error:
         queue.put_nowait(error)
     finally:

@@ -414,6 +414,13 @@ async def test_writing_a_plan_streams_a_snapshot_and_persists_it(
     stored = detail.json()["data"]["plan_json"]
     assert stored is not None
     assert stored["title"] == "绑完整屏"
+    last_input = model.seen[-1]
+    assert "你正在做第 1 项" in str(last_input[-1].content)
+    assert "读画布" in str(last_input[-1].content)
+    assert (
+        sum("## 当前计划" in str(message.content) for message in last_input)
+        == 1
+    )
 
 
 async def test_the_plan_reaches_the_next_rounds_prompt(
@@ -470,3 +477,41 @@ async def test_a_new_turn_moves_the_session_to_the_top(
     after = (await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")).json()
     assert datetime.fromisoformat(after["data"]["updated_at"]) > long_ago
     assert after["data"]["row_version"] == before.json()["data"]["row_version"]
+
+
+async def test_context_refusal_keeps_already_completed_tool_receipts(
+    db_stack: DbStack,
+) -> None:
+    model = ScriptedChat(
+        script=[
+            _asks(
+                "plan.write",
+                "saved-plan",
+                title="保留执行记录",
+                items=[{"title": "已经执行", "status": "in_progress"}],
+            ),
+            _asks("tools.describe", "oversized-call", name="x" * 100_000),
+        ]
+    )
+    _install(db_stack, model)
+    session_id = await _new_session(db_stack.client)
+    events = await _advance(
+        db_stack.client, session_id, user_text="规划并核验工具"
+    )
+    assert events[-1][0] == "error"
+    assert events[-1][1]["code"] == 42203
+    detail = await db_stack.client.get(f"{SESSIONS_URL}/{session_id}")
+    data = detail.json()["data"]
+    assert data["plan_json"]["title"] == "保留执行记录"
+    messages = data["messages"]
+    assert messages[0]["role"] == "user"
+    assert any(
+        message["role"] == "tool"
+        and "保留执行记录" in json.dumps(message, ensure_ascii=False)
+        for message in messages
+    )
+    steps = [step for message in messages for step in message["steps"]]
+    assert any(
+        step["name"] == "plan.write" and step["state"] == "succeeded"
+        for step in steps
+    )

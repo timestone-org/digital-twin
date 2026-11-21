@@ -15,6 +15,10 @@ from langchain_core.messages import (
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
+from ai_assistant.apps.chat.services.context_tags import (
+    IMAGE_CALL_ID,
+    STATE_SLOT,
+)
 from llmcore.memory import HistoryRow, Summary, history
 
 ASCII_MAX = 127
@@ -70,8 +74,12 @@ def split_messages(
         for message in messages
         if isinstance(message, SystemMessage)
         or _matches_request(message, pinned_text)
+        or message.additional_kwargs.get(STATE_SLOT)
     ]
-    candidates = [message for message in messages if message not in pinned]
+    protected = {id(message) for message in pinned}
+    candidates = [
+        message for message in messages if id(message) not in protected
+    ]
     cut = 0
     while (
         cut < max(0, len(candidates) - MIN_RECENT_MESSAGES)
@@ -82,15 +90,58 @@ def split_messages(
             break
         cut = boundary
     dropped = candidates[:cut]
-    kept_ids = {id(message) for message in [*pinned, *candidates[cut:]]}
+    kept_ids = protected | {id(message) for message in candidates[cut:]}
     return dropped, [message for message in messages if id(message) in kept_ids]
+
+
+def required_messages(
+    messages: Sequence[BaseMessage], pinned_text: str | None
+) -> list[BaseMessage]:
+    kept: set[int] = set()
+    pending: set[str] = set()
+    group: set[int] = set()
+    for message in messages:
+        if isinstance(message, SystemMessage) or message.additional_kwargs.get(
+            STATE_SLOT
+        ):
+            kept.add(id(message))
+            continue
+        if _matches_request(message, pinned_text):
+            kept.add(id(message))
+            group.clear()
+            pending.clear()
+            continue
+        if isinstance(message, AIMessage):
+            pending = {str(call["id"]) for call in message.tool_calls}
+            group = {id(message)} if pending else set()
+            continue
+        if (
+            isinstance(message, ToolMessage) and message.tool_call_id in pending
+        ) or message.additional_kwargs.get(IMAGE_CALL_ID) in pending:
+            group.add(id(message))
+    if pinned_text is None:
+        kept.update(_latest_request_id(messages))
+    protected = kept | group
+    return [message for message in messages if id(message) in protected]
+
+
+def _latest_request_id(messages: Sequence[BaseMessage]) -> set[int]:
+    for message in reversed(messages):
+        if (
+            isinstance(message, HumanMessage)
+            and not message.additional_kwargs.get(STATE_SLOT)
+            and IMAGE_CALL_ID not in message.additional_kwargs
+        ):
+            return {id(message)}
+    return set()
 
 
 def _next_boundary(candidates: Sequence[BaseMessage], cut: int) -> int:
     """下一个不拆工具批次的切点；Args: candidates, cut。"""
     boundary = cut + 1
-    while boundary < len(candidates) and isinstance(
-        candidates[boundary], ToolMessage
+    while boundary < len(candidates) and (
+        isinstance(candidates[boundary], ToolMessage)
+        or IMAGE_CALL_ID in candidates[boundary].additional_kwargs
     ):
         boundary += 1
     return boundary
