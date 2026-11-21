@@ -265,6 +265,42 @@ async def test_editing_one_column_keeps_the_collected_value(
     assert record["overrides"]["温度"]["value"] == 25.0
 
 
+async def test_partial_edit_keeps_omitted_required_manual_values(
+    app_client: httpx.AsyncClient,
+) -> None:
+    table = await create_table(app_client)
+    table_id = str(table["id"])
+    await create_column(app_client, table_id, key="产量", is_required=True)
+    await create_column(app_client, table_id, key="水量")
+    before = await create_record(
+        app_client, table_id, ts=FIRST_MOMENT, values={"产量": 30, "水量": 12}
+    )
+    target = record_url(table_id, before["record"]["row_id"], FIRST_MOMENT)
+
+    changed = await app_client.patch(target, json={"values": {"水量": 18}})
+    assert changed.status_code == 200, changed.text
+    assert data_of(changed)["record"]["values"] == {"产量": 30, "水量": 18}
+
+    cleared = await app_client.patch(target, json={"values": {"水量": None}})
+    assert cleared.status_code == 200, cleared.text
+    assert data_of(cleared)["record"]["values"] == {"产量": 30, "水量": None}
+
+
+async def test_explicit_null_cannot_clear_a_required_manual_value(
+    app_client: httpx.AsyncClient,
+) -> None:
+    table_id = await seed_table(app_client, key="产量", is_required=True)
+    before = await create_record(
+        app_client, table_id, ts=FIRST_MOMENT, values={"产量": 30}
+    )
+    target = record_url(table_id, before["record"]["row_id"], FIRST_MOMENT)
+
+    rejected = await app_client.patch(target, json={"values": {"产量": None}})
+    assert rejected.status_code == HTTP_BAD_REQUEST
+    assert code_of(rejected) == RECORD_INVALID
+    assert rejected.json()["details"][0]["field"] == "values[产量]"
+
+
 async def test_changing_the_data_time_keeps_the_row_identity(
     app_client: httpx.AsyncClient,
 ) -> None:

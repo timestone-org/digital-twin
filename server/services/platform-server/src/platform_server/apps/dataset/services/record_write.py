@@ -73,6 +73,7 @@ from platform_server.apps.dataset.services.record_values import (
     SanitizedValues,
     merge_overrides,
     merge_values,
+    require_filled,
     sanitize,
 )
 from platform_server.apps.dataset.services.sessions import Sessions
@@ -146,6 +147,7 @@ async def create_record(
     """
     table, columns, scope = await writer.prepare(table_id)
     values = sanitize(payload.values, columns, actor=writer.actor)
+    require_filled(values.values, columns)
     _require_some_value(values, columns)
     slot = await _slot_of(session, writer, table, _stamp(payload.ts))
     if slot.existing is not None:
@@ -303,6 +305,7 @@ async def update_record(
     record = await require_record(session, locator)
     values = sanitize(payload.values, columns, actor=writer.actor)
     merged = merge_values(record.values_json, values)
+    require_filled(merged, columns)
     overrides = merge_overrides(record.overrides_json, values)
     stamp = record.ts
     if payload.ts is not None:
