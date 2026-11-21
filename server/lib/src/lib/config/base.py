@@ -49,7 +49,6 @@ class AppSettings(EnvSettings):
     app_http_port: int = 8000
     # 优雅关停时等待在途工作的上限，必须小于编排器的宽限期
     app_drain_timeout_s: float = 20.0
-    app_trace_sample_ratio: float = Field(default=0.1, ge=0.0, le=1.0)
 
     @field_validator("app_log_level", mode="before")
     @classmethod

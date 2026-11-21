@@ -137,9 +137,11 @@ def test_settings_object_is_frozen() -> None:
         settings.postgres_host = "other"
 
 
-def test_trace_sample_ratio_is_bounded() -> None:
-    with pytest.raises(ValidationError):
-        make(app_trace_sample_ratio=1.5)
+def test_retired_trace_sample_ratio_cannot_block_startup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SAMPLE_APP_TRACE_SAMPLE_RATIO", "invalid")
+    assert make().app_name == "service"
 
 
 def test_an_unknown_log_level_is_rejected_at_load_time() -> None:
