@@ -62,6 +62,9 @@ class AcModel(UuidPrimaryKeyMixin, TimestampMixin, Base):
         server_default=text(f"'{MODEL_STATUS_QUEUED}'"),
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    training_dispatch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True)
+    )
     feature_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     trained_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
