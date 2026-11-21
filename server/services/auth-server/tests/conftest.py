@@ -156,6 +156,7 @@ def _with_test_doubles(built: Container) -> Container:
         api_keys=api_keys,
         hasher=built.auth.hasher,
         login_limiter=_relimit(built.auth.login_limiter, cache),
+        account_login_limiter=_relimit(built.auth.account_login_limiter, cache),
         signup_limiter=_relimit(built.auth.signup_limiter, cache),
         signup_enabled=built.auth.signup_enabled,
         signup_default_role=built.auth.signup_default_role,

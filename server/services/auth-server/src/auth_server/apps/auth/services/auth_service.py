@@ -57,6 +57,16 @@ _TIMING_DECOY = (
 )
 
 
+async def _take_login_attempt(limiter: FixedWindowLimiter, key: str) -> None:
+    """记一次登录尝试，保持登录面专属错误码。Args: limiter, key。"""
+    try:
+        await limiter.hit(key)
+    except RateLimited as error:
+        raise TooManyLoginAttempts(
+            error.message, context=error.context
+        ) from error
+
+
 @dataclass(frozen=True)
 class AuthService:
     """会话面的业务逻辑。事务边界在这一层。"""
@@ -65,6 +75,7 @@ class AuthService:
     api_keys: ApiKeyService
     hasher: BoundedHasher
     login_limiter: FixedWindowLimiter
+    account_login_limiter: FixedWindowLimiter
     signup_limiter: FixedWindowLimiter
     signup_enabled: bool
     signup_default_role: str
@@ -73,25 +84,21 @@ class AuthService:
     async def login(
         self, sessions: SessionFactory, *, login: str, password: str
     ) -> SessionOut:
-        """账号口令登录。失败次数按账号限流。
+        """账号口令登录，按登录标识及稳定账号分别计数。
 
         Args: sessions, login（用户名或邮箱）, password。
         """
         login_key = login.strip().lower()
-        try:
-            await self.login_limiter.hit(login_key)
-        except RateLimited as error:
-            # 登录场景有自己的错误码，前端按它给文案；通用限流码对不上
-            raise TooManyLoginAttempts(
-                error.message, context=error.context
-            ) from error
+        await _take_login_attempt(self.login_limiter, login_key)
         async with sessions() as session:
             user = await user_crud.get_by_login(session, login)
             credentials = LoginCredentials.from_user(user) if user else None
         if credentials is None:
             await self.hasher.verify(password, _TIMING_DECOY)
             raise InvalidCredentials("用户名或密码错误")
-        await self._verify_login_password(credentials, password)
+        await self._verify_login_password(
+            credentials, password, attempt_limiter=self.account_login_limiter
+        )
         upgraded = (
             await self.hasher.hash(password)
             if self.hasher.needs_rehash(credentials.hashed_password)
@@ -103,6 +110,7 @@ class AuthService:
                 sessions, credentials, password
             )
         user = identity.user
+        await self.account_login_limiter.reset(str(user.id))
         for key in {login_key, user.username.lower(), user.email.lower()}:
             await self.login_limiter.reset(key)
         _logger.info("login_succeeded", "", user_id=str(user.id))
@@ -236,9 +244,19 @@ class AuthService:
         _logger.info("password_changed", "", user_id=str(user.id))
 
     async def _verify_login_password(
-        self, credentials: LoginCredentials, password: str
+        self,
+        credentials: LoginCredentials,
+        password: str,
+        *,
+        attempt_limiter: FixedWindowLimiter | None = None,
     ) -> None:
-        if not await self.hasher.verify(password, credentials.hashed_password):
+        verified = await self.hasher.verify(
+            password, credentials.hashed_password
+        )
+        # 同一次登录的并发重散列校验沿用首次计数。
+        if attempt_limiter is not None:
+            await _take_login_attempt(attempt_limiter, str(credentials.user_id))
+        if not verified:
             _logger.info(
                 "login_failed", "口令不符", user_id=str(credentials.user_id)
             )

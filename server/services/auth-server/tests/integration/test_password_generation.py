@@ -235,6 +235,34 @@ async def test_login_releases_the_connection_for_hashes_and_cache(
     assert all(count == 0 for _, count in observed), observed
 
 
+async def test_account_attempt_uses_the_released_database_pool(
+    container: Container, account: UUID, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with container.database.session() as session:
+        user = await session.get(User, account)
+        assert user is not None
+        login = user.email
+    pool = container.database.engine.sync_engine.pool
+    assert isinstance(pool, AsyncAdaptedQueuePool)
+    observed: list[tuple[str, str, int]] = []
+    hit_attempt = FixedWindowLimiter.hit
+
+    async def hit(limiter: FixedWindowLimiter, key: str) -> int:
+        observed.append((limiter.namespace, key, pool.checkedout()))
+        return await hit_attempt(limiter, key)
+
+    monkeypatch.setattr(FixedWindowLimiter, "hit", hit)
+    saved = await container.auth.login(
+        container.database.session, login=login, password=INITIAL
+    )
+
+    assert saved.user.id == account
+    assert observed == [
+        ("login", login.lower(), 0),
+        ("login-account", str(account), 0),
+    ]
+
+
 async def test_login_requires_a_committed_success_record(
     container: Container,
     account: UUID,

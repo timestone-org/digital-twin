@@ -9,6 +9,7 @@ import threading
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from typing import cast
 
 import pytest
@@ -110,6 +111,7 @@ def build_auth(spy: SpyHasher) -> AuthService:
         api_keys=cast("ApiKeyService", None),
         hasher=bounded(spy),
         login_limiter=limiter,
+        account_login_limiter=replace(limiter, namespace="login-account"),
         signup_limiter=limiter,
         signup_enabled=False,
         signup_default_role="viewer",
