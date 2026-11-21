@@ -7,11 +7,13 @@ import asyncio
 import contextlib
 import json
 from collections.abc import Mapping, Sequence
+from typing import Protocol
 from uuid import UUID
 
 from collector_server.apps.collect import tuning
 from collector_server.apps.collect.drivers.base import Sample, ValueSink
 from collector_server.apps.collect.tuning import PlanView
+from collector_server.clock import utc_now_ms
 from collector_server.snapshot import SnapshotStore
 from collectwire import (
     FIELD_QUALITY,
@@ -54,6 +56,10 @@ class ValueBuffer:
         """取走这一窗的全部读数，并换上一个空字典。"""
         pending, self._values = self._values, {}
         return pending
+
+    def discard(self, point_code: str) -> None:
+        """丢掉失效点位尚未刷新的读数。Args: point_code。"""
+        self._values.pop(point_code, None)
 
     def size(self) -> int:
         """当前窗内的点位数。"""
@@ -100,6 +106,15 @@ def encode_fields(pending: Mapping[str, Sample]) -> dict[str, str]:
     }
 
 
+class SnapshotLiveness(Protocol):
+    """快照写入端所需的租约与数据源在线状态。"""
+
+    @property
+    def is_leader(self) -> bool: ...
+
+    def is_online(self, source_id: UUID) -> bool: ...
+
+
 class SnapshotSink:
     """全部数据源的窗口缓冲，加一条定期落 Redis 的循环。"""
 
@@ -121,7 +136,12 @@ class SnapshotSink:
         self._interval_ms = interval_ms
         self._ttl_s = ttl_s
         self._plan = plan
+        self._liveness: SnapshotLiveness | None = None
         self._buffers: dict[UUID, ValueBuffer] = {}
+        self._invalidations: dict[UUID, dict[str, Sample]] = {}
+        self._plan_version: str | None = None
+        self._planned_points: dict[UUID, frozenset[str]] = {}
+        self._reconciled_points: dict[UUID, frozenset[str]] = {}
         # ⚠ flush 与清理互斥：写键与删键走的是两条连接，交错了就会让一个已经
         # 停采的数据源被自己的尾帧重新写回去，那份值还要再当一个 TTL 的实时值
         self._lock = asyncio.Lock()
@@ -135,6 +155,13 @@ class SnapshotSink:
         """因写入失败被丢掉的读数条数。静默丢弃最难查，所以要能读出来。"""
         return self._dropped
 
+    def bind_liveness(self, liveness: SnapshotLiveness) -> None:
+        """挂上运行状态，供快照续期和清理使用。
+
+        Args: liveness。
+        """
+        self._liveness = liveness
+
     def sink_for(self, source_id: UUID) -> ValueSink:
         """取一个数据源的 ValueSink，交给驱动当回调。
 
@@ -142,6 +169,17 @@ class SnapshotSink:
         """
         buffer = self._buffers.setdefault(source_id, ValueBuffer())
         return buffer.record
+
+    def invalidate_point(self, source_id: UUID, point_code: str) -> None:
+        """把点位置为坏质量。Args: source_id, point_code。"""
+        if self._holds_lease():
+            buffer = self._buffers.setdefault(source_id, ValueBuffer())
+            buffer.discard(point_code)
+            self._invalidations.setdefault(source_id, {})[point_code] = (
+                None,
+                utc_now_ms(),
+                "bad",
+            )
 
     async def start(self) -> None:
         """起 flush 循环。"""
@@ -160,22 +198,67 @@ class SnapshotSink:
             await task
         await self.flush_once()
 
+    def discard_windows(self) -> None:
+        """丢主时断开旧会话的缓冲，保留源身份供下一任清理。"""
+        self._buffers = {source: ValueBuffer() for source in self._buffers}
+        self._invalidations.clear()
+        self._reconciled_points.clear()
+
     async def flush_once(self) -> None:
-        """清掉退出计划的数据源，再把这一窗的读数整批写进 Redis。"""
+        """按采集计划清理快照，再用同一次租约写出这一窗。"""
         async with self._lock:
-            await self._prune()
+            lease_token = self._store.lease_token
+            if lease_token is None or not self._holds_lease():
+                self._reconciled_points.clear()
+                return
+            wanted = self._plan_points()
+            await self._prune(wanted, lease_token)
+            if not self._owns_window(lease_token):
+                return
+            wanted = self._plan_points()
+            invalidations = self._take_invalidations()
             pending: dict[UUID, dict[str, Sample]] = {}
             quiet: list[UUID] = []
             for source_id, buffer in list(self._buffers.items()):
                 window = buffer.swap()
+                invalid = invalidations.get(source_id)
+                if invalid:
+                    window = invalid | window
+                if wanted is not None:
+                    point_codes = wanted.get(source_id)
+                    if point_codes is None:
+                        continue
+                    window = {
+                        code: sample
+                        for code, sample in window.items()
+                        if code in point_codes
+                    }
                 if window:
                     pending[source_id] = window
                 else:
                     quiet.append(source_id)
-            await self._write(pending)
-            await self._keepalive(quiet)
+            if not await self._write(
+                pending, invalidations, lease_token
+            ) and self._owns_window(lease_token):
+                self._retry_invalidations(invalidations)
+            await self._keepalive(quiet, lease_token)
 
-    async def _keepalive(self, source_ids: Sequence[UUID]) -> None:
+    def _take_invalidations(self) -> dict[UUID, dict[str, Sample]]:
+        pending, self._invalidations = self._invalidations, {}
+        return pending if self._holds_lease() else {}
+
+    def _retry_invalidations(
+        self, pending: Mapping[UUID, dict[str, Sample]]
+    ) -> None:
+        if self._holds_lease():
+            for source_id, invalid in pending.items():
+                self._invalidations[source_id] = (
+                    invalid | self._invalidations.get(source_id, {})
+                )
+
+    async def _keepalive(
+        self, source_ids: Sequence[UUID], lease_token: str
+    ) -> None:
         """给这一窗没有新读数的数据源续一次存活期。
 
         ⚠ 少了这一步，一个「一天变一次」的点位会在 TTL 到期时**整片消失**：
@@ -183,16 +266,23 @@ class SnapshotSink:
         「这个点位没有值」与「它的值一直没变」。
         ⚠ 续期不等于凭空造键：EXPIRE 打在不存在的键上什么都不做，所以从没上报
         过读数的数据源不会因为保活冒出一个空快照。
-        ⚠ 只要采集进程还活着就续：因此「键还在」说的是「collector 还在管这个
-        数据源」，**不是**「现场设备此刻连着」——设备断没断由数据源运行态说
-        （`SourceStatus`），不由值的年龄猜。
+        ⚠ 只有持有租约且当前计划中的数据源在线才续；否则快照按 TTL 回收。
 
         Args: source_ids。
         """
+        if not self._owns_window(lease_token):
+            return
+        if self._plan is not None and self._current_plan() is None:
+            return
+        liveness = self._liveness
+        if liveness is not None:
+            source_ids = [sid for sid in source_ids if liveness.is_online(sid)]
         if not source_ids:
             return
         try:
-            await self._store.touch(source_ids, ttl_s=self._ttl_s_now())
+            await self._store.touch(
+                source_ids, ttl_s=self._ttl_s_now(), lease_token=lease_token
+            )
         except Exception as error:
             _logger.warning(
                 "snapshot_keepalive_failed",
@@ -201,27 +291,70 @@ class SnapshotSink:
                 error_type=type(error).__name__,
             )
 
-    async def _prune(self) -> None:
-        """把已经不在计划里的数据源连缓冲带快照一起清掉。
-
-        ⚠ 停采的数据源必须**立刻**没有当前值，不能只等 TTL 到期：那段时间里
-        大屏与配置页上它看起来还在实时刷新，而现场其实早就断开了——「返回陈旧
-        数据必须标注为陈旧」，而已经停采的值连标注的资格都没有
-        （runtime-resilience §9）。下一次启用时值由重新建立的会话现产。
-        ⚠ 依据是计划而不是会话有没有拆完：会话拆除有它自己的时序与失败，而计划
-        是唯一真源，每一拍都按它对一次账。
-        ⚠ 拿不到计划就什么都不清：那时「计划里没有它」说的是我们不知道，不是
-        它不该被采（ADR-0001）。
-        """
+    def _plan_points(self) -> dict[UUID, frozenset[str]] | None:
+        """按计划版本缓存各数据源的点位编码。"""
         plan = self._current_plan()
         if plan is None:
-            return
-        wanted = {source.source_id for source in plan.sources}
-        for source_id in list(self._buffers):
-            if source_id not in wanted:
-                await self._forget(source_id)
+            return None
+        if plan.version != self._plan_version:
+            self._planned_points = {
+                source.source_id: frozenset(p.point_code for p in source.points)
+                for source in plan.sources
+            }
+            self._plan_version = plan.version
+        return self._planned_points
 
-    async def _forget(self, source_id: UUID) -> None:
+    async def _prune(
+        self, wanted: Mapping[UUID, frozenset[str]] | None, lease_token: str
+    ) -> None:
+        """按当前计划清除停采的数据源与点位快照。
+
+        ⚠ 接任前任副本的快照也要清理；单看内存中的新旧计划看不到遗留字段。
+
+        Args: wanted。
+        """
+        if wanted is None:
+            self._reconciled_points.clear()
+            return
+        for source_id in list(self._buffers):
+            if not self._owns_window(lease_token):
+                return
+            point_codes = wanted.get(source_id)
+            if point_codes is None:
+                self._reconciled_points.pop(source_id, None)
+                await self._forget(source_id, lease_token)
+                continue
+            reconciled = self._reconciled_points.get(source_id)
+            if reconciled is point_codes:
+                continue
+            if reconciled == point_codes:
+                self._reconciled_points[source_id] = point_codes
+            else:
+                await self._retain_points(source_id, point_codes, lease_token)
+
+    async def _retain_points(
+        self, source_id: UUID, point_codes: frozenset[str], lease_token: str
+    ) -> None:
+        """清掉停采点位的字段，清理成功后才记住这份点位清单。
+
+        Args: source_id, point_codes。
+        """
+        try:
+            await self._store.retain_fields(
+                source_id, point_codes, lease_token=lease_token
+            )
+        except Exception as error:
+            _logger.warning(
+                "snapshot_field_cleanup_failed",
+                "无法清除停采点位的快照字段，下一轮继续",
+                source_id=str(source_id),
+                error_type=type(error).__name__,
+            )
+            return
+        if self._owns_window(lease_token):
+            self._reconciled_points[source_id] = point_codes
+
+    async def _forget(self, source_id: UUID, lease_token: str) -> None:
         """丢掉一个数据源的缓冲，并删掉它在 Redis 上的快照。
 
         ⚠ 删不掉只记日志不抛：清理失败不该带走整条 flush 循环。缓冲已经丢了，
@@ -230,8 +363,9 @@ class SnapshotSink:
         Args: source_id。
         """
         self._buffers.pop(source_id, None)
+        self._invalidations.pop(source_id, None)
         try:
-            await self._store.drop(source_id)
+            await self._store.drop(source_id, lease_token=lease_token)
         except Exception as error:
             _logger.warning(
                 "snapshot_drop_failed",
@@ -247,9 +381,12 @@ class SnapshotSink:
         )
 
     async def _write(
-        self, pending: Mapping[UUID, Mapping[str, Sample]]
-    ) -> None:
-        """把这一窗各数据源的读数整批写出去。
+        self,
+        pending: Mapping[UUID, Mapping[str, Sample]],
+        invalidations: Mapping[UUID, dict[str, Sample]],
+        lease_token: str,
+    ) -> bool:
+        """把这一窗各数据源的读数整批写出去，返回是否成功。
 
         ⚠ **一批一个往返**：按数据源逐个写会让一拍的耗时随数据源数线性涨，
         而窗口默认只有 300ms。整批是一次 MULTI/EXEC，成败也因此是整批的——
@@ -261,10 +398,10 @@ class SnapshotSink:
         而漏网的那一类会顺着 flush 逃出去带走整条循环——快照就此永久停摆，
         而进程还活着、探针还绿着。
 
-        Args: pending（数据源 → 这一窗的读数）。
+        Args: pending（数据源 → 这一窗的读数）, invalidations。
         """
         if not pending:
-            return
+            return True
         try:
             await self._store.write_many(
                 {
@@ -272,18 +409,25 @@ class SnapshotSink:
                     for source_id, window in pending.items()
                 },
                 ttl_s=self._ttl_s_now(),
+                lease_token=lease_token,
             )
         except Exception as error:
-            dropped = sum(len(window) for window in pending.values())
+            dropped = sum(
+                sample is not invalidations.get(source_id, {}).get(code)
+                for source_id, window in pending.items()
+                for code, sample in window.items()
+            )
             self._dropped += dropped
             _logger.error(
                 "snapshot_write_failed",
-                "快照写入失败，本窗读数已丢弃",
+                "快照写入失败，读数已丢弃，点位失效标记将重试",
                 sources=len(pending),
                 dropped=dropped,
                 dropped_total=self._dropped,
                 error_type=type(error).__name__,
             )
+            return False
+        return True
 
     async def _loop(self) -> None:
         """按周期 flush，直到被叫停。周期每拍现取，运行参数改了下一拍就生效。"""
@@ -315,3 +459,9 @@ class SnapshotSink:
 
     def _current_plan(self) -> CollectPlan | None:
         return None if self._plan is None else self._plan.current
+
+    def _holds_lease(self) -> bool:
+        return self._liveness is None or self._liveness.is_leader
+
+    def _owns_window(self, lease_token: str) -> bool:
+        return self._holds_lease() and self._store.lease_token == lease_token

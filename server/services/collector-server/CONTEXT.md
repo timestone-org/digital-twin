@@ -57,7 +57,7 @@
 **不是启动的逆序**（[runtime-resilience §8](../../../docs/agents/runtime-resilience.md)），顺序由 `app.py` 的常量显式声明、`tests/contract/test_shutdown_order.py` 锁死：
 
 ```
-命令总线（停收新活） → supervisor（心跳停 → 拆会话 → 让租约） → sink（冲尾帧）
+命令总线（停收新活） → supervisor（拆会话 → 快照冲尾窗 → 让租约） → sink（停循环）
   → 归档缓冲（冲尾帧进 Stream） → 归档 writer（把 Stream 排干进库） → 数据库 → Redis
 ```
 
@@ -65,12 +65,13 @@
 
 ⚠ 两个缓冲必须比会话晚停——它们要接住拆会话时补交的尾帧；归档 writer 又比缓冲晚停，它要把那一帧排进库。
 
-## 5. Redis 上的四条面
+## 5. Redis 上的接口
 
 | 面 | 键 | 谁读 |
 |---|---|---|
-| 选主租约 | `collect:leader`（TTL 15s，CAS 续/让） | 只有本服务 |
+| 选主租约 | `collect:leader`（TTL 15s，CAS 续/让） | 本服务与 `platform-publisher` |
 | 快照 | `collect:snapshot:{source_id}` 哈希，字段 = `point_code` | `platform-publisher` 读，见 DASHBOARD_DESIGN §6 |
+| 快照属主 | `collect:snapshot-owners:{source_id}` 哈希，字段 = `point_code` | `platform-publisher` 核对当前租约及原始读数的 SHA-256 |
 | 归档流 | `collect:archive:{source_id}` Stream，一条条目 = 一批行 | 只有本服务（writer 读完即 `XDEL`） |
 | 命令总线 | 请求 `collect:cmd:req`，应答 `collect:cmd:reply:{request_id}` | platform 发、本服务应 |
 
@@ -80,8 +81,11 @@
 
 ⚠ 归档条目**必须带 `traceparent`**：落库发生在另一拍、可能在另一个副本上，漏了它链路就在异步处齐断。
 ⚠ writer 靠 `SCAN collect:archive:*` 找流，不按计划列举：数据源从计划里删掉之后，它留在流里的行仍然必须落库。
+⚠ 快照只为持有租约、计划有效且在线的数据源续期。接管和点位清单变更时清掉停采字段，保留仍在采的点位值。
 
-**不做 fence 令牌。** 租约带 fence 的前提是外部资源认得它，而 PLC 不认——脑裂窗口靠 renew-or-die 压在一个 TTL 内，再靠归档主键去重兜底。
+每次取得租约都换令牌。快照的写入、续期和清理在 Redis 核对当前令牌后原子执行，
+失去租约后丢弃快照窗口。正常关停持租约冲完尾窗，再主动让位。设备侧仍靠
+renew-or-die 停止继续请求；归档依靠主键去重。
 
 ## 6. 命令总线的两条口径
 

@@ -7,7 +7,7 @@
 import asyncio
 import contextlib
 import secrets
-from collections.abc import Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 from uuid import UUID
@@ -110,7 +110,9 @@ class SourceSession:
         self._options = options
         self._reporter = reporter
         self._stopped = asyncio.Event()
-        self._subscribed: set[str] = set()
+        self._subscribed: dict[str, PointSpec] = {}
+        self._attaching: set[str] = set()
+        self._invalidate_point: Callable[[str], None] | None = None
         # 串行点位挂载：`_subscribed` 要等 subscribe 返回才更新，并发就会重订
         self._attach_lock = asyncio.Lock()
         self._poller: PollLoop | None = None
@@ -185,6 +187,19 @@ class SourceSession:
         if callable(revoke):
             revoke()
 
+    def bind_point_invalidation(
+        self, invalidate: Callable[[str], None]
+    ) -> None:
+        """挂接快照与归档的点位失效处理。Args: invalidate。"""
+        self._invalidate_point = invalidate
+
+    def invalidate_points(self, point_codes: Iterable[str]) -> None:
+        """在采样配置更换前使旧读数失效。Args: point_codes。"""
+        invalidate = self._invalidate_point
+        if invalidate is not None and not self._stopped.is_set():
+            for code in point_codes:
+                invalidate(code)
+
     async def apply(self, source: PlanSource) -> None:
         """点位变了：退掉不要的、订上新增的，**不重连**。
 
@@ -206,20 +221,34 @@ class SourceSession:
 
         Args: source。
         """
-        if self._is_online and not self._wants_subscribe():
+        was_polling = self._is_online and not self._wants_subscribe()
+        wanted = {spec.point_code: spec for spec in specs_of(source)}
+        self.invalidate_points(
+            spec.point_code
+            for spec in specs_of(self._source)
+            if wanted.get(spec.point_code) != spec
+        )
+        removed = [
+            code
+            for code, spec in self._subscribed.items()
+            if wanted.get(code) != spec
+        ]
+        self._source = source
+        # 先摘掉采样资格，挡住等退订回应时仍到达的旧通知。
+        for code in removed:
+            del self._subscribed[code]
+        if was_polling:
             self._poll_generation += 1
             await self._stop_polling()
-        wanted = {point.point_code for point in source.points}
-        removed = sorted(self._subscribed - wanted)
-        self._source = source
         if removed:
             await self._driver.unsubscribe(removed)
-            self._subscribed -= set(removed)
         await self._attach()
 
     async def _open(self) -> None:
         """建连并挂上取数。"""
         await self._reporter.report(self._status(STATE_CONNECTING))
+        if self._stopped.is_set():
+            return
         self._loaded_count = self._driver.load_points(specs_of(self._source))
         is_empty_allowed = (
             self._driver.capabilities.is_empty_source_connection_supported
@@ -233,7 +262,8 @@ class SourceSession:
         self._is_online = True
         async with self._attach_lock:
             await self._attach()
-        await self._reporter.report(self._status(STATE_ONLINE))
+        if not self._stopped.is_set():
+            await self._reporter.report(self._status(STATE_ONLINE))
 
     async def _attach(self) -> None:
         """按能力与配置选订阅还是轮询，调用方持有 `_attach_lock`。
@@ -271,8 +301,22 @@ class SourceSession:
         """
         if not specs:
             return
-        result = await self._driver.subscribe(specs, self._revocable_sink)
-        self._subscribed.update(result.accepted)
+        self._attaching.update(spec.point_code for spec in specs)
+        try:
+            result = await self._driver.subscribe(specs, self._revocable_sink)
+        finally:
+            self._attaching.clear()
+        if not self._is_online or self._stopped.is_set():
+            return
+        accepted = set(result.accepted)
+        self._subscribed.update(
+            (spec.point_code, spec)
+            for spec in specs
+            if spec.point_code in accepted
+        )
+        self.invalidate_points(
+            refused.point_code for refused in result.rejected
+        )
         for refused in result.rejected:
             _logger.error(
                 "point_rejected",
@@ -289,7 +333,9 @@ class SourceSession:
 
         Args: point_code, value, ts_ms, quality。
         """
-        if not self._stopped.is_set():
+        if self._is_online and (
+            point_code in self._subscribed or point_code in self._attaching
+        ):
             self._sink(point_code, value, ts_ms, quality)
 
     async def _start_polling(self) -> None:

@@ -33,6 +33,7 @@ from collector_server.apps.collect.runtime.supervisor import (
     LEASE_TTL_S,
     CollectSupervisor,
     SessionBuilder,
+    SnapshotLifecycle,
     SupervisorOptions,
 )
 from collector_server.apps.collect.services import (
@@ -121,7 +122,7 @@ def _build_session_builder(
     }
 
     def build(source: PlanSource) -> SourceSession:
-        return SourceSession(
+        session = SourceSession(
             source=source,
             driver=create_driver(
                 source.protocol,
@@ -137,6 +138,13 @@ def _build_session_builder(
             options=_session_options(settings, plan),
             reporter=state(),
         )
+
+        def invalidate(point_code: str) -> None:
+            sink.invalidate_point(source.source_id, point_code)
+            archive.invalidate_point(source.source_id, point_code)
+
+        session.bind_point_invalidation(invalidate)
+        return session
 
     return build
 
@@ -206,17 +214,19 @@ def _build_supervisor(
     lease: RedisLease,
     plan: PlanStore,
     builder: SessionBuilder,
+    sink: SnapshotSink,
 ) -> CollectSupervisor:
-    """总控：租约 + 计划 + 会话收敛。
-
-    Args: settings, lease, plan, builder。
-    """
+    """总控与它持有租约时负责收尾的快照窗口。"""
     return CollectSupervisor(
         lease=lease,
         plan=plan,
         builder=builder,
         options=SupervisorOptions(
-            plan_refresh_interval_s=settings.plan_refresh_interval_s
+            plan_refresh_interval_s=settings.plan_refresh_interval_s,
+            snapshot=SnapshotLifecycle(
+                discard=sink.discard_windows,
+                flush=sink.flush_once,
+            ),
         ),
     )
 
@@ -247,16 +257,17 @@ def _build_redis(settings: Settings) -> RedisFaces:
     Args: settings。
     """
     redis_url = settings.url()
+    lease = RedisLease(
+        url=redis_url,
+        key=LEASE_KEY,
+        token=settings.app_instance,
+        ttl_s=LEASE_TTL_S,
+        timeout_s=settings.redis_timeout_s,
+    )
     return RedisFaces(
-        lease=RedisLease(
-            url=redis_url,
-            key=LEASE_KEY,
-            token=settings.app_instance,
-            ttl_s=LEASE_TTL_S,
-            timeout_s=settings.redis_timeout_s,
-        ),
+        lease=lease,
         snapshot=RedisSnapshotStore(
-            url=redis_url, timeout_s=settings.redis_timeout_s
+            url=redis_url, lease=lease, timeout_s=settings.redis_timeout_s
         ),
         stream=RedisArchiveStream(
             url=redis_url, timeout_s=settings.redis_timeout_s
@@ -308,10 +319,10 @@ def build_container(settings: Settings) -> Container:
         redis.lease,
         plan,
         _build_session_builder(settings, plan, sink, archive, state),
+        sink,
     )
-    # 归档心跳要问 supervisor「谁在线订阅着」，而 supervisor 的会话工厂又要拿
-    # 归档的 sink：两头互相持有，只能这一头晚绑
     archive.bind_liveness(supervisor)
+    sink.bind_liveness(supervisor)
     return Container(
         settings=settings,
         database=database,

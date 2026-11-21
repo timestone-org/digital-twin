@@ -35,6 +35,7 @@ from collector_server.apps.collect.drivers.modbus_tcp.driver import (
 )
 from collector_server.apps.collect.runtime.sink import SnapshotSink, fan_out
 from collector_server.apps.collect.services import PointHistoryService
+from collector_server.lease import RedisLease
 from collector_server.snapshot import RedisSnapshotStore
 from collector_server.stream import RedisArchiveStream, stream_key
 from collectwire import CollectPlan, PlanPoint, PlanSource, snapshot_key
@@ -131,8 +132,13 @@ class _Pipeline:
     raw_redis: Redis
 
 
-def _pipeline(redis_url: str, database: Database, view: Any) -> _Pipeline:
-    snapshot_store = RedisSnapshotStore(url=redis_url)
+def _pipeline(
+    redis_url: str,
+    database: Database,
+    view: Any,
+    snapshot_lease: RedisLease,
+) -> _Pipeline:
+    snapshot_store = RedisSnapshotStore(url=redis_url, lease=snapshot_lease)
     archive_stream = RedisArchiveStream(url=redis_url)
     raw_redis = Redis.from_url(  # pyright: ignore[reportUnknownMemberType]
         redis_url, decode_responses=True
@@ -204,7 +210,10 @@ async def _cleanup(
 
 
 async def test_loopback_value_reaches_redis_and_timescale(
-    redis_url: str, database: Database, build_plan_view: Any
+    redis_url: str,
+    database: Database,
+    build_plan_view: Any,
+    snapshot_lease: RedisLease,
 ) -> None:
     port = _loopback_port()
     source_id = uuid4()
@@ -226,7 +235,10 @@ async def test_loopback_value_reaches_redis_and_timescale(
         [PointSpec("temperature", "holding:1:float32", 1000, "float")]
     )
     pipeline = _pipeline(
-        redis_url, database, build_plan_view(_plan(source_id, endpoint))
+        redis_url,
+        database,
+        build_plan_view(_plan(source_id, endpoint)),
+        snapshot_lease,
     )
     sink = fan_out(
         pipeline.snapshots.sink_for(source_id),

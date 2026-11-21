@@ -5,7 +5,7 @@ import json
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from redis.asyncio import Redis
 from sqlalchemy import text
@@ -23,6 +23,7 @@ from collector_server.apps.collect.runtime.session import SourceStatus
 from collector_server.apps.collect.runtime.sink import SnapshotSink, fan_out
 from collector_server.apps.collect.services import PointHistoryService
 from collector_server.clock import Clock
+from collector_server.lease import RedisLease
 from collector_server.snapshot import RedisSnapshotStore
 from collector_server.stream import RedisArchiveStream, stream_key
 from collectwire import CollectPlan, PlanPoint, PlanSource, snapshot_key
@@ -200,9 +201,18 @@ class HttpPipeline:
 
 @asynccontextmanager
 async def http_pipeline(
-    redis_url: str, database: Database, plan: CollectPlan, clock: Clock
+    redis_url: str,
+    database: Database,
+    plan: CollectPlan,
+    clock: Clock,
 ) -> AsyncIterator[HttpPipeline]:
-    snapshot_store = RedisSnapshotStore(url=redis_url)
+    lease = RedisLease(
+        url=redis_url,
+        key=f"collect:test:leader:{uuid4()}",
+        token="http-pipeline",
+        ttl_s=120,
+    )
+    snapshot_store = RedisSnapshotStore(url=redis_url, lease=lease)
     stream = RedisArchiveStream(url=redis_url)
     view = StaticPlan(current=plan)
     archives = ArchiveBuffer(
@@ -232,8 +242,11 @@ async def http_pipeline(
         snapshot_store=snapshot_store,
         archive_stream=stream,
     )
-    await archives.flush_once()
     try:
+        assert await lease.acquire()
+        await archives.flush_once()
         yield pipeline
     finally:
         await pipeline.close()
+        await lease.release()
+        await lease.close()

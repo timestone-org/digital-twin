@@ -5,6 +5,7 @@
 """
 
 import asyncio
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
@@ -300,6 +301,39 @@ async def test_a_point_removed_during_the_first_subscribe_is_unsubscribed(
     driver.subscribe_gate.set()
     await asyncio.gather(opening, applying)
     assert driver.unsubscribed == ["b"]
+
+
+async def test_retired_address_notifications_are_ignored_during_unsubscribe(
+    driver: Any, reporter: Any, build_source: Any, build_point: Any
+) -> None:
+    neighbor = build_point("neighbor")
+    original = build_source(points=(build_point("moved"), neighbor))
+    updated = build_source(
+        points=(build_point("moved", address="ns=2;s=new"), neighbor)
+    )
+    seen: list[tuple[object, ...]] = []
+    session = SourceSession(
+        source=original,
+        driver=driver,
+        sink=lambda *sample: seen.append(sample),
+        options=OPTIONS,
+        reporter=reporter,
+    )
+
+    async def unsubscribe(codes: Sequence[str]) -> int:
+        driver.sink("moved", 1, 2, "good")
+        driver.sink("neighbor", 3, 4, "good")
+        return len(codes)
+
+    driver.unsubscribe = unsubscribe
+    task = asyncio.create_task(session.run())
+    try:
+        await asyncio.wait_for(driver.has_entered_subscribe.wait(), timeout=2)
+        await session.apply(updated)
+        assert seen == [("neighbor", 3, 4, "good")]
+    finally:
+        await session.stop()
+        await task
 
 
 async def test_a_plan_change_queued_behind_a_revoke_subscribes_nothing(

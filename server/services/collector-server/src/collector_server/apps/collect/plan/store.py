@@ -33,7 +33,7 @@ class PlanStore:
 
     @property
     def current(self) -> CollectPlan | None:
-        """当前生效的计划；从没拉到过就是 None。"""
+        """当前有效的计划。上一次拉取失败时为 None。"""
         return self._plan
 
     @property
@@ -44,22 +44,20 @@ class PlanStore:
     async def refresh(self) -> bool:
         """拉一次并比对版本，返回「是否需要重新收敛」。
 
-        ⚠ 拉失败时**不抛**：调用方是主循环，抛出去只会让循环退出。降级方向
-        是保持上一份**已经生效**的计划继续采，并每次都响亮告警——那不是
-        「用过期缓存猜」，而是「platform 还没说要改」。真正禁止的是启动期
-        没拿到计划却拿旧的顶上，那种情况这里的 `current` 就是 None。
+        ⚠ 拉取失败时撤销旧计划并告警，通知主循环停采（ADR-0001）。
         """
         try:
             fetched = await self._fetcher.fetch()
         except PlanUnavailable:
+            had_plan = self._plan is not None
+            self._plan = None
             self._consecutive_failures += 1
             _logger.error(
                 "plan_unavailable",
                 "拿不到采集计划",
                 consecutive_failures=self._consecutive_failures,
-                has_plan=self._plan is not None,
             )
-            return False
+            return had_plan
         self._consecutive_failures = 0
         if self._plan is not None and self._plan.version == fetched.version:
             return False
