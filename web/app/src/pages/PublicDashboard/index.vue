@@ -106,12 +106,13 @@ watch(
 const values = useDashboardValues(
   () => nodes.value,
   () => publicToken(),
-  () => channel.connectionState.value,
-  true,
   {
-    readLatest: (keys, signal) =>
-      readPublicDatasetLatest(publicToken(), keys, signal),
-    scope: () => (doc.loading.value ? '' : publicToken()),
+    connectionState: () => channel.connectionState.value,
+    dataset: {
+      readLatest: (keys, signal) =>
+        readPublicDatasetLatest(publicToken(), keys, signal),
+      scope: () => (doc.loading.value ? '' : publicToken()),
+    },
   },
 )
 // 这张屏到底有没有实时绑定。⚠ 没有的话不许说「实时」：通道连着与画面上的

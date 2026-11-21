@@ -23,7 +23,10 @@ import { usePointSamples } from '@/composables/usePointSamples'
 import { useDatasetLatestValues } from '@/composables/useDatasetLatestValues'
 import { useRealtimeChannel } from '@/composables/useRealtimeChannel'
 import { boundPointKeysOf } from '@/features/dashboard/editorDoc'
-import { createBindingReader } from '@/runtime/bindingReader'
+import {
+  connectedPointReader,
+  createBindingReader,
+} from '@/runtime/bindingReader'
 import type { ReadPointSample } from '@/runtime/bindingReader'
 import { dashboardTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
@@ -66,18 +69,18 @@ export function useTwinLiveValues(
     }),
   })
 
+  const currentConnection = () => channel.connectionState?.value
   const samples = usePointSamples(
     () => boundPointKeysOf(bindings()),
     dashboardId,
+    currentConnection,
   )
   const readDataset = useDatasetLatestValues(bindings, dashboardId)
 
+  const readPoint = connectedPointReader(samples.read, currentConnection)
   const readBinding = (): BindingValueReader => {
-    const read = createBindingReader(samples.read, readDataset)
-    const disconnected =
-      channel.connectionState?.value !== undefined &&
-      channel.connectionState.value !== 'open'
-    return guardEditorReading(read, disconnected)
+    const read = createBindingReader(readPoint, readDataset)
+    return guardEditorReading(read)
   }
 
   // ⚠ 在 computed 里调用读取器：对快照缓存的响应式依赖由这次调用建立
@@ -97,17 +100,12 @@ export function useTwinLiveValues(
     return stitched
   })
 
-  return { scene, readBinding, read: samples.read }
+  return { scene, readBinding, read: readPoint }
 }
 
 /** 编辑视口不携带逐槽元数据，陈旧读数必须显式失效。 */
-function guardEditorReading(
-  read: BindingValueReader,
-  disconnected: boolean,
-): BindingValueReader {
+function guardEditorReading(read: BindingValueReader): BindingValueReader {
   return (binding, siblings) => {
-    if (binding.sourceKind === 'opcua' && disconnected)
-      return { state: 'error', message: '实时连接已断开，数据可能过期' }
     const slot = read(binding, siblings)
     if (slot.state !== 'ok' || slot.isStale !== true) return slot
     if (binding.sourceKind === 'opcua')

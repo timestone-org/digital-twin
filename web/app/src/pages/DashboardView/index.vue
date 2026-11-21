@@ -80,7 +80,7 @@ const nodes = computed(() => file.dashboard.value?.nodes ?? [])
 const values = useDashboardValues(
   () => nodes.value,
   () => file.dashboard.value?.id ?? '',
-  () => channel.connectionState.value,
+  { connectionState: () => channel.connectionState.value },
 )
 
 // 时序槽的取数与刷新节拍叠在实时那一份之上，整屏一个节拍。
