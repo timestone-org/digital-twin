@@ -67,6 +67,7 @@ from platform_server.apps.hvac.startups import (
     BATCH_STATUS_RUNNING,
     SHARD_STATUS_DONE,
     SHARD_STATUS_FAILED,
+    SHARD_STATUS_SKIPPED,
 )
 
 _logger = get_logger("platform.hvac.ac_startup")
@@ -382,14 +383,27 @@ async def fail_shard(
     见——批次判失败、上一批次照常服务，人看到了再重新触发。
     Args: session, message, reason。
     """
+    batch = await ac_startup_batch_crud.lock(session, message.batch_id)
+    if batch is None:
+        return
+    if batch.status != BATCH_STATUS_RUNNING:
+        await ac_startup_shard_crud.settle_pending(
+            session,
+            AcStartupShard(batch_id=batch.id, month=message.month),
+            status=SHARD_STATUS_SKIPPED,
+            error="批次已停止抽取",
+        )
+        return
     # ⚠ 空原因会撞上分片表的 CHECK，失败本身就落不了库
     text = reason.strip()[:_MAX_REASON] or "未说明原因"
-    await ac_startup_shard_crud.mark(
+    settled = await ac_startup_shard_crud.settle_pending(
         session,
         AcStartupShard(batch_id=message.batch_id, month=message.month),
         status=SHARD_STATUS_FAILED,
         error=text,
     )
+    if not settled:
+        return
     _logger.error(
         "ac_startup_shard_failed",
         "分片抽取失败",

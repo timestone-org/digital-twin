@@ -17,6 +17,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.database_fakes import MakerSessions
 
 from platform_server.apps.hvac.crud import (
     ac_startup_batch_crud,
@@ -80,7 +81,7 @@ def bare_context() -> ExtractionContext:
 
 
 async def test_a_shard_of_a_failed_batch_never_stays_pending(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """一片失败之后，还在路上的那些分片必须各自落一个终态。"""
     room_id = await make_room(db_session, "半路判失败")
@@ -94,7 +95,7 @@ async def test_a_shard_of_a_failed_batch_never_stays_pending(
     await fail_shard(db_session, plan.messages[0], reason="外部数据源不可用")
     assert await finalize_if_complete(db_session, plan.batch.id) is not None
 
-    stray = await run_shard(db_session, bare_context(), plan.messages[1])
+    stray = await run_shard(worker_sessions, bare_context(), plan.messages[1])
     assert stray.outcome == SHARD_RUN_SKIPPED
     statuses = {
         shard.status

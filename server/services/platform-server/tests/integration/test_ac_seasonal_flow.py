@@ -12,6 +12,7 @@ import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.database_fakes import MakerSessions
 from unit.opcua_fakes import FakeNodeWriter
 from unit.source_fakes import FakeAcSource
 
@@ -47,9 +48,11 @@ from platform_server.apps.hvac.services.ac_startup_service import (
 
 @pytest.fixture
 async def seasonal_model(
-    app_client: httpx.AsyncClient, db_session: AsyncSession
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
 ) -> SeasonalModel:
-    return await train_seasons(app_client, db_session)
+    return await train_seasons(app_client, db_session, worker_sessions)
 
 
 async def test_historical_labels_and_predictions_use_the_event_season(
@@ -192,6 +195,7 @@ async def _assert_seasonal_publishing(
 async def test_changed_policy_blocks_batch_promotion(
     app_client: httpx.AsyncClient,
     db_session: AsyncSession,
+    worker_sessions: MakerSessions,
 ) -> None:
     from_context = await bound_room(db_session, "季节重算期间")
     unit = await db_session.scalar(
@@ -211,7 +215,7 @@ async def test_changed_policy_blocks_batch_promotion(
         timezone="Asia/Shanghai",
     )
     context = ExtractionContext(StubReader(historical_rows()), rules, 100000)
-    await run_shard(db_session, context, plan.messages[0])
+    await run_shard(worker_sessions, context, plan.messages[0])
     changed = {
         **policy_body(),
         "winter_period": {"start": "02-01", "end": "03-15"},

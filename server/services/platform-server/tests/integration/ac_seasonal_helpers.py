@@ -9,6 +9,7 @@ from typing import cast
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.database_fakes import MakerSessions
 
 from integration.test_ac_model_training_flow import OneSessionDatabase
 from integration.test_ac_startup_batches_api import PREFIX, bound_room
@@ -84,7 +85,9 @@ class SeasonalModel:
     model_id: uuid.UUID
 
 
-async def extract_seasons(session: AsyncSession, room_id: uuid.UUID) -> None:
+async def extract_seasons(
+    session: AsyncSession, room_id: uuid.UUID, worker_sessions: MakerSessions
+) -> None:
     rules = ExtractionRules()
     plan = await request_rebuild(
         session,
@@ -97,7 +100,7 @@ async def extract_seasons(session: AsyncSession, room_id: uuid.UUID) -> None:
     )
     context = ExtractionContext(StubReader(historical_rows()), rules, 100000)
     for message in plan.messages:
-        await run_shard(session, context, message)
+        await run_shard(worker_sessions, context, message)
     batch = await finalize_if_complete(session, plan.batch.id)
     assert batch is not None
     assert batch.is_current
@@ -105,7 +108,9 @@ async def extract_seasons(session: AsyncSession, room_id: uuid.UUID) -> None:
 
 
 async def train_seasons(
-    client: httpx.AsyncClient, session: AsyncSession
+    client: httpx.AsyncClient,
+    session: AsyncSession,
+    worker_sessions: MakerSessions,
 ) -> SeasonalModel:
     room_id = await bound_room(session, "两季整链")
     unit = await session.scalar(select(AcUnit).where(AcUnit.room_id == room_id))
@@ -114,7 +119,7 @@ async def train_seasons(
         f"{PREFIX}/ac-units/{unit.id}/compliance-policies", json=policy_body()
     )
     assert saved.status_code == 200, saved.text
-    await extract_seasons(session, room_id)
+    await extract_seasons(session, room_id, worker_sessions)
     made = await client.post(
         f"{PREFIX}/ac-models",
         json={

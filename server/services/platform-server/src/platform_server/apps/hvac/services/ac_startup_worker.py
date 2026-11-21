@@ -206,8 +206,7 @@ class ShardConsumer:
             await self._record_failure(message, reason=reason)
 
     async def _run_one(self, message: ac_startup_queue.ShardMessage) -> None:
-        async with self._database.session() as session:
-            run = await run_shard(session, self._context, message)
+        run = await run_shard(self._database, self._context, message)
         self._log_run(message, run)
 
     @staticmethod
