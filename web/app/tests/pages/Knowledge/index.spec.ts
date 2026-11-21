@@ -30,6 +30,8 @@ const api = vi.hoisted(() => ({
   listDocuments: vi.fn(),
   listSources: vi.fn(),
   createSource: vi.fn(),
+  updateSourceMetadata: vi.fn(),
+  detachSource: vi.fn(),
   syncSource: vi.fn(),
   createBase: vi.fn(),
   updateBaseMetadata: vi.fn(),
@@ -1013,6 +1015,80 @@ describe('知识来源入口', () => {
     expect(api.listSources).toHaveBeenCalledWith('b1', expect.any(AbortSignal))
     expect(document.body.textContent).toContain('knowledge:use')
     expect(document.body.textContent).toContain('不保存凭据')
+  })
+
+  it('管理员只提交来源的实际更改，已有导入的路径与记录字段只读', async () => {
+    const src = {
+      id: 's1',
+      baseId: 'b1',
+      kind: 'platform',
+      name: '台账来源',
+      canChangeIdentity: false,
+      config: {
+        path: '/api/v1/platform/items',
+        id_field: 'row_id',
+        title_field: 'label',
+      },
+      lastSyncedAt: null,
+      lastError: '',
+    }
+    api.listSources.mockResolvedValue([src])
+    api.updateSourceMetadata.mockResolvedValue({ ...src, name: '导入资料' })
+    const wrapper = await render()
+    await buttonOf(wrapper, '来源配置')?.trigger('click')
+    await flushPromises()
+    modalButton('编辑').click()
+    await flushPromises()
+    const inputs = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('.dt-modal input'),
+    )
+    expect(
+      inputs.find((field) => field.value === '/api/v1/platform/items')
+        ?.disabled,
+    ).toBe(true)
+    expect(inputs.find((field) => field.value === 'row_id')?.disabled).toBe(
+      true,
+    )
+    const title = inputs.find((field) => field.value === '台账来源')
+    if (title === undefined) throw new Error('没有现有来源名称')
+    type(title, '导入资料')
+    await flushPromises()
+    modalButton('保存来源').click()
+    await flushPromises()
+    expect(api.updateSourceMetadata).toHaveBeenCalledWith('s1', {
+      name: '导入资料',
+    })
+    expect(document.body.textContent).toContain('导入资料')
+  })
+
+  it('确认解绑之前保留来源，确认后只移除来源', async () => {
+    api.listSources.mockResolvedValue([
+      {
+        id: 's1',
+        baseId: 'b1',
+        kind: 'platform',
+        name: '台账来源',
+        canChangeIdentity: true,
+        config: { path: '/api/v1/platform/items' },
+        lastSyncedAt: null,
+        lastError: '',
+      },
+    ])
+    api.detachSource.mockResolvedValue(undefined)
+    const wrapper = await render()
+    await buttonOf(wrapper, '来源配置')?.trigger('click')
+    await flushPromises()
+    confirmSpy.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    modalButton('解绑').click()
+    await flushPromises()
+    expect(api.detachSource).not.toHaveBeenCalled()
+    modalButton('解绑').click()
+    await flushPromises()
+    expect(api.detachSource).toHaveBeenCalledWith('s1')
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('保留') }),
+    )
+    expect(api.deleteDocument).not.toHaveBeenCalled()
   })
 
   it('只读账号可查看来源但没有添加和同步入口', async () => {

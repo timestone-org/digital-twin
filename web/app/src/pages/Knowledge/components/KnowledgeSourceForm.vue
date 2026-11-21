@@ -2,12 +2,17 @@
 /** @fileoverview 平台来源配置：显式字段，不收 URL 或凭据。 */
 import { computed, ref, watch } from 'vue'
 import { DtButton, DtCheckbox, DtInput, DtNotice } from '@dt/ui'
-import type { PlatformSourceConfig } from '@/api/knowledge'
+import { sourceConfig } from '../scripts/sourceMetadata'
+import type { KnowledgeSource, PlatformSourceConfig } from '@/api/knowledge'
 import { isCursorPlatformPath } from '../scripts/sourcePath'
 
-const props = defineProps<{ isBusy: boolean }>()
+const props = defineProps<{
+  isBusy: boolean
+  source?: KnowledgeSource | undefined
+}>()
 const emit = defineEmits<{
   submit: [name: string, config: PlatformSourceConfig]
+  cancel: []
   dirty: [value: boolean]
 }>()
 const name = ref('')
@@ -17,14 +22,32 @@ const titleField = ref('')
 const pageParam = ref('page')
 const sizeParam = ref('size')
 const isAcknowledged = ref(false)
+const initial = computed(() => sourceConfig(props.source))
+watch(
+  () => props.source,
+  (source) => {
+    const values = sourceConfig(source)
+    name.value = source?.name ?? ''
+    path.value = values.path
+    idField.value = values.id_field
+    titleField.value = values.title_field
+    pageParam.value = values.page_param
+    sizeParam.value = values.size_param
+    isAcknowledged.value = false
+  },
+  { immediate: true },
+)
+const needsAcknowledgement = computed(
+  () => props.source === undefined || path.value.trim() !== initial.value.path,
+)
 const isDirty = computed(
   () =>
-    name.value !== '' ||
-    path.value !== '' ||
-    idField.value !== 'row_id' ||
-    titleField.value !== '' ||
-    pageParam.value !== 'page' ||
-    sizeParam.value !== 'size' ||
+    name.value !== (props.source?.name ?? '') ||
+    path.value !== initial.value.path ||
+    idField.value !== initial.value.id_field ||
+    titleField.value !== initial.value.title_field ||
+    pageParam.value !== initial.value.page_param ||
+    sizeParam.value !== initial.value.size_param ||
     isAcknowledged.value,
 )
 watch(isDirty, (value) => emit('dirty', value), { immediate: true })
@@ -35,27 +58,37 @@ const config = computed<PlatformSourceConfig>(() => ({
   page_param: pageParam.value.trim(),
   size_param: sizeParam.value.trim(),
 }))
+const hasStoredPath = computed(
+  () => props.source !== undefined && config.value.path === initial.value.path,
+)
 const pathError = computed(() =>
-  isCursorPlatformPath(config.value.path)
-    ? '目前只支持 page/size 页码集合，不能读取使用 after 游标的台账记录。'
-    : path.value !== '' && !isPlatformPath(config.value.path)
-      ? '填写 /api/v1/platform/ 开头的平台路径，不含域名、查询参数或片段。'
-      : '',
+  hasStoredPath.value
+    ? ''
+    : isCursorPlatformPath(config.value.path)
+      ? '目前只支持 page/size 页码集合，不能读取使用 after 游标的台账记录。'
+      : path.value !== '' && !isPlatformPath(config.value.path)
+        ? '填写 /api/v1/platform/ 开头的平台路径，不含域名、查询参数或片段。'
+        : '',
 )
 const nameError = computed(() =>
   [...name.value.trim()].length > 120 ? '来源名称最多 120 个字符。' : '',
+)
+const hasValidPaging = computed(
+  () =>
+    config.value.page_param !== '' &&
+    config.value.size_param !== '' &&
+    config.value.page_param !== config.value.size_param,
 )
 const isValid = computed(
   () =>
     name.value.trim().length > 0 &&
     nameError.value === '' &&
-    isPlatformPath(config.value.path) &&
-    !isCursorPlatformPath(config.value.path) &&
+    (hasStoredPath.value ||
+      (isPlatformPath(config.value.path) &&
+        !isCursorPlatformPath(config.value.path))) &&
     config.value.id_field !== '' &&
-    config.value.page_param !== '' &&
-    config.value.size_param !== '' &&
-    config.value.page_param !== config.value.size_param &&
-    isAcknowledged.value,
+    hasValidPaging.value &&
+    (!needsAcknowledgement.value || isAcknowledged.value),
 )
 
 function isPlatformPath(value: string): boolean {
@@ -73,7 +106,9 @@ function submit(): void {
 
 <template>
   <form class="flex flex-col gap-3" @submit.prevent="submit">
-    <h3 class="text-sm font-medium text-text-title">添加平台来源</h3>
+    <h3 class="text-sm font-medium text-text-title">
+      {{ source ? '编辑平台来源' : '添加平台来源' }}
+    </h3>
     <DtNotice intent="info"
       >使用当前账号读取平台，不保存凭据。添加后不会自动同步。仅支持 page/size
       页码集合，暂不支持 after 游标接口。</DtNotice
@@ -94,7 +129,7 @@ function submit(): void {
       placeholder="/api/v1/platform/dataset-tables"
       hint="照示例读台账目录时，把下面的行标识改成 id、标题填 name；读台账行用默认的 row_id。"
       :error="pathError"
-      :disabled="isBusy"
+      :disabled="isBusy || source?.canChangeIdentity === false"
     />
     <div class="grid grid-cols-2 gap-3">
       <DtInput
@@ -102,7 +137,7 @@ function submit(): void {
         name="source-id-field"
         label="行标识字段"
         required
-        :disabled="isBusy"
+        :disabled="isBusy || source?.canChangeIdentity === false"
       />
       <DtInput
         v-model="titleField"
@@ -131,13 +166,27 @@ function submit(): void {
       intent="warning"
       >页码和每页条数参数名不能相同。</DtNotice
     >
+    <DtNotice v-if="source?.canChangeIdentity === false" intent="info"
+      >已有导入资料；更换路径或行标识字段请新建来源。</DtNotice
+    >
     <DtCheckbox
+      v-if="needsAcknowledgement"
       v-model="isAcknowledged"
       label="我确认这些资料可供拥有 knowledge:use 的用户检索"
       :disabled="isBusy"
     />
-    <DtButton :disabled="!isValid || isBusy" :loading="isBusy" @click="submit"
-      >添加来源</DtButton
+    <DtButton
+      :disabled="!isValid || isBusy"
+      :loading="isBusy"
+      @click="submit"
+      >{{ source ? '保存来源' : '添加来源' }}</DtButton
+    >
+    <DtButton
+      v-if="source"
+      variant="ghost"
+      :disabled="isBusy"
+      @click="$emit('cancel')"
+      >取消编辑</DtButton
     >
   </form>
 </template>

@@ -1,10 +1,9 @@
 <script setup lang="ts">
 /** @fileoverview 来源卡片：可见的配置、同步状态和权限门禁。 */
 import { computed } from 'vue'
-import { PERMISSION_CODES } from '@dt/contracts'
-import { DtButton, DtNotice } from '@dt/ui'
+import { DtNotice } from '@dt/ui'
 import type { KnowledgeSource } from '@/api/knowledge'
-import PermGuard from '@/components/PermGuard.vue'
+import KnowledgeSourceActions from './KnowledgeSourceActions.vue'
 import { formatDateTime } from '@/utils/datetime'
 import { isCursorPlatformPath } from '../scripts/sourcePath'
 const props = defineProps<{
@@ -12,7 +11,11 @@ const props = defineProps<{
   isBusy: boolean
   isLoading: boolean
 }>()
-defineEmits<{ sync: [source: KnowledgeSource] }>()
+defineEmits<{
+  sync: [source: KnowledgeSource]
+  edit: [source: KnowledgeSource]
+  detach: [source: KnowledgeSource]
+}>()
 /** 来源种类的中文说法；认不出的种类原样显示，免得新种类在界面上整行消失。 */
 const KIND_LABELS: Readonly<Record<string, string>> = {
   upload: '文件上传 · 传文档时自动摄取',
@@ -56,20 +59,13 @@ const path = computed(() =>
       intent="danger"
       >{{ source.lastError }}</DtNotice
     >
-    <PermGuard
-      v-if="source.kind === 'platform'"
-      :codes="[PERMISSION_CODES.knowledgeWrite]"
-    >
-      <DtButton
-        size="sm"
-        class="mt-2"
-        :aria-label="`同步${source.name}`"
-        :disabled="
-          isBusy || isLoading || isCursorPlatformPath(source.config.path)
-        "
-        @click="$emit('sync', source)"
-        >同步</DtButton
-      >
-    </PermGuard>
+    <KnowledgeSourceActions
+      :source="source"
+      :is-busy="isBusy"
+      :is-loading="isLoading"
+      @sync="$emit('sync', $event)"
+      @edit="$emit('edit', $event)"
+      @detach="$emit('detach', $event)"
+    />
   </li>
 </template>

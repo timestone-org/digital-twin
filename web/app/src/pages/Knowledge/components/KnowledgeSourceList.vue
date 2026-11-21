@@ -9,7 +9,12 @@ defineProps<{
   isBusy: boolean
   isLoading: boolean
 }>()
-defineEmits<{ reload: []; sync: [source: KnowledgeSource] }>()
+defineEmits<{
+  reload: []
+  sync: [source: KnowledgeSource]
+  edit: [source: KnowledgeSource]
+  detach: [source: KnowledgeSource]
+}>()
 </script>
 <template>
   <section class="min-w-0">
@@ -38,6 +43,8 @@ defineEmits<{ reload: []; sync: [source: KnowledgeSource] }>()
         :is-busy="isBusy"
         :is-loading="isLoading"
         @sync="$emit('sync', $event)"
+        @edit="$emit('edit', $event)"
+        @detach="$emit('detach', $event)"
       />
     </ul>
   </section>

@@ -7,7 +7,10 @@
  * 把整条 `/api/v1/knowledge/...` 当 path 传，客户端会再拼一次缺省的 auth 前缀，
  * 拿回来的是一个 403 的 HTML 页，前端只说得出「服务端响应格式异常」。
  */
-import type { KnowledgeBaseMetadataPatch } from '@dt/contracts'
+import type {
+  KnowledgeBaseMetadataPatch,
+  KnowledgeSourceMetadataPatch,
+} from '@dt/contracts'
 import type { Page } from '@dt/contracts'
 
 import { KNOWLEDGE_BASE_URL } from '@/config/app'
@@ -196,6 +199,32 @@ export async function createSource(
       `${BASES}/${baseId}/sources`,
       onKnowledge({ method: 'POST', body }),
     ),
+  )
+}
+
+/** 保存平台来源的部分配置。
+ * @param sourceId 来源标识
+ * @param changes 实际修改的字段
+ */
+export async function updateSourceMetadata(
+  sourceId: string,
+  changes: KnowledgeSourceMetadataPatch,
+): Promise<KnowledgeSource> {
+  return toSource(
+    await requestData<unknown>(
+      `${SOURCES}/${encodeURIComponent(sourceId)}`,
+      onKnowledge({ method: 'PATCH', body: changes }),
+    ),
+  )
+}
+
+/** 停止来源同步并保留资料。
+ * @param sourceId 来源标识
+ */
+export async function detachSource(sourceId: string): Promise<void> {
+  await request<unknown>(
+    `${SOURCES}/${encodeURIComponent(sourceId)}`,
+    onKnowledge({ method: 'DELETE' }),
   )
 }
 
