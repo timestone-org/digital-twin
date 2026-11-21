@@ -23,6 +23,7 @@ INDEXES = (
     "modeling_workflow_idx_20261103",
 )
 POINT_REFERENCE_INDEX = "dataset_point_ref_idx_20261121"
+COMMAND_ORIGIN = "modeling_cmd_origin_20261121"
 
 
 def migration_path(revision: str) -> Path:
@@ -65,6 +66,7 @@ def test_index_failure_keeps_a_completed_structure_revision_to_resume_from():
     }
     assert STRUCTURES[-1] in ancestry
     assert POINT_REFERENCE_INDEX in ancestry
+    assert COMMAND_ORIGIN in ancestry
     point_index = scripts.get_revision(POINT_REFERENCE_INDEX)
     assert point_index is not None
     assert point_index.down_revision == STRUCTURES[-1]
@@ -149,3 +151,21 @@ def test_interrupted_index_phase_can_be_invoked_again(
     migration.upgrade()
     assert len(operations.indexes) == expected_count
     assert all(operations.indexes.values())
+
+
+def test_command_origin_is_an_additive_nullable_column():
+    tree = ast.parse(migration_path(COMMAND_ORIGIN).read_text(encoding="utf-8"))
+    upgrade = next(
+        item
+        for item in tree.body
+        if isinstance(item, ast.FunctionDef) and item.name == "upgrade"
+    )
+    calls = [
+        ast.unparse(item.func)
+        for item in ast.walk(upgrade)
+        if isinstance(item, ast.Call)
+    ]
+    assert calls.count("op.add_column") == 1
+    assert "op.drop_column" not in calls
+    assert "requested_operation" in ast.unparse(upgrade)
+    assert "nullable=True" in ast.unparse(upgrade)
