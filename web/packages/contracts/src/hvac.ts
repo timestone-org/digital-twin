@@ -189,7 +189,7 @@ export interface RawSeries {
 
 /**
  * 一次开机的结局。
- * ⚠ openapi 把它声明成自由 `string`，闭集来自后端 `startups.py` 的 `OUTCOME_*`，
+ * ⚠ openapi 把它声明成自由 `string`，可读闭集由后端 `startups.py` 声明，
  * 由契约用例双向锁死。丢弃原因与「可用」同样要显示——它们说明数据为什么少。
  */
 export const STARTUP_OUTCOMES = [
@@ -197,6 +197,7 @@ export const STARTUP_OUTCOMES = [
   'set_changed',
   'timeout',
   'data_gap',
+  'unassessed',
 ] as const
 export type StartupOutcome = (typeof STARTUP_OUTCOMES)[number]
 

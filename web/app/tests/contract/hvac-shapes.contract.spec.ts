@@ -678,7 +678,7 @@ describe('指标分组的闭集与后端目录一致', () => {
   })
 })
 
-describe('开机事件的闭集与后端常量一致', () => {
+describe('开机事件的可读闭集与后端常量一致', () => {
   // ⚠ openapi 把 outcome 与 status 都声明成自由 string，闭集只在后端的常量表里
   const STARTUP_SOURCE = join(
     process.cwd(),
@@ -698,8 +698,13 @@ describe('开机事件的闭集与后端常量一致', () => {
     ['BATCH_STATUS', STARTUP_BATCH_STATUSES],
   ])('%s_* 与前端的联合类型逐项对上', (prefix, declared) => {
     const source = readFileSync(STARTUP_SOURCE, 'utf8')
+    // 读端先接受新结局，抽取稍后写入；两阶段都严格对照可读全集。
+    const acceptedPrefix =
+      prefix === 'OUTCOME' ? '(?:OUTCOME|READ_ONLY_OUTCOME)' : prefix
     const found = [
-      ...source.matchAll(new RegExp(`^${prefix}_[A-Z_]+ = "([a-z_]+)"$`, 'gm')),
+      ...source.matchAll(
+        new RegExp(`^${acceptedPrefix}_[A-Z_]+ = "([a-z_]+)"$`, 'gm'),
+      ),
     ].map((match) => match[1])
     expect(found).not.toHaveLength(0)
     expect([...found].sort()).toEqual([...declared].sort())
