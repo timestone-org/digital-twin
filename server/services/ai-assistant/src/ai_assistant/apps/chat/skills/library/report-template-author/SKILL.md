@@ -42,3 +42,10 @@ description: "读取当前报告草稿，配置指标、正文数据内容与页
 - 图表与表格的 table/key 取真实台账字段；`window` 留空表示整个报告期。
 - 一张图先保持单一主题；需要多序列时分步插入或向用户说明当前工具一次插一条序列。
 - 试算不是保存。试算通过后明确告诉用户“草稿尚未保存”。
+
+## 已有正文
+
+`report.read_draft` 的正文提纲按 offset/limit 分页，沿 document.next_offset 续读。
+使用实际 path 调 `report.read_content` 读全原文；has_more=false 才表示该段读完。
+`can_replace_text=true` 时可用 `report.replace_text`，带本次完整 expected_text，
+仅改未保存草稿并保留段落格式。混合格式或业务节点由正文编辑器修改，不能整段覆盖来绕过校验。

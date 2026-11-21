@@ -30,7 +30,8 @@ def test_a_surface_without_skills_says_so() -> None:
     落地起就有技能了——继续拿它当例子的话，这条闸会在下一次「某个技能扩到
     所有工作面」时无声地变成恒真。"""
     prompt = build_system_prompt("no-such-surface")
-    assert "没有可用的技能" in prompt
+    assert "没有专用编辑技能" in prompt
+    assert "仍可使用本轮提供的读取工具" in prompt
 
 
 def test_the_resident_prompt_never_carries_a_skill_body() -> None:
