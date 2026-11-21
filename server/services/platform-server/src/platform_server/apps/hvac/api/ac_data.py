@@ -17,6 +17,7 @@ from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
 from platform_server.apps.hvac.deps import (
     get_ac_source_reader,
     get_session,
+    get_sessions,
     require,
 )
 from platform_server.apps.hvac.schemas import (
@@ -42,6 +43,7 @@ from platform_server.apps.hvac.services import (
     ac_reading_service,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
+from platform_server.apps.hvac.services.sessions import Sessions
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(prefix=API_PREFIX, tags=["ac-data"])
@@ -73,6 +75,7 @@ def series_options(
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SessionsDep = Annotated[Sessions, Depends(get_sessions)]
 ReaderDep = Annotated[AcSourceReader, Depends(get_ac_source_reader)]
 WindowDep = Annotated[TimeWindow, Depends(time_window)]
 CursorDep = Annotated[CursorParams, Depends(cursor_params)]
@@ -118,7 +121,7 @@ async def list_source_objects(
 )
 async def list_raw_samples(
     ac_unit_id: uuid.UUID,
-    session: SessionDep,
+    sessions: SessionsDep,
     reader: ReaderDep,
     window: WindowDep,
     cursor: CursorDep,
@@ -126,10 +129,10 @@ async def list_raw_samples(
 ) -> ApiResponse[CursorPage[RawSampleOut]]:
     """区间内的逐行原始数据，游标翻页。
 
-    Args: ac_unit_id, session, reader, window, cursor, _viewer。
+    Args: ac_unit_id, sessions, reader, window, cursor, _viewer。
     """
     page = await ac_reading_service.list_raw_samples(
-        session, reader, ac_unit_id=ac_unit_id, window=window, cursor=cursor
+        sessions, reader, ac_unit_id=ac_unit_id, window=window, cursor=cursor
     )
     return ok(page)
 
@@ -141,7 +144,7 @@ async def list_raw_samples(
 )
 async def list_raw_series(
     ac_unit_id: uuid.UUID,
-    session: SessionDep,
+    sessions: SessionsDep,
     reader: ReaderDep,
     window: WindowDep,
     options: SeriesDep,
@@ -149,10 +152,10 @@ async def list_raw_series(
 ) -> ApiResponse[RawSeriesOut]:
     """按分钟桶聚合的折线图数据，桶宽在响应里回显。
 
-    Args: ac_unit_id, session, reader, window, options, _viewer。
+    Args: ac_unit_id, sessions, reader, window, options, _viewer。
     """
     series = await ac_reading_service.list_raw_series(
-        session, reader, ac_unit_id=ac_unit_id, window=window, options=options
+        sessions, reader, ac_unit_id=ac_unit_id, window=window, options=options
     )
     return ok(series)
 
@@ -164,16 +167,16 @@ async def list_raw_series(
 )
 async def read_live_readings(
     room_id: uuid.UUID,
-    session: SessionDep,
+    sessions: SessionsDep,
     reader: ReaderDep,
     _viewer: ViewDep,
 ) -> ApiResponse[LiveReadingsOut]:
     """房间里每台绑了原始数据的机组在回看窗内的最后一条可用读数。
 
-    Args: room_id, session, reader, _viewer。
+    Args: room_id, sessions, reader, _viewer。
     """
     return ok(
-        await ac_live_readings.read_live(session, reader, room_id=room_id)
+        await ac_live_readings.read_live(sessions, reader, room_id=room_id)
     )
 
 
@@ -203,16 +206,16 @@ async def put_binding(
     ac_unit_id: uuid.UUID,
     dataset: str,
     payload: AcDataBindingPutIn,
-    session: SessionDep,
+    sessions: SessionsDep,
     reader: ReaderDep,
     _manager: ManageDep,
 ) -> ApiResponse[AcDataBindingOut]:
     """把这台空调的这个数据集指向外部库里的一个对象。
 
-    Args: ac_unit_id, dataset, payload, session, reader, _manager。
+    Args: ac_unit_id, dataset, payload, sessions, reader, _manager。
     """
     binding = await ac_data_service.put_binding(
-        session,
+        sessions,
         reader,
         ac_unit_id=ac_unit_id,
         dataset=dataset,

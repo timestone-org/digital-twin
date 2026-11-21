@@ -214,16 +214,7 @@ async def _write_members(
 async def _apply_change(
     session: AsyncSession, case: ConfigurationCase, operation: str
 ) -> None:
-    if operation == "binding_update":
-        source = FakeAcSource(columns={"After": full_shape()})
-        await ac_data_service.put_binding(
-            session,
-            AcSourceReader(source=source, timezone="Asia/Shanghai"),
-            ac_unit_id=case.unit_id,
-            dataset="raw_minute",
-            payload=AcDataBindingPutIn(source_object="After"),
-        )
-    elif operation == "binding_delete":
+    if operation == "binding_delete":
         await ac_data_service.delete_binding(
             session, ac_unit_id=case.unit_id, dataset="raw_minute"
         )
@@ -248,13 +239,44 @@ async def _apply_change(
         await _write_members(session, case, operation)
 
 
+@dataclass
+class BindingSessions:
+    """把数据库实际等待锁的写连接交给观察者。"""
+
+    database: Database
+    ready: asyncio.Future[int]
+    has_read_configuration: bool = False
+
+    @asynccontextmanager
+    async def session(self) -> AsyncIterator[AsyncSession]:
+        async with self.database.session() as session:
+            if self.has_read_configuration:
+                await _identify(session, self.ready)
+            self.has_read_configuration = True
+            yield session
+
+
+async def _identify(session: AsyncSession, ready: asyncio.Future[int]) -> None:
+    process_id = await session.scalar(text("SELECT pg_backend_pid()"))
+    assert isinstance(process_id, int)
+    ready.set_result(process_id)
+
+
 async def _write_configuration(
     case: ConfigurationCase, ready: asyncio.Future[int], operation: str
 ) -> None:
+    if operation == "binding_update":
+        source = FakeAcSource(columns={"After": full_shape()})
+        await ac_data_service.put_binding(
+            BindingSessions(case.database, ready),
+            AcSourceReader(source=source, timezone="Asia/Shanghai"),
+            ac_unit_id=case.unit_id,
+            dataset="raw_minute",
+            payload=AcDataBindingPutIn(source_object="After"),
+        )
+        return
     async with case.database.session() as session:
-        process_id = await session.scalar(text("SELECT pg_backend_pid()"))
-        assert isinstance(process_id, int)
-        ready.set_result(process_id)
+        await _identify(session, ready)
         await _apply_change(session, case, operation)
 
 

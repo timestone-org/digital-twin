@@ -27776,7 +27776,7 @@
         ]
       },
       "put": {
-        "description": "把这台空调的这个数据集指向外部库里的一个对象。\n\nArgs: ac_unit_id, dataset, payload, session, reader, _manager。",
+        "description": "把这台空调的这个数据集指向外部库里的一个对象。\n\nArgs: ac_unit_id, dataset, payload, sessions, reader, _manager。",
         "operationId": "put_binding_api_v1_platform_ac_units__ac_unit_id__data_bindings__dataset__put",
         "parameters": [
           {
@@ -27935,7 +27935,7 @@
     },
     "/api/v1/platform/ac-units/{ac_unit_id}/raw-samples": {
       "get": {
-        "description": "区间内的逐行原始数据，游标翻页。\n\nArgs: ac_unit_id, session, reader, window, cursor, _viewer。",
+        "description": "区间内的逐行原始数据，游标翻页。\n\nArgs: ac_unit_id, sessions, reader, window, cursor, _viewer。",
         "operationId": "list_raw_samples_api_v1_platform_ac_units__ac_unit_id__raw_samples_get",
         "parameters": [
           {
@@ -28027,7 +28027,7 @@
     },
     "/api/v1/platform/ac-units/{ac_unit_id}/raw-series": {
       "get": {
-        "description": "按分钟桶聚合的折线图数据，桶宽在响应里回显。\n\nArgs: ac_unit_id, session, reader, window, options, _viewer。",
+        "description": "按分钟桶聚合的折线图数据，桶宽在响应里回显。\n\nArgs: ac_unit_id, sessions, reader, window, options, _viewer。",
         "operationId": "list_raw_series_api_v1_platform_ac_units__ac_unit_id__raw_series_get",
         "parameters": [
           {
@@ -41807,7 +41807,7 @@
     },
     "/api/v1/platform/rooms/{room_id}/live-readings": {
       "get": {
-        "description": "房间里每台绑了原始数据的机组在回看窗内的最后一条可用读数。\n\nArgs: room_id, session, reader, _viewer。",
+        "description": "房间里每台绑了原始数据的机组在回看窗内的最后一条可用读数。\n\nArgs: room_id, sessions, reader, _viewer。",
         "operationId": "read_live_readings_api_v1_platform_rooms__room_id__live_readings_get",
         "parameters": [
           {

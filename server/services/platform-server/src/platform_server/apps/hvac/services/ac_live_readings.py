@@ -42,6 +42,7 @@ from platform_server.apps.hvac.services.ac_startup_frames import (
     running_state,
 )
 from platform_server.apps.hvac.services.room_service import require_room
+from platform_server.apps.hvac.services.sessions import Sessions
 
 # 回看窗（分钟）：外库逐分钟写入，再早的行回答不了「现在是什么状况」
 LOOKBACK_MINUTES = 15
@@ -73,13 +74,14 @@ _CELSIUS_METRICS = frozenset(
 
 
 async def read_live(
-    session: AsyncSession, reader: AcSourceReader, *, room_id: uuid.UUID
+    sessions: Sessions, reader: AcSourceReader, *, room_id: uuid.UUID
 ) -> LiveReadingsOut:
     """房间里每台绑定了原始数据的机组的当下读数，serial 升序。
 
-    Args: session, reader, room_id。
+    Args: sessions, reader, room_id。
     """
-    units = await load_live_units(session, room_id)
+    async with sessions.session() as read:
+        units = await load_live_units(read, room_id)
     return await fetch_live(reader, units)
 
 

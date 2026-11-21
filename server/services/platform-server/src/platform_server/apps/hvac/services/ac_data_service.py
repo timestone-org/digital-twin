@@ -51,6 +51,7 @@ from platform_server.apps.hvac.schemas import (
     MetricOut,
 )
 from platform_server.apps.hvac.services.ac_configuration_guard import lock_unit
+from platform_server.apps.hvac.services.sessions import Sessions
 
 _logger = get_logger("platform.hvac.ac_data")
 
@@ -161,7 +162,7 @@ async def ensure_source_object_matches(
 
 
 async def put_binding(
-    session: AsyncSession,
+    sessions: Sessions,
     reader: SourceDescriber,
     *,
     ac_unit_id: uuid.UUID,
@@ -170,33 +171,35 @@ async def put_binding(
 ) -> AcDataBindingOut:
     """设置绑定。同一空调同一数据集只有一条，重复调用是覆盖不是新增。
 
-    Args: session, reader, ac_unit_id, dataset, payload。
+    Args: sessions, reader, ac_unit_id, dataset, payload。
     """
-    await _require_ac_unit(session, ac_unit_id)
+    async with sessions.session() as read:
+        await _require_ac_unit(read, ac_unit_id)
     spec = require_dataset(dataset)
     source_object = ensure_valid_source_object(payload.source_object)
     await ensure_source_object_matches(
         reader, source_object=source_object, dataset=spec
     )
-    await lock_unit(session, ac_unit_id)
-    binding = await ac_data_binding_crud.find(session, ac_unit_id, dataset)
-    if binding is None:
-        binding = AcDataBinding(
-            ac_unit_id=ac_unit_id,
+    async with sessions.session() as session:
+        await lock_unit(session, ac_unit_id)
+        binding = await ac_data_binding_crud.find(session, ac_unit_id, dataset)
+        if binding is None:
+            binding = AcDataBinding(
+                ac_unit_id=ac_unit_id,
+                dataset=dataset,
+                source_object=source_object,
+            )
+            session.add(binding)
+        else:
+            binding.source_object = source_object
+        await session.flush()
+        _logger.info(
+            "ac_data_binding_set",
+            "数据源绑定已设置",
+            ac_unit_id=str(ac_unit_id),
             dataset=dataset,
-            source_object=source_object,
         )
-        session.add(binding)
-    else:
-        binding.source_object = source_object
-    await session.flush()
-    _logger.info(
-        "ac_data_binding_set",
-        "数据源绑定已设置",
-        ac_unit_id=str(ac_unit_id),
-        dataset=dataset,
-    )
-    return _to_binding_out(binding)
+        return _to_binding_out(binding)
 
 
 async def delete_binding(
