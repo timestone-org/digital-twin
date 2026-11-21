@@ -363,6 +363,8 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
 
     location /api/v1/auth/ {
       include /etc/nginx/conf.d/auth-inject.conf;
+      proxy_set_header X-Edge-Source-IP $remote_addr;
+      proxy_set_header X-Edge-Audit-Key "${AUTH_EDGE_SERVICE_KEY}";
       proxy_pass http://$auth_upstream$request_uri;
       include /etc/nginx/conf.d/proxy-common.conf;
     }

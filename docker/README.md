@@ -261,6 +261,13 @@ PostgreSQL 的初始化变量只对空数据卷生效，已有数据库的密码
 schema，`KNOWLEDGE_EMBEDDING_DIMENSIONS` 必须与所用嵌入模型维数一致。
 维数变更需要专门迁移及重新解析已有文档，不能仅改环境变量。
 
+### 认证管理审计来源
+
+Docker 网关转发认证管理请求时携带它观测到的客户端地址，认证服务验证服务证明后
+写入审计。先更新认证服务，再更新 Docker 网关。两端继续共用部署的
+`AUTH_EDGE_SERVICE_KEY`。混合版本期间按连接地址记录，历史审计记录保留原样。
+详见 [ADR-0065](../docs/adr/0065-认证审计采用可信边缘来源地址.md)。
+
 ### realtime-hub 的两处部署前置
 
 **`/api/v1/realtime/ws` 是一条免认证 location，这不是漏了 `auth_request`。**

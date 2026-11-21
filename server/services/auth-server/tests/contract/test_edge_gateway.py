@@ -100,6 +100,22 @@ def _sets_header(body: str, header: str) -> bool:
     return re.search(rf"\bproxy_set_header\s+{header}\s", body) is not None
 
 
+def test_docker_auth_audit_source_is_set_by_the_edge() -> None:
+    server, blocks = load("nginx.conf.template")
+    auth = find(blocks, "/api/v1/auth/")
+    assert _includes(auth.body, "auth-inject.conf")
+    assert "proxy_set_header X-Edge-Source-IP $remote_addr;" in auth.body
+    assert 'proxy_set_header X-Edge-Audit-Key "${AUTH_EDGE_SERVICE_KEY}";' in (
+        auth.body
+    )
+    assert not _sets_header(server, "X-Edge-Audit-Key")
+    assert all(
+        not _sets_header(block.body, "X-Edge-Audit-Key")
+        for block in blocks
+        if block is not auth
+    )
+
+
 @pytest.mark.parametrize("filename", CONFIGS)
 def test_every_rate_limit_rejects_with_429_not_503(filename: str) -> None:
     """limit_req 默认回 503：前端会把「点太快了」报成服务端故障。"""
