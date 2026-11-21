@@ -1,6 +1,7 @@
 """服务端工具在执行前校验参数，失败提示说明状态与恢复方式。"""
 
 import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ from ai_assistant.apps.chat.services.intent.select import specs_for
 from ai_assistant.apps.chat.services.tools.execution import (
     ToolExecutionError,
     ToolExecutor,
+    validate_arguments,
 )
 from ai_assistant.apps.chat.services.tools.guides import OUTPUT_GUIDES
 from ai_assistant.apps.chat.services.tools.providers.server import ServerTools
@@ -139,3 +141,33 @@ async def test_chunk_window_never_clips_while_claiming_end() -> None:
         await executor.run_with_budget(
             "knowledge.read_chunk", {"base_id": "b", "chunk_id": "c"}, 1000
         )
+
+
+def test_config_path_accepts_the_browser_array_index_fixture() -> None:
+    fixture = json.loads(
+        (Path(__file__).parents[1] / "fixtures/config_path.json").read_text()
+    )
+    spec = next(one for one in TOOL_SPECS if one.name == fixture["name"])
+    validate_arguments(spec, fixture["arguments"])
+    assert fixture["arguments"]["path"] == ["indicators", 0, "name"]
+
+
+def test_whole_canvas_read_accepts_an_explicit_null_scope() -> None:
+    spec = next(
+        one for one in TOOL_SPECS if one.name == "dashboard.read_values"
+    )
+    validate_arguments(
+        spec, {"node_id": None, "keyword": "温度", "offset": 0, "limit": 2}
+    )
+    assert "null" in spec.parameters["properties"]["node_id"]["type"]
+
+
+@pytest.mark.parametrize(
+    "path", [[], ["indicators", -1], [True], [0.5], [9007199254740992]]
+)
+def test_config_path_rejects_invalid_field_or_index_segments(
+    path: list[object],
+) -> None:
+    spec = next(one for one in TOOL_SPECS if one.name == "dashboard.set_config")
+    with pytest.raises(ToolExecutionError):
+        validate_arguments(spec, {"node_id": "radar", "path": path, "value": 1})

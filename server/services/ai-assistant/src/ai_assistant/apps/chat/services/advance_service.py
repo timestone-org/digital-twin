@@ -41,6 +41,9 @@ from ai_assistant.apps.chat.services.context_summary import (
 )
 from ai_assistant.apps.chat.services.context_tags import IMAGE_CALL_ID
 from ai_assistant.apps.chat.services.intent import select as tool_select
+from ai_assistant.apps.chat.services.intent.client_contract import (
+    with_window_defaults,
+)
 from ai_assistant.apps.chat.services.memory import state_block
 from ai_assistant.apps.chat.services.memory.page_context import (
     path_of,
@@ -387,7 +390,7 @@ async def advance(
     outcome: TurnOutcome | None = None
     async for item in stream_context(turn, messages, updates):
         if isinstance(item, TurnOutcome):
-            outcome = item
+            outcome = with_window_defaults(item, payload.client_tools)
             continue
         if isinstance(item, TurnStep):
             produced.append(item)

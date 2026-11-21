@@ -4,6 +4,8 @@
 模型会先试一次、失败、再换路——三次往返换一个本可以不发生的错误。
 """
 
+import pytest
+
 from ai_assistant.apps.chat.enums import SURFACE_KINDS
 from ai_assistant.apps.chat.services.intent.select import (
     CORE_SERVER_TOOLS,
@@ -45,6 +47,21 @@ def test_client_tools_follow_the_pages_own_report() -> None:
     assert "dashboard.read_canvas" in names
     # 页面没报的客户端工具不下发——模型看得见也调不动
     assert "dashboard.write_binding" not in names
+
+
+@pytest.mark.parametrize(
+    ("surface", "name"),
+    [
+        ("dashboard-editor", "dashboard.list_nodes"),
+        ("report-editor", "report.read_content"),
+        ("report-editor", "report.replace_text"),
+    ],
+)
+def test_new_client_capabilities_require_an_explicit_page_report(
+    surface: str, name: str
+) -> None:
+    assert name not in _names(surface, None)
+    assert name in _names(surface, [name])
 
 
 def test_an_empty_report_means_no_client_tools_at_all() -> None:
@@ -98,3 +115,26 @@ def test_cross_module_read_tools_are_visible_on_every_surface() -> None:
     for surface in SURFACE_KINDS:
         names = _names(surface, [])
         assert set(CROSS_MODULE_READ_TOOLS) <= names
+
+
+@pytest.mark.parametrize(
+    ("surface", "read", "marker"),
+    [
+        (
+            "twin-editor",
+            "dashboard.read_values",
+            "capability.dashboard.read_values.v2",
+        ),
+        ("dashboard-editor", "dashboard.read_values", "dashboard.list_nodes"),
+        ("report-editor", "report.read_draft", "report.read_content"),
+    ],
+)
+def test_existing_read_names_follow_the_reported_paging_version(
+    surface: str, read: str, marker: str
+) -> None:
+    old = next(spec for spec in specs_for(surface, [read]) if spec.name == read)
+    new = next(
+        spec for spec in specs_for(surface, [read, marker]) if spec.name == read
+    )
+    assert "offset" not in old.parameters["properties"]
+    assert "offset" in new.parameters["properties"]

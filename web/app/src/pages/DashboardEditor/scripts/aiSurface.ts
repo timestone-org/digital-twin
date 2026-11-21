@@ -57,6 +57,7 @@ const CARD_STYLE = '__cardStyle'
 
 /** 这一页实现了哪些客户端工具。⚠ 与技能清单里声明的名字逐字相同。 */
 export const EDITOR_TOOLS = [
+  'dashboard.list_nodes',
   'dashboard.read_canvas',
   'dashboard.write_binding',
   'dashboard.remove_binding',
