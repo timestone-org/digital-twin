@@ -106,11 +106,12 @@ export function useTwin2dLiveValues(
 ): Twin2dLiveValues {
   const channel = useRealtimeChannel()
   const currentConnection = () => channel.connectionState?.value
+  const subscribe = createPointSubscribe(channel, () => {
+    const id = dashboardId()
+    return id === '' ? null : dashboardTopic(id)
+  })
   installDashboardDataSources({
-    subscribe: createPointSubscribe(channel, () => {
-      const id = dashboardId()
-      return id === '' ? null : dashboardTopic(id)
-    }),
+    subscribe,
   })
 
   // ⚠ `boundPointKeysOf` 出的是**定序**的去重表：次序一抖，`usePointSamples`
@@ -119,6 +120,7 @@ export function useTwin2dLiveValues(
   const samples = usePointSamples(
     () => keys.value,
     dashboardId,
+    subscribe,
     currentConnection,
   )
   const read = connectedPointReader(samples.read, currentConnection)

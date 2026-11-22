@@ -9,6 +9,8 @@ import type { ApiEnvelope, FieldError } from '@dt/contracts'
 import { SUCCESS_CODE } from '@dt/contracts'
 
 import { AUTH_BASE_URL, REQUEST_TIMEOUT_MS } from '@/config/app'
+import { ByteTransfer } from './byteTransfer'
+import { sameRequestOwner } from './requestOwner'
 
 /** 业务错误：HTTP 2xx 之外或信封 code 非 0。 */
 export class BizError extends Error {
@@ -52,12 +54,14 @@ export class TransportError extends Error {
 
 interface ClientHooks {
   getToken: () => string | null
+  getSessionIdentity: () => string | null
   onRefresh: () => Promise<boolean>
   onUnauthorized: (attemptedToken: string | null) => void
 }
 
 let hooks: ClientHooks = {
   getToken: () => null,
+  getSessionIdentity: () => null,
   onRefresh: () => Promise.resolve(false),
   onUnauthorized: () => undefined,
 }
@@ -80,7 +84,7 @@ export interface RequestOptions {
   /** 跳过令牌注入与 401 重试（登录、刷新自己走这条）。 */
   anonymous?: boolean | undefined
   signal?: AbortSignal | undefined
-  /** 固定调用预算覆盖默认超时；不会启用重试。 */
+  /** 普通请求的总时限或文件传输的空闲时限，单位毫秒。 */
   timeoutMs?: number | undefined
   /** 附加请求头，如 `Idempotency-Key`。不许在这里塞 Authorization。 */
   headers?: Record<string, string> | undefined
@@ -170,10 +174,16 @@ async function readEnvelope<T>(
   return { ...body, data: body.data as T }
 }
 
+function requestSignal(options: RequestOptions): AbortSignal {
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS)
+  return options.signal ? AbortSignal.any([options.signal, timeout]) : timeout
+}
+
 async function send(
   path: string,
   options: RequestOptions,
   token: string | null,
+  byteSignal?: AbortSignal,
 ): Promise<Response> {
   const headers: Record<string, string> = {
     Accept: 'application/json',
@@ -183,11 +193,7 @@ async function send(
     headers['Content-Type'] = 'application/json'
   }
   if (token !== null) headers.Authorization = `Bearer ${token}`
-  // ⚠ 每个跨进程调用都要有超时：没有超时的请求会在下游卡住时永远挂着
-  const timeout = AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS)
-  const signal = options.signal
-    ? AbortSignal.any([options.signal, timeout])
-    : timeout
+  const signal = byteSignal ?? requestSignal(options)
   try {
     return await fetch(buildUrl(path, options), {
       method: options.method ?? 'GET',
@@ -197,6 +203,7 @@ async function send(
     })
   } catch (error) {
     if (isTimeout(error)) throw timeoutError(0)
+    if (byteSignal?.aborted) throw byteSignal.reason
     throw new TransportError(0, '无法连接服务器，请检查网络')
   }
 }
@@ -247,22 +254,61 @@ export async function request<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T | null> {
-  const attemptedToken = bearerToken(options)
-  const first = await send(path, options, attemptedToken)
-  if (
-    first.status !== 401 ||
-    options.anonymous ||
-    options.credentialOverride !== undefined
-  ) {
-    return unwrap<T>(first)
+  const response = await authorizedResponse(options, (token) =>
+    send(path, options, token),
+  )
+  return unwrap<T>(response)
+}
+
+/** 只在原账号的首个 401 上续期一次。 */
+async function authorizedResponse(
+  options: RequestOptions,
+  attempt: (token: string | null) => Promise<Response>,
+  refresh: () => Promise<boolean> = () => hooks.onRefresh(),
+): Promise<Response> {
+  const before = {
+    token: bearerToken(options),
+    session: hooks.getSessionIdentity(),
   }
-  if (hooks.getToken() !== attemptedToken) return unwrap<T>(first)
-  const refreshed = await hooks.onRefresh()
-  if (!refreshed) {
-    hooks.onUnauthorized(attemptedToken)
-    return unwrap<T>(first)
+  const first = await attempt(before.token)
+  if (!canRefreshResponse(first, options, before.token)) return first
+  let renewed: boolean
+  try {
+    renewed = await refresh()
+  } catch (error) {
+    discardBody(first)
+    throw error
   }
-  return unwrap<T>(await send(path, options, bearerToken(options)))
+  const after = {
+    token: bearerToken(options),
+    session: hooks.getSessionIdentity(),
+  }
+  const sameOwner = sameRequestOwner(before, after)
+  if (!renewed) {
+    if (after.session === null || sameOwner) hooks.onUnauthorized(before.token)
+    return first
+  }
+  if (!sameOwner) return first
+  discardBody(first)
+  return attempt(after.token)
+}
+
+function canRefreshResponse(
+  response: Response,
+  options: RequestOptions,
+  token: string | null,
+): boolean {
+  return (
+    response.status === 401 &&
+    !options.anonymous &&
+    options.credentialOverride === undefined &&
+    hooks.getToken() === token
+  )
+}
+
+function discardBody(response: Response): void {
+  // 已选定续期结果，释放被替代响应占用的连接。
+  void response.body?.cancel().catch(() => undefined)
 }
 
 /**
@@ -274,29 +320,37 @@ export async function request<T>(
  * 取回来的 Blob 由调用方转成 object URL，并在卸载时 revoke。
  *
  * ⚠ 401 的重试与 `request` 同一条口径：抖一下不该把人踢下线。
+ * 等响应和两次收到字节之间分别限时，持续传输可超过这个时长。
  * @param path 相对前缀的路径
- * @param options 前缀、query、中止信号
+ * @param options 前缀、query、空闲时限与中止信号
  */
 export async function requestBytes(
   path: string,
   options: RequestOptions = {},
 ): Promise<Blob> {
-  const attemptedToken = bearerToken(options)
-  const first = await send(path, options, attemptedToken)
-  if (
-    first.status !== 401 ||
-    options.anonymous ||
-    options.credentialOverride !== undefined
-  ) {
-    return unwrapBytes(first)
+  const transfer = new ByteTransfer(
+    options.timeoutMs ?? REQUEST_TIMEOUT_MS,
+    options.signal,
+  )
+  let status = 0
+  try {
+    const response = await authorizedResponse(
+      options,
+      (token) =>
+        transfer.headers((signal) => send(path, options, token, signal)),
+      () => transfer.refresh(() => hooks.onRefresh()),
+    )
+    status = response.status
+    return await unwrapBytes(transfer.monitor(response))
+  } catch (error) {
+    if (transfer.signal.aborted) {
+      if (isTimeout(transfer.signal.reason)) throw timeoutError(status)
+      throw transfer.signal.reason
+    }
+    throw error
+  } finally {
+    transfer.clear()
   }
-  if (hooks.getToken() !== attemptedToken) return unwrapBytes(first)
-  const refreshed = await hooks.onRefresh()
-  if (!refreshed) {
-    hooks.onUnauthorized(attemptedToken)
-    return unwrapBytes(first)
-  }
-  return unwrapBytes(await send(path, options, bearerToken(options)))
 }
 
 /**

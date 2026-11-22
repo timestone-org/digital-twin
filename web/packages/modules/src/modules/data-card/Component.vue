@@ -267,6 +267,7 @@ const scroll = computed(() =>
         </button>
       </div>
       <ScrollList
+        v-slot="{ isDuplicate }"
         :item-count="shownCount"
         :auto-scroll="scroll.autoScroll"
         :seconds-per-item="scroll.scrollSpeed"
@@ -288,6 +289,7 @@ const scroll = computed(() =>
               :align="align"
               :vars="cellVars"
               :emit-value="one.emitValue"
+              :is-duplicate="isDuplicate"
               :alarm="alarms[one.index] ?? null"
               @pick="onPick"
             />

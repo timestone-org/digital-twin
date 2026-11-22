@@ -39,18 +39,23 @@ from platform_server.apps.hvac.services.ac_compliance_service import (
     effective_compliance,
 )
 from platform_server.apps.hvac.services.ac_room_configuration import (
+    BoundUnit,
     RoomConfiguration,
-    load_bound_units,
+    legacy_startup_assessment,
     load_configuration,
-    restore_configuration,
+    read_batch_configuration,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_extract import (
     merge_extents,
 )
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
+from platform_server.apps.hvac.services.sessions import Sessions
+from platform_server.apps.hvac.startup_assessment import ColdStartAssessment
 from platform_server.apps.hvac.startups import (
     BATCH_RETENTION,
+    OUTCOME_UNASSESSED,
+    OUTCOME_USABLE,
     OUTCOMES,
     SHARD_STATUS_DONE,
 )
@@ -89,17 +94,18 @@ async def list_episodes(
         outcome=filters.outcome,
         running_set=filters.running_set,
     )
+    configuration = read_batch_configuration(current)
+    assessment = legacy_startup_assessment(current, configuration)
     rows = await ac_startup_episode_crud.page_by_batch(
-        session, current.id, window=window
+        session, current.id, window=window, assessment=assessment
     )
     excluded = await ac_startup_exclusion_crud.map_by_room(session, room_id)
-    configuration = (
-        None
-        if current.configuration_snapshot is None
-        else restore_configuration(current.configuration_snapshot)
-    )
     return _to_page(
-        rows, limit=cursor.limit, excluded=excluded, configuration=configuration
+        rows,
+        limit=cursor.limit,
+        excluded=excluded,
+        configuration=configuration,
+        assessment=assessment,
     )
 
 
@@ -162,10 +168,11 @@ def _to_page(
     limit: int,
     excluded: dict[datetime, AcStartupExclusion],
     configuration: RoomConfiguration | None = None,
+    assessment: ColdStartAssessment | None = None,
 ) -> CursorPage[StartupEpisodeOut]:
     """多取的那一行只用来判断还有没有下一页。
 
-    Args: rows, limit, excluded。
+    Args: rows, limit, excluded, configuration, assessment。
     """
     has_more = len(rows) > limit
     visible = rows[:limit]
@@ -177,7 +184,10 @@ def _to_page(
         else None
     )
     return CursorPage[StartupEpisodeOut](
-        items=[_to_episode(row, excluded, configuration) for row in visible],
+        items=[
+            _to_episode(row, excluded, configuration, assessment)
+            for row in visible
+        ],
         next=next_cursor,
         has_more=has_more,
     )
@@ -187,18 +197,24 @@ def _to_episode(
     row: AcStartupEpisode,
     excluded: dict[datetime, AcStartupExclusion],
     configuration: RoomConfiguration | None = None,
+    assessment: ColdStartAssessment | None = None,
 ) -> StartupEpisodeOut:
     """事件行 → 对外模型，顺带套上人工排除。
 
-    Args: row, excluded。
+    Args: row, excluded, configuration, assessment。
     """
     exclusion = excluded.get(row.started_at)
+    is_unassessed = (
+        row.outcome == OUTCOME_USABLE
+        and assessment is not None
+        and not assessment.allows(row.started_at)
+    )
     return StartupEpisodeOut(
         started_at=row.started_at,
         running_set=list(row.running_set),
-        complied_at=row.complied_at,
-        duration_minutes=row.duration_minutes,
-        outcome=row.outcome,
+        complied_at=None if is_unassessed else row.complied_at,
+        duration_minutes=None if is_unassessed else row.duration_minutes,
+        outcome=OUTCOME_UNASSESSED if is_unassessed else row.outcome,
         readings=dict(row.readings),
         idle_minutes=row.idle_minutes,
         is_excluded=exclusion is not None,
@@ -216,7 +232,7 @@ def _to_episode(
 
 
 async def list_batches(
-    session: AsyncSession,
+    sessions: Sessions,
     reader: AcSourceReader,
     *,
     room_id: uuid.UUID,
@@ -224,32 +240,36 @@ async def list_batches(
 ) -> StartupBatchesOut:
     """批次列表、当前批次、组合覆盖度、数据范围与「该不该重算」。
 
-    Args: session, reader, room_id, rules。
+    Args: sessions, reader, room_id, rules。
     """
-    await _require_room(session, room_id)
-    rows = await ac_startup_batch_crud.list_by_room(
-        session, room_id, limit=BATCH_RETENTION
-    )
-    current = await ac_startup_batch_crud.find_current(session, room_id)
-    configuration = await load_configuration(
-        session, room_id, timezone=reader.timezone, rules=rules
-    )
-    expected = configuration.fingerprint()
+    async with sessions.session() as read:
+        await _require_room(read, room_id)
+        rows = await ac_startup_batch_crud.list_by_room(
+            read, room_id, limit=BATCH_RETENTION
+        )
+        current = await ac_startup_batch_crud.find_current(read, room_id)
+        configuration = await load_configuration(
+            read, room_id, timezone=reader.timezone, rules=rules
+        )
+        expected = configuration.fingerprint()
+        items = [await _to_batch(read, row) for row in rows]
+        active = await _to_batch(read, current) if current is not None else None
+        coverage = await _coverage(read, current)
+        is_stale = (
+            current is not None and current.params_fingerprint != expected
+        )
     return StartupBatchesOut(
-        items=[await _to_batch(session, row) for row in rows],
-        current=(
-            await _to_batch(session, current) if current is not None else None
-        ),
-        coverage=await _coverage(session, current),
+        items=items,
+        current=active,
+        coverage=coverage,
         expected_fingerprint=expected,
-        # ⚠ 没有当前批次时不算「过期」：那是「还没算过」，要人做的事不一样
-        is_stale=current is not None and current.params_fingerprint != expected,
-        source_range=await _source_range(session, reader, room_id),
+        is_stale=is_stale,
+        source_range=await _source_range(reader, room_id, configuration.units),
     )
 
 
 async def _source_range(
-    session: AsyncSession, reader: AcSourceReader, room_id: uuid.UUID
+    reader: AcSourceReader, room_id: uuid.UUID, units: tuple[BoundUnit, ...]
 ) -> SourceRangeOut | None:
     """外库里实际有数据的那一段；没绑或外库不可达都给 None。
 
@@ -257,9 +277,8 @@ async def _source_range(
     字段依赖厂商库（CONTEXT §5）。取不到就说不知道，不返回陈旧值。
     ⚠ 限时只罩外库那一段：罩住会话上的查询的话，超时取消会把这个请求的连接
     留在半截状态。
-    Args: session, reader, room_id。
+    Args: reader, room_id, units。
     """
-    units = await load_bound_units(session, room_id)
     try:
         async with asyncio.timeout(SOURCE_RANGE_BUDGET_S):
             extent = await merge_extents(reader, units)
@@ -292,7 +311,12 @@ async def _coverage(
     """
     if current is None:
         return []
-    rows = await ac_startup_episode_crud.coverage(session, current.id)
+    assessment = legacy_startup_assessment(
+        current, read_batch_configuration(current)
+    )
+    rows = await ac_startup_episode_crud.coverage(
+        session, current.id, assessment=assessment
+    )
     return [
         CombinationCoverageOut(running_set=running_set, usable_count=total)
         for running_set, total in rows

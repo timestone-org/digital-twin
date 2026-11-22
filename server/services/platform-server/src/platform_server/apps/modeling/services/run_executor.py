@@ -37,6 +37,10 @@ from platform_server.apps.modeling.services.node_task import (
     NodePayload,
     NodeResult,
 )
+from platform_server.apps.modeling.services.post_split_fit import (
+    FitReuse,
+    plan_fit_reuse,
+)
 
 # 错误文本落库前的截断长度，与节点记录那一列一致
 MAX_ERROR_TEXT = 8 * 1024
@@ -112,6 +116,7 @@ class Execution:
     #: 每个节点落一次库。⚠ 必须逐节点落而不是攒到最后：跑到一半的进度要对
     #: 别的副本可见，前端轮询读的就是这些行
     on_node_finished: Callable[[NodeOutcome], Awaitable[None]]
+    business_timezone: str | None = None
 
 
 @dataclass
@@ -123,6 +128,9 @@ class _Context:
     )
     artifacts: dict[str, SealedArtifact] = field(
         default_factory=dict[str, SealedArtifact]
+    )
+    fitted: dict[str, dict[str, Any]] = field(
+        default_factory=dict[str, dict[str, Any]]
     )
 
 
@@ -136,7 +144,8 @@ async def execute_graph(
     Args: graph, execution。
     """
     nodes = graph.node_by_id()
-    order = topological_order(graph)
+    reuse = plan_fit_reuse(graph)
+    order = topological_order(graph, precedes=reuse.sources)
     context = _Context()
     outcomes: list[NodeOutcome] = []
     budgets = _Budgets(
@@ -149,7 +158,7 @@ async def execute_graph(
             return _cancelled(outcomes + skipped, context)
         outcome = await _run_one(
             nodes[node_id],
-            _setting_of(graph, nodes, ordinal, execution),
+            _setting_of(graph, nodes, ordinal, execution, reuse),
             context,
             budgets,
         )
@@ -185,6 +194,7 @@ class _Setting:
     nodes: dict[str, GraphNode]
     ordinal: int
     execution: Execution
+    fit_reuse: FitReuse
 
 
 def _setting_of(
@@ -192,9 +202,14 @@ def _setting_of(
     nodes: dict[str, GraphNode],
     ordinal: int,
     execution: Execution,
+    fit_reuse: FitReuse,
 ) -> _Setting:
     return _Setting(
-        graph=graph, nodes=nodes, ordinal=ordinal, execution=execution
+        graph=graph,
+        nodes=nodes,
+        ordinal=ordinal,
+        execution=execution,
+        fit_reuse=fit_reuse,
     )
 
 
@@ -216,7 +231,7 @@ class _Budget:
         self._used = 0
 
     def take(
-        self, previews: dict[str, dict[str, Any]]
+        self, previews: dict[str, preview_service.PreparedPreview]
     ) -> tuple[dict[str, dict[str, Any]], bool]:
         """把一组摘要压进预算，回 `(摘要, 是否被截断)`。
 
@@ -224,23 +239,23 @@ class _Budget:
         """
         kept: dict[str, dict[str, Any]] = {}
         truncated = False
-        for port, raw in previews.items():
-            fitted, was_cut = preview_service.fit_budget(raw)
-            size = preview_service.size_of(fitted)
+        for port, prepared in previews.items():
+            fitted = prepared.content
+            size = prepared.size_bytes
             if (
                 self._used + size > preview_service.RUN_PREVIEW_MAX_BYTES
-                and raw.get("kind") not in _UNBUDGETED_KINDS
+                and fitted.get("kind") not in _UNBUDGETED_KINDS
             ):
                 kept[port] = {
-                    "kind": raw.get("kind", "unknown"),
+                    "kind": fitted.get("kind", "unknown"),
                     "note": "本次运行的结果摘要已用满预算",
                 }
-                if raw.get("kind") == preview_service.KIND_FRAME:
+                if fitted.get("kind") == preview_service.KIND_FRAME:
                     kept[port]["data_period"] = fitted.get("data_period")
                 truncated = True
                 continue
             kept[port] = fitted
-            truncated = truncated or was_cut
+            truncated = truncated or prepared.is_truncated
             self._used += size
         return kept, truncated
 
@@ -279,12 +294,7 @@ async def _run_one(
     except Exception:
         return _node_failed(node, setting, started, traceback.format_exc())
     _remember_result(node.id, result, context)
-    previews, truncated = budgets.previews.take(
-        {
-            port: preview_service.summarize(value)
-            for port, value in result.outputs.items()
-        }
-    )
+    previews, truncated = budgets.previews.take(result.previews)
     return NodeOutcome(
         node_id=node.id,
         operator=node.operator,
@@ -314,6 +324,8 @@ def _remember_result(
         context.ports[(node_id, port)] = payload
     if result.artifact is not None:
         context.artifacts[node_id] = result.artifact
+    if result.fitted is not None:
+        context.fitted[node_id] = result.fitted
 
 
 async def _run_node(
@@ -333,10 +345,26 @@ async def _run_node(
             config=dict(node.config),
             inputs=_inputs_of(node, setting, context),
             tz_offset_minutes=execution.tz_offset_minutes,
+            business_timezone=execution.business_timezone,
             split_plan=split_plan_of(setting.graph, setting.nodes, node.id),
             model_artifact=_input_artifact(node, setting, context),
+            fitted=_training_fit(
+                setting.fit_reuse.source_for(node.id), context
+            ),
         )
     )
+
+
+def _training_fit(
+    source: str | None, context: _Context
+) -> dict[str, Any] | None:
+    """取训练节点实际产出的拟合参数。Args: source, context。"""
+    if source is None:
+        return None
+    fitted = context.fitted.get(source)
+    if fitted is None:
+        raise OperatorError("测试分支对应的训练算子没有产出拟合参数")
+    return fitted
 
 
 def _input_artifact(

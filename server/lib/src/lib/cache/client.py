@@ -18,6 +18,10 @@ _logger = get_logger("lib.cache")
 # 值等于自己才续期。否则会续到别人的键上，两个持有者同时以为自己独占
 _RENEW_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
+    if ARGV[3] then
+        redis.call('set', KEYS[1], ARGV[3], 'EX', ARGV[2])
+        return 1
+    end
     return redis.call('expire', KEYS[1], ARGV[2])
 end
 return 0
@@ -86,18 +90,30 @@ class Cache:
         )
         return bool(result)
 
-    async def renew_if_owner(self, key: str, value: str, *, ttl_s: int) -> bool:
-        """值还等于 `value` 才续期，续上返回 True。
+    async def renew_if_owner(
+        self,
+        key: str,
+        value: str,
+        *,
+        ttl_s: int,
+        replacement: str | None = None,
+    ) -> bool:
+        """值等于 `value` 才续期，可同时原子替换。
 
         ⚠ 必须是 CAS 而不是「先读再写」：读到自己、写回去之间键可能已经过期
         并被别人抢走，那一写就把别人的锁改成了自己的，两个持有者同时以为自己
         独占——而两边都不会报错。
-        Args: key, value, ttl_s。
+        Args: key, value, ttl_s, replacement。
         """
+        args = (
+            (value, ttl_s)
+            if replacement is None
+            else (value, ttl_s, replacement)
+        )
         return bool(
             await self._run(
                 self._client.eval(  # pyright: ignore[reportUnknownMemberType]
-                    _RENEW_SCRIPT, 1, key, value, ttl_s
+                    _RENEW_SCRIPT, 1, key, *args
                 )
             )
         )

@@ -1,8 +1,7 @@
 """platform-server 进程入口。容器 `CMD` 直接用这个可执行名。"""
 
-import uvicorn
-
 from lib.config import load_settings_or_exit
+from lib.web import serve_http as serve_application
 from platform_server import publisher, worker
 from platform_server.app import build_app
 from platform_server.settings import ROLE_PUBLISHER, ROLE_WORKER, Settings
@@ -30,13 +29,7 @@ def serve_http(settings: Settings) -> None:
 
     Args: settings。
     """
-    uvicorn.run(
-        build_app(settings),
-        host=settings.app_http_host,
-        port=settings.app_http_port,
-        log_config=None,
-        access_log=False,
-    )
+    serve_application(build_app(settings), settings)
 
 
 if __name__ == "__main__":

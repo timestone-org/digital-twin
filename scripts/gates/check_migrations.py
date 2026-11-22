@@ -12,6 +12,7 @@ import ast
 import re
 from pathlib import Path
 
+from _migration_routines import executed_sql
 from _migration_sql import one_step_sql, sql_text
 
 from _report import Violation, at, main, parse, read, service_dirs
@@ -139,7 +140,7 @@ def check_no_backfill_in_migration() -> list[Violation]:
         scopes = _scopes(tree)
         for call in _op_calls(tree, "execute"):
             text = sql_text(call.args[0] if call.args else None)
-            if text is None or not BACKFILL.search(text):
+            if text is None or not BACKFILL.search(executed_sql(text)):
                 continue
             if (path.name, scopes.get(id(call), "")) not in BACKFILL_ALLOWED:
                 found.append(

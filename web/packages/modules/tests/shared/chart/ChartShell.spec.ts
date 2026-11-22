@@ -92,6 +92,28 @@ describe('空态', () => {
   })
 })
 
+it('加载失败时显示原因，恢复后重新显示原有数据状态', async () => {
+  echarts.createChart.mockRejectedValueOnce(new Error('本地图表资源暂不可用'))
+  const wrapper = await mountShell({
+    isEmpty: true,
+    emptyText: '所选时间内没有数据',
+  })
+  try {
+    expect(wrapper.get('[role="status"]').text()).toBe(
+      '图表加载失败，请刷新页面重试',
+    )
+    expect(wrapper.text()).not.toContain('所选时间内没有数据')
+
+    await wrapper.setProps({ config: { title: '合成趋势图' } })
+    await flushPromises()
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+    expect(wrapper.get('.dt-chart__empty').text()).toBe('所选时间内没有数据')
+    expect(echarts.createChart).toHaveBeenCalledTimes(2)
+  } finally {
+    wrapper.unmount()
+  }
+})
+
 describe('喂给各族的东西', () => {
   /**
    * 在渲染根上写一个变量并触发一次重建，返回最后一次 build 的入参与 wrapper。

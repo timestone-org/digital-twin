@@ -28,6 +28,7 @@ from platform_server.apps.hvac.services.ac_startup_rules import (
 from platform_server.apps.hvac.startups import (
     BATCH_STATUS_READY,
     OUTCOME_SET_CHANGED,
+    OUTCOME_UNASSESSED,
     OUTCOME_USABLE,
 )
 
@@ -235,6 +236,54 @@ async def test_episodes_filter_by_outcome(
     items = response.json()["data"]["items"]
     assert {item["outcome"] for item in items} == {OUTCOME_USABLE}
     assert len(items) == 2
+
+
+async def test_an_unassessed_filter_is_accepted_before_extraction_writes_it(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    room_id = await seeded_room(db_session, "未评估读取")
+    response = await app_client.get(
+        f"{PREFIX}/rooms/{room_id}/startup-episodes",
+        params={"outcome": "unassessed"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["items"] == []
+
+
+async def test_reader_returns_a_stored_unassessed_episode(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    room_id = await make_room(db_session, "未评估兼容")
+    batch = await make_batch(db_session, room_id)
+    await make_episode(
+        db_session,
+        batch,
+        minute=10,
+        running_set=["K11"],
+        outcome=OUTCOME_USABLE,
+    )
+    await make_episode(
+        db_session,
+        batch,
+        minute=20,
+        running_set=["K11"],
+        outcome=OUTCOME_UNASSESSED,
+    )
+    path = f"{PREFIX}/rooms/{room_id}/startup-episodes"
+    listing = await app_client.get(path)
+    assert listing.status_code == 200, listing.text
+    assert [item["outcome"] for item in listing.json()["data"]["items"]] == [
+        OUTCOME_UNASSESSED,
+        OUTCOME_USABLE,
+    ]
+    filtered = await app_client.get(
+        path, params={"outcome": OUTCOME_UNASSESSED}
+    )
+    assert filtered.status_code == 200, filtered.text
+    [found] = filtered.json()["data"]["items"]
+    assert found["outcome"] == OUTCOME_UNASSESSED
+    assert found["complied_at"] is None
+    assert found["duration_minutes"] is None
 
 
 async def test_episodes_filter_by_running_set_ignoring_order(

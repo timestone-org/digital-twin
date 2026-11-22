@@ -3,6 +3,7 @@
 import {
   REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE,
   REALTIME_PUBLIC_GRANT_CLOSE_CODE,
+  REALTIME_PUBLIC_SUBPROTOCOL,
   type ClientMessage,
   type ModuleConnectionState,
 } from '@dt/contracts'
@@ -23,9 +24,8 @@ import {
   currentCredential,
   setPublicTicket,
 } from '@/runtime/realtimeCredential'
-import { dispatchFrame } from '@/runtime/realtimeDispatch'
+import { dispatchFrame, type DispatchPorts } from '@/runtime/realtimeDispatch'
 import { createTopicRegistry, type TopicHandler } from '@/runtime/topicRegistry'
-import type { DispatchPorts } from '@/runtime/realtimeDispatch'
 import { useAuthStore } from '@/stores/auth'
 
 interface Channel {
@@ -37,8 +37,12 @@ interface Channel {
   subscribe: (topic: string, handler: TopicHandler) => () => void
   requestSnapshot: (topic: string) => void
 }
+type PublicChannel = Channel & { publicAbnormalCloses: Ref<number> }
 
+// 浏览器用 1006 表示无关闭帧，包括 accept 前的 HTTP 拒绝。
+const ABNORMAL_CLOSE = 1006
 const isRejected = ref(false)
+const publicAbnormalCloses = ref(0)
 const topics = createTopicRegistry()
 const ports: DispatchPorts = {
   topics,
@@ -92,6 +96,7 @@ function connect(): void {
     if (socket !== opened) return
     connectionState.value = 'open'
     isRejected.value = false
+    publicAbnormalCloses.value = 0
     resetBackoff()
     resubscribeAll()
   })
@@ -103,6 +108,10 @@ function connect(): void {
     if (socket !== opened) return
     socket = null
     clearPointSnapshots(subscribe)
+    if (offered.marker === REALTIME_PUBLIC_SUBPROTOCOL) {
+      publicAbnormalCloses.value =
+        event.code === ABNORMAL_CLOSE ? publicAbnormalCloses.value + 1 : 0
+    }
     // ⚠ 握手被拒后必须停止重连并报告错误，不能让旧值仍显示为实时。
     if (event.code === REALTIME_HANDSHAKE_REJECTED_CLOSE_CODE) {
       isRejected.value = true
@@ -154,6 +163,7 @@ export function closeRealtimeChannel(): void {
   resetBackoff()
   connectionState.value = 'closed'
   isRejected.value = false
+  publicAbnormalCloses.value = 0
 }
 
 /** 取全局唯一的实时通道。 */
@@ -173,15 +183,18 @@ export function useRealtimeChannel(): Channel {
  * 使用公开票据建立通道，须在页面 setup 的其它取通道操作之前调用。
  * @param ticket 公开令牌
  */
-export function usePublicRealtimeChannel(ticket: string): Channel {
+export function usePublicRealtimeChannel(ticket: string): PublicChannel {
   if (setPublicTicket(ticket)) {
+    if (reconnectTimer !== null) clearTimeout(reconnectTimer)
+    reconnectTimer = null
     clearPointSnapshots(subscribe)
     socket?.close()
     socket = null
     resetBackoff()
     connectionState.value = 'closed'
     isRejected.value = false
+    publicAbnormalCloses.value = 0
   }
   // ⚠ 换屏由取数层重订，清主题表会误删它刚登记的处理器。
-  return useRealtimeChannel()
+  return { ...useRealtimeChannel(), publicAbnormalCloses }
 }

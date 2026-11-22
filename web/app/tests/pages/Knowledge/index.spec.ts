@@ -18,6 +18,7 @@ import type {
   KnowledgeCapability,
   KnowledgeDocument,
 } from '@/api/knowledge'
+import * as reembedding from '@/api/knowledgeReembedding'
 import KnowledgePage from '@/pages/Knowledge/index.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -29,8 +30,11 @@ const api = vi.hoisted(() => ({
   listDocuments: vi.fn(),
   listSources: vi.fn(),
   createSource: vi.fn(),
+  updateSourceMetadata: vi.fn(),
+  detachSource: vi.fn(),
   syncSource: vi.fn(),
   createBase: vi.fn(),
+  updateBaseMetadata: vi.fn(),
   deleteBase: vi.fn(),
   uploadDocument: vi.fn(),
   reparseDocument: vi.fn(),
@@ -130,6 +134,7 @@ beforeEach(() => {
   api.readCapability.mockResolvedValue({
     ...READY,
     sourceKinds: ['upload', 'platform'],
+    supportsBaseMetadata: true,
   })
   api.listSources.mockResolvedValue([])
   api.listBases.mockResolvedValue([BASE])
@@ -153,6 +158,96 @@ async function render(codes: string[] = ALL_CODES) {
   await flushPromises()
   return wrapper
 }
+
+it.each([
+  { codes: ['knowledge:use'] },
+  { codes: ['knowledge:use', 'knowledge:write'] },
+])(
+  '非管理账号 $codes 可见向量状态并阅读文档，没有重嵌管理入口',
+  async ({ codes }) => {
+    const tasks = vi
+      .spyOn(reembedding, 'latestReembedding')
+      .mockResolvedValue(null)
+    const changed = { ...BASE, vectorStatus: 'space_mismatch' }
+    api.listBases.mockResolvedValue([changed])
+    api.readBase.mockResolvedValue(changed)
+    const wrapper = await render(codes)
+    expect(wrapper.text()).toContain('向量空间已变更')
+    expect(wrapper.text()).toContain('当前使用关键词检索')
+    expect(wrapper.text()).toContain(documentOf({}).title)
+    expect(buttonOf(wrapper, '整库重嵌')).toBeUndefined()
+    expect(tasks).not.toHaveBeenCalled()
+  },
+)
+
+it('刷新状态后按已发布的索引更新模型和维数', async () => {
+  api.listBases.mockResolvedValue([{ ...BASE, vectorStatus: 'space_mismatch' }])
+  api.readBase.mockResolvedValue({
+    ...BASE,
+    embeddingModel: '新档案模型',
+    dimensions: 8,
+    vectorStatus: 'ready',
+  })
+  const wrapper = await render(['knowledge:use'])
+  await wrapper.get('button[aria-label="刷新状态"]').trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('新档案模型')
+  expect(wrapper.text()).toContain('向量索引可用')
+  expect(wrapper.text()).not.toContain('向量空间已变更')
+})
+
+it('具有管理权限的账号可从已选知识库预检整库重嵌', async () => {
+  const tasks = vi
+    .spyOn(reembedding, 'latestReembedding')
+    .mockResolvedValue(null)
+  const base = { ...BASE, vectorStatus: 'space_mismatch' }
+  api.listBases.mockResolvedValue([base])
+  api.readBase.mockResolvedValue(base)
+  const wrapper = await render(ALL_CODES)
+  expect(buttonOf(wrapper, '整库重嵌')).toBeDefined()
+  expect(tasks).toHaveBeenCalledExactlyOnceWith(
+    BASE.id,
+    expect.any(AbortSignal),
+  )
+})
+
+it('旧服务没有向量状态时保留原模型且不请求管理接口', async () => {
+  const tasks = vi
+    .spyOn(reembedding, 'latestReembedding')
+    .mockResolvedValue(null)
+  const wrapper = await render(ALL_CODES)
+  expect(wrapper.text()).toContain(BASE.embeddingModel)
+  expect(buttonOf(wrapper, '整库重嵌')).toBeUndefined()
+  expect(tasks).not.toHaveBeenCalled()
+})
+
+it('预检期间失去管理权限会关闭操作而保留文档', async () => {
+  const base = { ...BASE, vectorStatus: 'space_mismatch' }
+  api.listBases.mockResolvedValue([base])
+  api.readBase.mockResolvedValue(base)
+  vi.spyOn(reembedding, 'latestReembedding').mockResolvedValue(null)
+  const pending = vi
+    .spyOn(reembedding, 'previewReembedding')
+    .mockImplementation(
+      (_id, signal) =>
+        new Promise((_resolve, reject) =>
+          signal.addEventListener('abort', () => reject(new Error('已关闭'))),
+        ),
+    )
+  const start = vi.spyOn(reembedding, 'startReembedding')
+  const wrapper = await render(ALL_CODES)
+  await buttonOf(wrapper, '整库重嵌')?.trigger('click')
+  await flushPromises()
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    '整库重嵌预检',
+  )
+  signIn(['knowledge:use'])
+  await flushPromises()
+  expect(pending.mock.calls[0]?.[1].aborted).toBe(true)
+  expect(document.querySelector('[role="dialog"]')).toBeNull()
+  expect(wrapper.text()).toContain(documentOf({}).title)
+  expect(start).not.toHaveBeenCalled()
+})
 
 function buttonOf(wrapper: VueWrapper, label: string) {
   return wrapper.findAll('button').find((one) => one.text() === label)
@@ -708,6 +803,74 @@ describe('建库', () => {
   })
 })
 
+describe('编辑知识库', () => {
+  it('旧服务缺编辑能力标志时仍能读取和刷新', async () => {
+    api.readCapability.mockResolvedValue({ ...READY })
+    const wrapper = await render()
+    expect(wrapper.find('button[aria-label="编辑知识库"]').exists()).toBe(false)
+    expect(wrapper.find('button[aria-label="刷新状态"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain(BASE.name)
+  })
+
+  it('填入现有元数据，只保存改过的描述并保留选库', async () => {
+    const wrapper = await render()
+    api.updateBaseMetadata.mockResolvedValue({ ...BASE, description: '新描述' })
+    await wrapper.get('button[aria-label="编辑知识库"]').trigger('click')
+    await flushPromises()
+    expect(modalField('input[type="text"]').value).toBe(BASE.name)
+    expect(modalField('textarea').value).toBe(BASE.description)
+    type(modalField('textarea'), '新描述')
+    await flushPromises()
+    modalButton('保存').click()
+    await flushPromises()
+    expect(api.updateBaseMetadata).toHaveBeenCalledWith(BASE.id, {
+      description: '新描述',
+    })
+    expect(wrapper.text()).toContain('新描述')
+    expect(document.body.querySelector('.dt-modal')).toBeNull()
+  })
+
+  it('保存失败保留原输入并显示原因', async () => {
+    const wrapper = await render()
+    api.updateBaseMetadata.mockRejectedValue(new Error('库暂时无法保存'))
+    await wrapper.get('button[aria-label="编辑知识库"]').trigger('click')
+    await flushPromises()
+    type(modalField('input[type="text"]'), '新库名')
+    await flushPromises()
+    modalButton('保存').click()
+    await flushPromises()
+    expect(modalField('input[type="text"]').value).toBe('新库名')
+    expect(document.body.querySelector('.dt-modal')?.textContent).toContain(
+      '库暂时无法保存',
+    )
+    expect(wrapper.get('h2[title]').text()).toBe(BASE.name)
+  })
+  it('先前库的迟到回执不能改动新库的编辑弹窗', async () => {
+    const other = { ...BASE, id: 'b2', name: '乙库' }
+    api.listBases.mockResolvedValue([BASE, other])
+    const pending = deferred<KnowledgeBase>()
+    api.updateBaseMetadata.mockReturnValue(pending.promise)
+    const wrapper = await render()
+    await wrapper.get('button[aria-label="编辑知识库"]').trigger('click')
+    await flushPromises()
+    type(modalField('input[type="text"]'), '甲的新名字')
+    await flushPromises()
+    modalButton('保存').click()
+    await flushPromises()
+    modalButton('取消').click()
+    await flushPromises()
+    await wrapper.get('span[title="乙库"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('button[aria-label="编辑知识库"]').trigger('click')
+    await flushPromises()
+    pending.settle({ ...BASE, name: '甲的新名字' })
+    await flushPromises()
+    expect(modalField('input[type="text"]').value).toBe('乙库')
+    expect(wrapper.get('h2[title]').text()).toBe('乙库')
+    expect(wrapper.text()).toContain('甲的新名字')
+  })
+})
+
 describe('删除知识库', () => {
   it('先问一句，取消就不打接口', async () => {
     confirmSpy.mockResolvedValue(false)
@@ -816,6 +979,7 @@ describe('权限', () => {
 
     const labels = wrapper.findAll('button').map((one) => one.text())
     expect(labels).not.toContain('新建知识库')
+    expect(wrapper.find('button[aria-label="编辑知识库"]').exists()).toBe(false)
     expect(labels).not.toContain('重新解析')
     expect(wrapper.find('button[aria-label="删除文档"]').exists()).toBe(false)
     expect(wrapper.find('button[aria-label="删除知识库"]').exists()).toBe(false)
@@ -828,6 +992,7 @@ describe('权限', () => {
     const labels = wrapper.findAll('button').map((one) => one.text())
     expect(labels).toContain('重新解析')
     expect(labels).not.toContain('新建知识库')
+    expect(wrapper.find('button[aria-label="编辑知识库"]').exists()).toBe(false)
     expect(wrapper.find('button[aria-label="删除知识库"]').exists()).toBe(false)
   })
 
@@ -850,6 +1015,80 @@ describe('知识来源入口', () => {
     expect(api.listSources).toHaveBeenCalledWith('b1', expect.any(AbortSignal))
     expect(document.body.textContent).toContain('knowledge:use')
     expect(document.body.textContent).toContain('不保存凭据')
+  })
+
+  it('管理员只提交来源的实际更改，已有导入的路径与记录字段只读', async () => {
+    const src = {
+      id: 's1',
+      baseId: 'b1',
+      kind: 'platform',
+      name: '台账来源',
+      canChangeIdentity: false,
+      config: {
+        path: '/api/v1/platform/items',
+        id_field: 'row_id',
+        title_field: 'label',
+      },
+      lastSyncedAt: null,
+      lastError: '',
+    }
+    api.listSources.mockResolvedValue([src])
+    api.updateSourceMetadata.mockResolvedValue({ ...src, name: '导入资料' })
+    const wrapper = await render()
+    await buttonOf(wrapper, '来源配置')?.trigger('click')
+    await flushPromises()
+    modalButton('编辑').click()
+    await flushPromises()
+    const inputs = Array.from(
+      document.body.querySelectorAll<HTMLInputElement>('.dt-modal input'),
+    )
+    expect(
+      inputs.find((field) => field.value === '/api/v1/platform/items')
+        ?.disabled,
+    ).toBe(true)
+    expect(inputs.find((field) => field.value === 'row_id')?.disabled).toBe(
+      true,
+    )
+    const title = inputs.find((field) => field.value === '台账来源')
+    if (title === undefined) throw new Error('没有现有来源名称')
+    type(title, '导入资料')
+    await flushPromises()
+    modalButton('保存来源').click()
+    await flushPromises()
+    expect(api.updateSourceMetadata).toHaveBeenCalledWith('s1', {
+      name: '导入资料',
+    })
+    expect(document.body.textContent).toContain('导入资料')
+  })
+
+  it('确认解绑之前保留来源，确认后只移除来源', async () => {
+    api.listSources.mockResolvedValue([
+      {
+        id: 's1',
+        baseId: 'b1',
+        kind: 'platform',
+        name: '台账来源',
+        canChangeIdentity: true,
+        config: { path: '/api/v1/platform/items' },
+        lastSyncedAt: null,
+        lastError: '',
+      },
+    ])
+    api.detachSource.mockResolvedValue(undefined)
+    const wrapper = await render()
+    await buttonOf(wrapper, '来源配置')?.trigger('click')
+    await flushPromises()
+    confirmSpy.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    modalButton('解绑').click()
+    await flushPromises()
+    expect(api.detachSource).not.toHaveBeenCalled()
+    modalButton('解绑').click()
+    await flushPromises()
+    expect(api.detachSource).toHaveBeenCalledWith('s1')
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('保留') }),
+    )
+    expect(api.deleteDocument).not.toHaveBeenCalled()
   })
 
   it('只读账号可查看来源但没有添加和同步入口', async () => {

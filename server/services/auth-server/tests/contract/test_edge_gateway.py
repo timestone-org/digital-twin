@@ -12,19 +12,17 @@ from pathlib import Path
 
 import pytest
 
+from lib.auth import IDENTITY_HEADERS
+
 ROOT = Path(__file__).resolve().parents[5]
 CONFIGS = ("nginx.conf.template", "dt-edge.windows.conf")
-AUTH_HEADERS = (
-    "X-Auth-User-Id",
-    "X-Auth-Username",
-    "X-Auth-Role",
-    "X-Auth-Permissions",
-    "X-Auth-Permissions-Truncated",
-    "X-Auth-Exp",
-    "X-Auth-Sig",
-)
 # 引号串整体跳过：串里的 `#` 与花括号不是注释也不是块边界
 _LEXEME = re.compile(r"'[^']*'|\"(?:\\.|[^\"\\])*\"|#[^\n]*|[{}]")
+
+# 正则 location 的引号内可有重复次数 {8,64}。
+_LOCATION = re.compile(
+    r"""\blocation\s+((?:"(?:\\.|[^"\\])*"|'[^']*'|[^{}"'])+?)\s*\{"""
+)
 
 
 @dataclass(frozen=True)
@@ -72,7 +70,7 @@ def load(filename: str) -> tuple[str, list[Block]]:
     blocks: list[Block] = []
     outside: list[str] = []
     cursor = 1
-    for found in re.finditer(r"\blocation\s+([^{]+?)\s*\{", server):
+    for found in _LOCATION.finditer(server):
         if found.start() < cursor:
             continue
         end = _close_of(server, found.end() - 1)
@@ -100,6 +98,22 @@ def _includes(body: str, name: str) -> bool:
 
 def _sets_header(body: str, header: str) -> bool:
     return re.search(rf"\bproxy_set_header\s+{header}\s", body) is not None
+
+
+def test_docker_auth_audit_source_is_set_by_the_edge() -> None:
+    server, blocks = load("nginx.conf.template")
+    auth = find(blocks, "/api/v1/auth/")
+    assert _includes(auth.body, "auth-inject.conf")
+    assert "proxy_set_header X-Edge-Source-IP $remote_addr;" in auth.body
+    assert 'proxy_set_header X-Edge-Audit-Key "${AUTH_EDGE_SERVICE_KEY}";' in (
+        auth.body
+    )
+    assert not _sets_header(server, "X-Edge-Audit-Key")
+    assert all(
+        not _sets_header(block.body, "X-Edge-Audit-Key")
+        for block in blocks
+        if block is not auth
+    )
 
 
 @pytest.mark.parametrize("filename", CONFIGS)
@@ -140,8 +154,35 @@ def test_client_sent_identity_headers_never_reach_an_upstream(
         )
         if not writes_headers or _includes(block.body, "auth-inject.conf"):
             continue
-        missing = [h for h in AUTH_HEADERS if not _sets_header(block.body, h)]
+        missing = [
+            h for h in IDENTITY_HEADERS if not _sets_header(block.body, h)
+        ]
         assert not missing, (block.match, missing)
+
+
+@pytest.mark.parametrize("filename", CONFIGS)
+def test_protected_routes_forward_the_signed_account_name(
+    filename: str,
+) -> None:
+    _, blocks = load(filename)
+    shared = (ROOT / "docker/nginx/auth-inject.conf").read_text()
+    protected = [
+        shared,
+        *(
+            block.body
+            for block in blocks
+            if re.search(r"\bauth_request\s+/_auth(?:_ws)?;", block.body)
+        ),
+    ]
+    for body in protected:
+        source = re.search(
+            r"auth_request_set\s+(\$\w+)\s+\$upstream_http_x_auth_sig_v2;", body
+        )
+        assert source is not None
+        assert re.search(
+            rf"proxy_set_header\s+X-Auth-Sig-V2\s+{re.escape(source.group(1))};",
+            body,
+        )
 
 
 @pytest.mark.parametrize("filename", CONFIGS)
@@ -159,6 +200,19 @@ def test_asset_bytes_cannot_run_script_in_the_app_origin(filename: str) -> None:
 
 
 @pytest.mark.parametrize("filename", CONFIGS)
+def test_asset_and_error_responses_disable_mime_sniffing(filename: str) -> None:
+    _, blocks = load(filename)
+    assert "proxy_hide_header X-Content-Type-Options;" in (
+        find(blocks, "^~ /oss/").body
+    )
+    for route in ("^~ /oss/", "@dt_oss_denied", "@dt_oss_missing"):
+        assert (
+            "add_header X-Content-Type-Options nosniff always;"
+            in find(blocks, route).body
+        ), route
+
+
+@pytest.mark.parametrize("filename", CONFIGS)
 def test_asset_errors_do_not_leak_the_bucket(filename: str) -> None:
     """对象存储的错误体里带桶名与对象键；对外地址刻意不暴露桶名。"""
     _, blocks = load(filename)
@@ -169,6 +223,8 @@ def test_asset_errors_do_not_leak_the_bucket(filename: str) -> None:
         assert page is not None, status
         named = find(blocks, page.group(1))
         assert "proxy_pass" not in named.body
+        assert "types { }" in named.body
+        assert "default_type text/plain;" in named.body
 
 
 @pytest.mark.parametrize("filename", CONFIGS)
@@ -183,3 +239,39 @@ def test_asset_bytes_have_an_explicit_short_cache_lifetime(
     )
     assert lifetime is not None
     assert int(lifetime.group(1)) <= 3600
+
+
+@pytest.mark.parametrize("filename", CONFIGS)
+def test_immutable_font_responses_are_limited_to_hashed_build_artifacts(
+    filename: str,
+) -> None:
+    """两种部署的一致缓存和协商范围。Args: filename。"""
+    _, blocks = load(filename)
+    fonts = [block for block in blocks if "gzip_static on;" in block.body]
+    assert len(fonts) == 1
+    font = fonts[0]
+    expression = re.fullmatch(r'~\s+"([^"]+)"', font.match)
+    assert expression is not None
+    route = re.compile(expression[1])
+    assert route.fullmatch("/ai/assets/HarmonyOS_Sans_SC_Regular-BuIQe7DE.ttf")
+    assert route.fullmatch("/ai/assets/DS-DIGI-dG6DdXEc.TTF")
+    for path in (
+        "/ai/assets/System.ttf",
+        "/ai/assets",
+        "/ai/login",
+        "/oss/logo.ttf",
+    ):
+        assert not route.fullmatch(path)
+    assert "try_files $uri =404;" in font.body
+    assert "gzip_vary on;" in font.body
+    assert "default_type font/ttf;" in font.body
+    assert (
+        "add_header Cache-Control $dt_font_cache_control always;" in font.body
+    )
+    text = (ROOT / "docker" / "nginx" / filename).read_text(encoding="utf-8")
+    assert re.search(
+        r'map\s+"\$dt_embed_mode:\$status"\s+\$dt_font_cache_control\s*\{\s*'
+        r"default\s+\$dt_embed_cache_control;\s*"
+        r'"~\^0:\(200\|206\|304\)\$"\s+"public, max-age=31536000, immutable";',
+        text,
+    )

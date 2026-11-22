@@ -12,6 +12,14 @@ import pytest
 
 from ai_assistant.upstream import AuthClient, DelegatedIdentity, PlatformClient
 from ai_assistant.upstream.auth import AuthUnavailable
+from ai_assistant.upstream.identity import caller_headers
+from lib.auth import (
+    SignedContext,
+    encode_identity,
+    encode_permissions,
+    sign_context,
+    sign_named_context,
+)
 from lib.utils.timeutils import utcnow
 
 USER = "01a03634-71b9-7038-880a-ce129b09b7d1"
@@ -197,3 +205,23 @@ async def test_one_slow_renewal_does_not_hold_up_another_user() -> None:
     finally:
         release.set()
         await stuck
+
+
+async def test_forwarding_and_reissue_preserve_the_account_name_claim() -> None:
+    context = SignedContext(USER, "reader", encode_permissions([]), 1999999999)
+    name = encode_identity("合成账号")
+    signed = {
+        "X-Auth-User-Id": USER,
+        "X-Auth-Username": name,
+        "X-Auth-Role": context.role,
+        "X-Auth-Permissions": context.permissions_b64,
+        "X-Auth-Exp": str(context.expires_at),
+        "X-Auth-Sig": sign_context("local-identity", context),
+        "X-Auth-Sig-V2": sign_named_context("local-identity", context, name),
+    }
+    client = _auth(signed)
+    try:
+        assert caller_headers(signed) == signed
+        assert await client.reissue_headers(USER) == signed
+    finally:
+        await client.close()

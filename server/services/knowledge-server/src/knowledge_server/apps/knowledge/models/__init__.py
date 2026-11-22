@@ -15,7 +15,14 @@ from knowledge_server.apps.knowledge.models.figure import (
     KnowledgeFigure,
 )
 from knowledge_server.apps.knowledge.models.knowledge_base import KnowledgeBase
+from knowledge_server.apps.knowledge.models.reembedding import (
+    ReembeddingAudit,
+    ReembeddingJob,
+)
 from knowledge_server.apps.knowledge.models.source import KnowledgeSource
+from knowledge_server.apps.knowledge.models.source_record import (
+    KnowledgeSourceRecord,
+)
 
 __all__ = [
     "FIGURE_KINDS",
@@ -25,4 +32,7 @@ __all__ = [
     "KnowledgeDocument",
     "KnowledgeFigure",
     "KnowledgeSource",
+    "KnowledgeSourceRecord",
+    "ReembeddingAudit",
+    "ReembeddingJob",
 ]

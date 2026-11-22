@@ -4,6 +4,7 @@
 （服务之间不许互相 import）。这条用例是那份复述的锚点。
 """
 
+import asyncio
 import json
 from typing import Any, cast
 
@@ -96,12 +97,27 @@ async def test_a_caller_supplied_traceparent_wins() -> None:
     assert json.loads(client.pushed[0][1])["traceparent"] == given
 
 
-async def test_the_reply_is_awaited_on_the_per_request_key() -> None:
+async def test_reply_uses_per_request_key_and_remaining_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     transport, client = build_transport(reply='{"status": "ok", "data": {}}')
-    await transport.call({}, request_id=REQUEST_ID, timeout_s=7.5)
-    keys, timeout = client.popped[0]
+    now_s = 100.0
+    lpush = client.lpush
+
+    async def push_after_latency(key: str, body: str) -> int:
+        nonlocal now_s
+        written = await lpush(key, body)
+        now_s += 0.5
+        return written
+
+    with monkeypatch.context() as clock:
+        clock.setattr(asyncio.get_running_loop(), "time", lambda: now_s)
+        clock.setattr(client, "lpush", push_after_latency)
+        await transport.call({}, request_id=REQUEST_ID, timeout_s=7.5)
+
+    keys, remaining_s = client.popped[0]
     assert keys == [reply_key(REQUEST_ID)]
-    assert timeout == 7.5
+    assert remaining_s == 7.0
 
 
 async def test_a_well_formed_reply_reaches_the_caller() -> None:

@@ -25,6 +25,7 @@ import {
   publishDashboard,
   unpublishDashboard,
 } from '@/api/dashboardShare'
+import type { UnpublishedJumpTarget } from '@/api/dashboardShareWire'
 import type { DashboardSummary } from '@/api/dashboardWire'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 import { copyText } from '@/utils/clipboard'
@@ -44,6 +45,7 @@ const toast = useToast()
 
 const isPublic = ref(false)
 const token = ref<string | null>(null)
+const unpublishedTargets = ref<UnpublishedJumpTarget[]>([])
 /** 当前链接还在取的路上。⚠ 取完仍然没有链接要另说一句：把「正在取」一直
  * 挂着的话，一次失败的读看上去和一条永远加载不完的链接一模一样。 */
 const loading = ref(false)
@@ -60,13 +62,20 @@ const link = computed(() =>
 /**
  * 取这张屏此刻的发布态。列表项里只有 `isPublic`，令牌得单独问发布面要。
  * @param dashboardId 大屏 id
+ * @param shouldUpdateLink 是否同步发布状态和链接
  */
-async function loadPublication(dashboardId: string): Promise<void> {
-  loading.value = true
+async function loadPublication(
+  dashboardId: string,
+  shouldUpdateLink = true,
+): Promise<void> {
+  loading.value = shouldUpdateLink
   await raced.run((signal) => getDashboardPublication(dashboardId, signal), {
     ok: (publication) => {
-      isPublic.value = publication.isPublic
-      token.value = publication.publicToken
+      unpublishedTargets.value = publication.unpublishedTargets
+      if (shouldUpdateLink) {
+        isPublic.value = publication.isPublic
+        token.value = publication.publicToken
+      }
     },
     fail: () => undefined,
     settled: () => {
@@ -76,16 +85,17 @@ async function loadPublication(dashboardId: string): Promise<void> {
 }
 
 watch(
-  () => [props.open, props.dashboard?.id] as const,
+  [() => props.open, () => props.dashboard?.id],
   ([open]) => {
     const target = props.dashboard
     // 关掉时作废在飞的那一次：不作废的话它之后返回，会写进一个已经没人看的
     // 状态，下次打开还没取完就先闪一条上一张屏的链接
     raced.cancel()
+    unpublishedTargets.value = []
     if (!open || target === null) return
     isPublic.value = target.isPublic
     token.value = null
-    if (target.isPublic) void loadPublication(target.id)
+    void loadPublication(target.id)
   },
   { immediate: true },
 )
@@ -118,8 +128,11 @@ function stillTargets(target: DashboardSummary): boolean {
 }
 
 function absorb(result: DashboardPublication): void {
-  isPublic.value = result.isPublic
-  token.value = result.publicToken
+  if (props.open && props.dashboard?.id === result.dashboardId) {
+    isPublic.value = result.isPublic
+    token.value = result.publicToken
+    void loadPublication(result.dashboardId, false)
+  }
   emit('updated', result)
 }
 
@@ -206,6 +219,20 @@ async function copyLink(): Promise<void> {
       </DtNotice>
       <DtNotice v-else icon="circle-question">
         还没有公开。发布后会生成一条匿名可读的链接，随时可以撤回。
+      </DtNotice>
+
+      <DtNotice
+        v-if="unpublishedTargets.length > 0"
+        intent="warning"
+        icon="alert-triangle"
+      >
+        <strong>跳转目标尚未发布</strong>
+        <p>公开访问者要等这些目标发布后才能从本屏跳转过去。</p>
+        <ul class="list-disc ps-5">
+          <li v-for="target in unpublishedTargets" :key="target.dashboardId">
+            {{ target.projectName }} / {{ target.name }}
+          </li>
+        </ul>
       </DtNotice>
 
       <DtInput

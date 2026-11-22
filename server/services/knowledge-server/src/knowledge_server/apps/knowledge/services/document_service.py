@@ -18,11 +18,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.crud import content_lock
 from knowledge_server.apps.knowledge.errors import (
     DocumentIngestInProgress,
     DocumentNotFound,
     DuplicateDocument,
     FigureBytesGone,
+    HistoricalSourceDocument,
     ObjectStoreDown,
     RawBytesGone,
     RawItemAbsent,
@@ -390,17 +392,32 @@ async def requeue_document(
 
     Args: session, stream, group, document_id, is_generation_enabled。
     """
+    await content_lock.document(session, document_id)
     row = await read_document(session, document_id)
-    if not is_generation_enabled and row.ingest_generation is not None:
+    if row.source_revision_state == "historical":
+        raise HistoricalSourceDocument("历史原文保留供引用，请重新解析当前版本")
+    is_source_version = row.source_revision_state in ("current", "pending")
+    if (
+        not is_source_version
+        and not is_generation_enabled
+        and row.ingest_generation is not None
+    ):
         # ⚠ 第二次滚动时旧配置副本不能复投新期次；否则会造两个同 generation
         # 的 entry，而 entry 级 owner 保护不了同一文档的两条消息。
         raise DocumentIngestInProgress("摄取期次正在切换，请稍后再重新解析")
-    generation = uuid7() if is_generation_enabled else row.ingest_generation
+    generation = (
+        uuid7()
+        if is_generation_enabled or is_source_version
+        else row.ingest_generation
+    )
     changed = await crud.document.mark_requeued(session, row.id, generation)
     if changed == 0:
         raise DocumentIngestInProgress("这份文档正在解析，请完成后再重新解析")
     made = document_out(row)
-    queue_ingest(session, stream, group, made, generation)
+    target = (
+        ingest_queue.source_version_group(group) if is_source_version else group
+    )
+    queue_ingest(session, stream, target, made, generation)
     return made
 
 

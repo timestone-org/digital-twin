@@ -130,9 +130,23 @@ describe('读与渲染', () => {
     expect(wrapper.text()).toContain('即时生效')
   })
 
+  it('历史项显示普通缺省与旧值，不显示账号 ID', async () => {
+    const actorId = '0196c034-7042-7123-b10a-1b96ed0ff612'
+    const wrapper = await render([
+      item({ overridden: true, updatedBy: actorId, previousValue: true }),
+    ])
+    expect(wrapper.text()).toContain('修改者未知')
+    expect(wrapper.text()).not.toContain(actorId)
+  })
+
   it('已覆盖的项亮徽标并写清改动人与旧值', async () => {
     const wrapper = await render([
-      item({ overridden: true, updatedBy: 'ops', previousValue: true }),
+      item({
+        overridden: true,
+        updatedBy: '0196c034-7042-7123-b10a-1b96ed0ff612',
+        updatedByName: 'ops',
+        previousValue: true,
+      }),
     ])
     expect(wrapper.text()).toContain('已覆盖')
     expect(wrapper.text()).toContain('ops')

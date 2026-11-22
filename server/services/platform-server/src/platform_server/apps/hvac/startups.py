@@ -36,6 +36,8 @@ OUTCOME_SET_CHANGED = "set_changed"
 OUTCOME_TIMEOUT = "timeout"
 # 窗口内出现了连续超限的缺失 / NULL / 清零
 OUTCOME_DATA_GAP = "data_gap"
+# 冷启动时没有达标范围，保留事实但不进训练。
+OUTCOME_UNASSESSED = "unassessed"
 
 OUTCOMES: frozenset[str] = frozenset(
     {
@@ -43,6 +45,7 @@ OUTCOMES: frozenset[str] = frozenset(
         OUTCOME_SET_CHANGED,
         OUTCOME_TIMEOUT,
         OUTCOME_DATA_GAP,
+        OUTCOME_UNASSESSED,
     }
 )
 

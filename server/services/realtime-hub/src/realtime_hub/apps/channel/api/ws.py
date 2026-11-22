@@ -226,17 +226,19 @@ async def _receive_frames(
 ) -> None:
     """持续处理客户端帧；凭据期限由并行驱动负责。
 
-    ⚠ 解不出的 JSON 只回一帧 error，不关连接：一条坏帧不该断掉整条通道。
+    ⚠ 非文本帧或解不出的 JSON 只回一帧 error，连接继续收帧。
 
     Args: websocket, container, connection_id。
     """
     session = container.session
     while True:
-        raw = await websocket.receive_text()
+        frame = await websocket.receive()
+        if frame["type"] == "websocket.disconnect":
+            return
         connection = await container.connections.get(connection_id)
         if connection is None:  # pragma: no cover - 摘除与收帧竞争，极窄
             return
-        message = _decode(raw)
+        message = _decode(frame.get("text"))
         if message is None:
             await connection.send(
                 {"type": TYPE_ERROR, "message": "消息不是合法的 JSON 对象"}
@@ -318,11 +320,13 @@ def _credential_from_subprotocols(
     return marker, offered[1]
 
 
-def _decode(raw: str) -> dict[str, object] | None:
+def _decode(raw: object) -> dict[str, object] | None:
     """把一帧文本解成动作字典；解不出返回 None。
 
     Args: raw。
     """
+    if not isinstance(raw, str):
+        return None
     try:
         message = json.loads(raw)
     except json.JSONDecodeError:

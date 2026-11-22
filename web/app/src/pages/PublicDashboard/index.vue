@@ -47,7 +47,7 @@ import {
   usePublicRealtimeChannel,
 } from '@/composables/useRealtimeChannel'
 import { boundPointKeys } from '@/features/dashboard/editorDoc'
-import { parseInteractionRules } from '@/features/dashboard/interactionRules'
+import { loadInteractions } from '@/features/dashboard/loadInteractions'
 import { useDashboardTheme } from '@/features/dashboard/useDashboardTheme'
 import { publicTopic } from '@/runtime/pointFrames'
 import { createPointSubscribe } from '@/runtime/pointStream'
@@ -74,11 +74,12 @@ const channel = usePublicRealtimeChannel(publicToken())
 
 // ⚠ 不装历史 provider：公开面没有历史端点，`archive` 绑定如实显示为没有数据。
 // 拿实时通道里收到过的那几个点冒充历史，会画出一条从打开页面才开始的假曲线
+const subscribe = createPointSubscribe(channel, () => {
+  const token = publicToken()
+  return token === '' ? null : publicTopic(token)
+})
 installDashboardDataSources({
-  subscribe: createPointSubscribe(channel, () => {
-    const token = publicToken()
-    return token === '' ? null : publicTopic(token)
-  }),
+  subscribe,
 })
 
 const getManifest: GetModuleManifest = (moduleType: string) =>
@@ -107,6 +108,7 @@ const values = useDashboardValues(
   () => nodes.value,
   () => publicToken(),
   {
+    subscribe,
     connectionState: () => channel.connectionState.value,
     dataset: {
       readLatest: (keys, signal) =>
@@ -153,12 +155,11 @@ provide(INTERACTION_KEY, interaction)
 watch(
   () => doc.dashboard.value,
   (current) => {
-    interaction.init(
-      current === null ? [] : parseInteractionRules(current.chromeJson),
-      nodes.value.map((node) => ({
-        nodeId: node.id,
-        isVisible: node.isVisible,
-      })),
+    loadInteractions(
+      interaction,
+      current?.chromeJson ?? {},
+      nodes.value,
+      getManifest,
     )
   },
   { immediate: true },
@@ -200,15 +201,21 @@ function describeStatus(): string {
 
 const status = computed(describeStatus)
 
-// ⚠ 被拒绝时去问一句「这张屏还公开吗」：撤回之后 hub 会断掉已经连着的匿名
-// 连接，而页面若只闷头重连，看的人会以为只是网断了。重取一次快照，撤回了就
-// 落到错误态说出来
+const RECHECK_AFTER_ABNORMAL_CLOSES = 3
+
+// 连续异常关闭也可能是预握手拒绝。由匿名读面确认，临时故障保留旧画面。
 watch(
-  () => channel.isRejected.value,
-  (isRejected) => {
-    if (isRejected) void doc.load(publicToken())
+  [channel.isRejected, channel.publicAbnormalCloses],
+  ([isRejected, abnormalCloses]) => {
+    if (isRejected || abnormalCloses >= RECHECK_AFTER_ABNORMAL_CLOSES)
+      void recheckPublication(publicToken())
   },
 )
+
+async function recheckPublication(token: string): Promise<void> {
+  if ((await doc.recheck(token)) && token === publicToken())
+    closeRealtimeChannel()
+}
 
 onMounted(() => {
   observer = new ResizeObserver((entries) => {

@@ -83,14 +83,15 @@ class FanoutListener:
                 await self._listen()
                 return
             except Exception as error:
-                self._needs_resync = True
                 _logger.warning(
                     "fanout_listen_failed",
                     "扇出监听中断，将重建订阅",
                     error_type=type(error).__name__,
                     retry_delay_s=self._retry_delay_s,
                 )
-                await self._resync_clients()
+                if not self._needs_resync:
+                    self._needs_resync = True
+                    await self._resync_clients()
                 await asyncio.sleep(
                     self._retry_delay_s
                     * random.uniform(0.8, 1.2)  # noqa: S311 - 重连抖动

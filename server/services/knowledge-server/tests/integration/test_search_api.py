@@ -7,6 +7,7 @@ from dataclasses import dataclass
 
 import httpx
 import pytest
+from integration.embedding_support import CertifiedTestEmbedder
 
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.schemas import SearchIn, SearchOut
@@ -51,7 +52,7 @@ BODY = (
 
 
 @dataclass(frozen=True)
-class FakeEmbedder:
+class FakeEmbedder(CertifiedTestEmbedder):
     """按正文长度造一条稳定的假向量。
 
     ⚠ 宽度必须**真的**等于库上那一列：列是 `vector(N)`，宽度对不上时写入
@@ -420,7 +421,7 @@ async def test_capabilities_lists_agentic_as_installed_but_not_ready(
 
 
 @dataclass(frozen=True)
-class DownEmbedder:
+class DownEmbedder(CertifiedTestEmbedder):
     """入库时好好的、检索时端点连不上的那一路。"""
 
     dimensions: int

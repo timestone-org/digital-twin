@@ -31,15 +31,15 @@ CPU 且阻塞的，扔进**进程池**——放进事件循环会把整条消费
 
 import asyncio
 import uuid
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable
 from concurrent.futures import Executor
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.services import (
     docx_preview,
     ingest_figures,
+    ingest_vectors,
 )
 from knowledge_server.apps.knowledge.services.chunking import (
     Chunk,
@@ -48,10 +48,13 @@ from knowledge_server.apps.knowledge.services.chunking import (
     limits_for,
     oversized,
 )
-from knowledge_server.apps.knowledge.services.embedding import Embedder
+from knowledge_server.apps.knowledge.services.embedding import (
+    Embedder,
+    EmbeddingUnavailable,
+)
+from knowledge_server.apps.knowledge.services.embedding.space import for_base
 from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
-    VectorRows,
 )
 from knowledge_server.apps.knowledge.services.parse_pool import RecyclingPool
 from knowledge_server.apps.knowledge.services.parsing import (
@@ -150,6 +153,8 @@ class _Pending:
     source_id: uuid.UUID
     external_ref: str
     object_key: str
+    generation: uuid.UUID | None
+    saved_chunk_count: int
 
 
 async def _raw_of(
@@ -163,7 +168,9 @@ async def _raw_of(
     Args: sessions, deps, document。
     """
     async with sessions() as session:
-        source = await crud.source.get_source(session, document.source_id)
+        source = await crud.source.get_source(
+            session, document.source_id, should_include_detached=True
+        )
         if source is None:
             raise IngestFailed("这份文档所属的来源已经不在了")
         kind = source.kind
@@ -272,55 +279,6 @@ async def _previewed(
     )
 
 
-def _batched(
-    rows: Sequence[tuple[uuid.UUID, str]], size: int
-) -> list[Sequence[tuple[uuid.UUID, str]]]:
-    """按批切。
-
-    ⚠ 有上限：嵌入端点对单次请求的总 token 有限，超了**整批**失败——
-    而失败的是「这一次摄取」不是「这一段」。
-
-    Args: rows, size。
-    """
-    step = max(1, size)
-    return [rows[at : at + step] for at in range(0, len(rows), step)]
-
-
-async def _indexed(
-    sessions: Sessions,
-    deps: IngestDeps,
-    base_id: uuid.UUID,
-    rows: Sequence[tuple[uuid.UUID, str]],
-) -> None:
-    """把块文本嵌成向量并写进索引。
-
-    ⚠ 一批一批来，而且**每批一个事务**：一整份大文档攒到最后一起写的话，
-    中途失败就等于白算——而算过的那几批是花过钱的。
-
-    ⚠ 嵌入调用在事务**之外**：它是一次跨网络的外部 IO，包在事务里会让一次
-    端点超时把数据库连接占住几十秒。
-
-    Args: sessions, deps, base_id, rows。
-    """
-    for batch in _batched(rows, deps.batch_size):
-        made = await deps.embedder.embed([text for _one, text in batch])
-        async with sessions() as session:
-            await deps.indexes.vector.upsert(
-                session,
-                VectorRows(
-                    base_id=base_id,
-                    model=deps.embedder.id,
-                    dimensions=deps.embedder.dimensions,
-                    rows=tuple(
-                        (chunk_id, vector)
-                        for (chunk_id, _text), vector in zip(
-                            batch, made, strict=True
-                        )
-                    ),
-                ),
-            )
-
-
 def _limits(deps: IngestDeps) -> ChunkLimits:
     """这一次的切块两条边，上限由嵌入档的窗口折算而来。
 
@@ -384,10 +342,18 @@ async def _claimed(
             source_id=row.source_id,
             external_ref=row.external_ref,
             object_key=row.object_key,
+            generation=row.ingest_generation,
+            saved_chunk_count=(
+                row.chunk_count
+                if row.source_revision_state in ("current", "pending")
+                else 0
+            ),
         )
 
 
-async def _embeddable(deps: IngestDeps) -> None:
+async def _embeddable(
+    sessions: Sessions, deps: IngestDeps, base_id: uuid.UUID
+) -> None:
     """先刷一次目录，再确认这套部署此刻算得出向量；算不出就别往下走。
 
     ⚠ 排在取原件之前：一份 200 MB 的文档解完再说「这套部署没配嵌入模型」，
@@ -398,6 +364,10 @@ async def _embeddable(deps: IngestDeps) -> None:
     await deps.refresh()
     if deps.embedder.can_embed:
         return
+    async with sessions() as session:
+        base = await crud.knowledge_base.get_base(session, base_id)
+        if base is not None and for_base(base, deps.embedder) is not None:
+            return
     raise IngestFailed(
         "这套部署此刻算不出向量：模型目录里没有给「知识库嵌入」这个用途"
         "分配可用的模型。配好之后按「重新解析」"
@@ -416,54 +386,27 @@ async def _staged(
 
 
 async def _figures_of(
-    sessions: Sessions,
     deps: IngestDeps,
     document: _Pending,
     parsed: ParsedDocument,
-) -> dict[str, uuid.UUID]:
+) -> ingest_figures.PreparedFigures:
     """存图那一段，把它的失败翻成「这份文档摄不进来」。
 
     ⚠ **不新增摄取状态**：状态是线上契约（CHECK 与前端文案都按那几档写的），
     而写图本来就是解析产出的一部分，算在 `parsing` 这一段里。
 
-    ⚠ 排在切块**之前**：切块要把「这一块引了哪几张图」记下来，而那需要图 id。
-
-    Args: sessions, deps, document, parsed。
+    Args: deps, document, parsed。
     """
     if deps.store is None:
-        return {}
+        return ingest_figures.PreparedFigures([], {})
     try:
-        return await ingest_figures.store_figures(
-            sessions,
+        return await ingest_figures.prepare_figures(
             deps.store,
             (document.base_id, document.document_id),
             parsed,
         )
     except ingest_figures.FigureStoreFailed as error:
         raise IngestFailed(str(error)) from error
-
-
-async def _saved_chunks(
-    sessions: Sessions,
-    document: _Pending,
-    chunks: tuple[Chunk, ...],
-    figure_ids: dict[str, uuid.UUID],
-) -> list[uuid.UUID]:
-    """整体替换块行，并重建块—图联结行。
-
-    ⚠ 两件事必须在**同一个事务**里：换块行会级联删掉旧联结行，中间断开的话
-    引用面上会有一瞬间「一张图都没有」。
-
-    Args: sessions, document, chunks, figure_ids。
-    """
-    async with sessions() as session:
-        chunk_ids = await crud.chunk.replace_chunks(
-            session, document.base_id, document.document_id, chunks
-        )
-        await crud.figure.link_figures(
-            session, ingest_figures.links_of(chunks, chunk_ids, figure_ids)
-        )
-    return chunk_ids
 
 
 async def ingest(
@@ -487,13 +430,15 @@ async def ingest(
             document_id=str(document_id),
         )
         return "skipped"
-    await _embeddable(deps)
+    if document.saved_chunk_count:
+        await _reindex_saved(sessions, deps, document)
+        return READY
+    await _embeddable(sessions, deps, document.base_id)
     raw = await _raw_of(sessions, deps, document)
     # ⚠ 先落派生物再解析，避免 PDF 与带图的 ParsedDocument 同时占住内存
     await _previewed(deps, document, raw)
     parsed = await _parsed(deps, raw)
     await _staged(sessions, document.document_id, "chunking")
-    figure_ids = await _figures_of(sessions, deps, document, parsed)
     chunks = _chunked(parsed, "", _limits(deps))
     _logger.info(
         "ingest_chunked",
@@ -502,40 +447,64 @@ async def ingest(
         chunks=len(chunks),
         max_tokens=max((one.token_count for one in chunks), default=0),
     )
-    chunk_ids = await _saved_chunks(sessions, document, chunks, figure_ids)
-    if chunks:
-        await _staged(sessions, document.document_id, "embedding")
-        await _indexed(
-            sessions,
-            deps,
-            document.base_id,
-            list(zip(chunk_ids, [one.text for one in chunks], strict=True)),
-        )
-    await _finished(sessions, deps, document, len(chunks))
+    await _publish_parsed(sessions, deps, document, parsed, chunks)
     return READY
 
 
-async def _finished(
-    sessions: Sessions, deps: IngestDeps, document: _Pending, chunk_count: int
+async def _reindex_saved(
+    sessions: Sessions, deps: IngestDeps, document: _Pending
 ) -> None:
-    """置 ready，并给还没钉嵌入档的库补上这一档。
-
-    ⚠ 建库那一刻没接嵌入档的话库上那一格是空的，而它就是「建没建过索引」的
-    判据：不补上，这个库永远被当成只能靠关键词命中。
-
-    Args: sessions, deps, document, chunk_count。
-    """
-    async with sessions() as session:
-        await crud.document.mark_ready(
-            session, document.document_id, chunk_count, datetime.now(UTC)
+    await deps.refresh()
+    source = ingest_vectors.Source(
+        document.base_id, document.document_id, document.generation
+    )
+    await _staged(sessions, document.document_id, "embedding")
+    try:
+        await ingest_vectors.reindex_saved(
+            sessions,
+            source,
+            deps.embedder,
+            deps.batch_size,
+            document.saved_chunk_count,
         )
-        if deps.embedder.model is not None:
-            await crud.knowledge_base.pin_embedding(
-                session,
-                document.base_id,
-                deps.embedder.model,
-                deps.embedder.dimensions,
+    except EmbeddingUnavailable as error:
+        await ingest_vectors.defer_saved(sessions, source, str(error))
+        raise IngestFailed(str(error)) from error
+
+
+async def _publish_parsed(
+    sessions: Sessions,
+    deps: IngestDeps,
+    document: _Pending,
+    parsed: ParsedDocument,
+    chunks: tuple[Chunk, ...],
+) -> None:
+    """保存原文与已核实的向量，或登记等待整库重嵌的文档。
+
+    Args: sessions, deps, document, parsed, chunks。
+    """
+    source = ingest_vectors.Source(
+        document.base_id, document.document_id, document.generation
+    )
+    await _staged(sessions, document.document_id, "embedding")
+    figures: ingest_figures.PreparedFigures | None = None
+    try:
+        async with ingest_vectors.verified(
+            sessions, source, deps.embedder, chunks, deps.batch_size
+        ) as batch:
+            figures = await _figures_of(deps, document, parsed)
+            async with sessions() as session:
+                await ingest_vectors.publish_document(
+                    session, batch, deps.embedder, chunks, figures
+                )
+    except EmbeddingUnavailable as error:
+        if figures is None:
+            figures = await _figures_of(deps, document, parsed)
+        async with sessions() as session:
+            await ingest_vectors.defer(
+                session, source, chunks, figures, str(error)
             )
+        raise IngestFailed(str(error)) from error
 
 
 async def mark_failed(

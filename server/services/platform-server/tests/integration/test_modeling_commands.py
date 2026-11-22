@@ -17,9 +17,6 @@ from integration.modeling_management_helpers import seed_versions
 from integration.test_modeling_templates import INSTANCES, make_template
 from lib.auth import (
     CallerContext,
-    SignedContext,
-    encode_permissions,
-    sign_context,
 )
 from lib.db import Database
 from lib.errors import AppError
@@ -171,23 +168,13 @@ async def test_command_result_only_belongs_to_authenticated_account(
 
 
 async def test_same_account_needs_original_operation_permission(
-    app_client, settings
+    app_client, sign
 ):
     created = await submit_instance(
         app_client, headers={"Idempotency-Key": "permission-check"}
     )
-    restricted = dict(app_client.headers)
-    permissions = encode_permissions(("modeling:view",))
-    context = SignedContext(
-        user_id=restricted["x-auth-user-id"],
-        role=restricted["x-auth-role"],
-        permissions_b64=permissions,
-        expires_at=int(restricted["x-auth-exp"]),
-    )
-    restricted["x-auth-permissions"] = permissions
-    restricted["x-auth-sig"] = sign_context(
-        settings.edge_signing_secret.get_secret_value(), context
-    )
+    account = uuid.UUID(app_client.headers["X-Auth-User-Id"])
+    restricted = sign(("modeling:view",), account_id=account)
     response = await app_client.get(
         f"{COMMANDS}/{created.headers['modeling-command-id']}",
         headers=restricted,

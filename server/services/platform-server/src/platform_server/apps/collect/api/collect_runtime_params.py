@@ -96,7 +96,7 @@ async def replace_collect_runtime_params(
         settings=settings,
         section=section,
         payload=payload,
-        actor=str(write.caller.user_id),
+        caller=write.caller,
     )
     await write.plans.notify(reason=REASON_PARAMS_CHANGED)
     return ok(state, message="运行参数已更新")

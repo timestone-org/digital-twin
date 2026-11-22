@@ -4,23 +4,16 @@
 里的后台任务上（见 app.py）。
 """
 
-import uvicorn
-
 from collector_server.app import build_app
 from collector_server.settings import Settings
 from lib.config import load_settings_or_exit
+from lib.web import serve_http
 
 
 def main() -> None:
     """构造配置与应用并起探针服务。"""
     settings = load_settings_or_exit(Settings)
-    uvicorn.run(
-        build_app(settings),
-        host=settings.app_http_host,
-        port=settings.app_http_port,
-        log_config=None,
-        access_log=False,
-    )
+    serve_http(build_app(settings), settings)
 
 
 if __name__ == "__main__":

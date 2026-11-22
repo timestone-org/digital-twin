@@ -4,7 +4,7 @@ import json
 import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from langchain_core.messages import (
@@ -18,11 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.chat.crud import session_crud
 from knowledge_server.apps.chat.errors import ChatUnavailable
-from knowledge_server.apps.chat.models import ChatMessage, ChatSession
+from knowledge_server.apps.chat.models import ChatSession
 from knowledge_server.apps.chat.services import (
     advance_persist,
     budget,
     client_receipts,
+    failed_question,
     title_service,
 )
 from knowledge_server.apps.chat.services import scope as scope_service
@@ -41,6 +42,10 @@ from knowledge_server.apps.chat.services.markers import numbers_in
 from knowledge_server.apps.chat.services.prompt import (
     build_system_prompt,
     scope_messages,
+)
+from knowledge_server.apps.chat.services.reference_history import (
+    model_history,
+    model_summary,
 )
 from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.chat.services.search_receipt import (
@@ -241,37 +246,33 @@ class LoadedContext:
 
 
 async def load_context(
-    session: AsyncSession, *, chat_session_id: uuid.UUID
+    session: AsyncSession, *, chat_session_id: uuid.UUID, is_resuming: bool
 ) -> LoadedContext:
     """读出这个会话的历史、已有摘要与检索范围。
 
     ⚠ 只读不拼：拼装要等折叠的结果，而折叠是一次模型调用，不能在这个事务里跑
     （database-standard：事务里禁止外部 IO）。
 
-    Args: session, chat_session_id。
+    Args: session, chat_session_id, is_resuming。
     """
-    rows = await session_crud.messages_of(session, chat_session_id)
+    rows = await session_crud.messages_of(
+        session, chat_session_id, is_context_read=True
+    )
     row = await session.get(ChatSession, chat_session_id)
     return LoadedContext(
-        rows=[_history_row(one) for one in rows],
-        summary=(
+        rows=model_history(rows, is_resuming=is_resuming),
+        summary=model_summary(
             summarize.stored_of(row.summary_json) if row is not None else None
         ),
         scope=await scope_service.resolve(
             session, row.base_scope_ids if row is not None else None
         ),
-        carried=await client_receipts.carried_ledger(session, rows),
+        carried=(
+            await client_receipts.carried_ledger(session, rows)
+            if is_resuming
+            else ()
+        ),
     )
-
-
-def _history_row(row: ChatMessage) -> HistoryRow:
-    """库里的一行 → 上下文那一层认的一条。
-
-    ⚠ 这一步是**边界**：`llmcore` 不许含 ORM（ADR-0037 决策二）。
-
-    Args: row。
-    """
-    return HistoryRow(role=row.role, seq=row.seq, content_json=row.content_json)
 
 
 MAX_SKILL_RESTORE_CHARS = 4000
@@ -321,7 +322,7 @@ def assemble(
             ],
             "prefix",
         ),
-        *marked(summarize.messages_of(summary), "summary"),
+        *marked(summarize.messages_of(model_summary(summary)), "summary"),
         *replayed,
         *history.fillers(orphans),
         *fresh,
@@ -350,6 +351,13 @@ async def advance(
     registry = deps.tools(loaded.scope, ledger)
     specs = _turn_specs(registry.specs, payload.client_tools)
     turn = _turn_deps(deps, loaded, selected, registry, specs)
+    if payload.user_text is not None:
+        turn = replace(
+            turn,
+            model=failed_question.RetainingResponder(
+                deps.model, deps.sessions, chat_session_id, payload.user_text
+            ),
+        )
     produced: list[TurnStep] = []
     outcome: TurnOutcome | None = None
     async for item in stream_turn(turn, messages):
@@ -515,7 +523,11 @@ async def _opened(
     Args: deps, chat_session_id, payload。
     """
     async with deps.sessions() as session:
-        loaded = await load_context(session, chat_session_id=chat_session_id)
+        loaded = await load_context(
+            session,
+            chat_session_id=chat_session_id,
+            is_resuming=bool(payload.tool_results),
+        )
     summary = await _summary_of(deps, chat_session_id, loaded)
     return loaded, assemble(
         payload=payload,

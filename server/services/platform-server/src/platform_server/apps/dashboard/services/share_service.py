@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
+from platform_server.apps.dashboard.crud import dashboard_crud
 from platform_server.apps.dashboard.errors import DashboardNotPublished
 from platform_server.apps.dashboard.models import (
     Dashboard,
@@ -19,10 +20,12 @@ from platform_server.apps.dashboard.models import (
     DashboardNode,
 )
 from platform_server.apps.dashboard.schemas.share import (
+    DashboardPublicationStateOut,
     DashboardShareOut,
     PublicBindingOut,
     PublicDashboardOut,
     PublicNodeOut,
+    UnpublishedJumpTargetOut,
 )
 from platform_server.apps.dashboard.services.dashboard_service import (
     require_dashboard,
@@ -76,16 +79,37 @@ async def publish_dashboard(
 
 
 async def get_publication(
-    session: AsyncSession, *, dashboard_id: uuid.UUID
-) -> DashboardShareOut:
+    session: AsyncSession,
+    *,
+    dashboard_id: uuid.UUID,
+    can_view_targets: bool,
+) -> DashboardPublicationStateOut:
     """读一张屏此刻的发布态，含公开令牌。
 
     ⚠ 必须有这条读面：令牌只在发布出参里回一次，没有它的话「已经公开的屏」
     重开分享面就再也拿不到自己那条链接，只能靠再发布一次——而再发布会把已经
     发出去的那条当场作废。
-    Args: session, dashboard_id。
+    Args: session, dashboard_id, can_view_targets。
     """
-    return to_share_out(await require_dashboard(session, dashboard_id))
+    dashboard = await require_dashboard(session, dashboard_id)
+    targets: set[uuid.UUID] = (
+        navigate_target_ids(dashboard.chrome_json) - {dashboard_id}
+        if can_view_targets
+        else set()
+    )
+    rows = await dashboard_crud.unpublished_targets(session, targets)
+    return DashboardPublicationStateOut(
+        dashboard_id=dashboard.id,
+        is_public=dashboard.is_public,
+        public_token=dashboard.public_token,
+        updated_at=dashboard.updated_at,
+        unpublished_targets=[
+            UnpublishedJumpTargetOut(
+                dashboard_id=target_id, name=name, project_name=project_name
+            )
+            for target_id, name, project_name in rows
+        ],
+    )
 
 
 async def unpublish_dashboard(

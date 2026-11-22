@@ -41,10 +41,13 @@ class SubscribingSocket:
         ):
             self.subscribed.set()
 
-    async def receive_text(self) -> str:
+    async def receive(self) -> dict[str, object]:
         if self._first:
             self._first = False
-            return json.dumps({"action": "subscribe", "topic": TOPIC})
+            return {
+                "type": "websocket.receive",
+                "text": json.dumps({"action": "subscribe", "topic": TOPIC}),
+            }
         await asyncio.Event().wait()
         raise AssertionError("取消后不应再收到一帧")
 

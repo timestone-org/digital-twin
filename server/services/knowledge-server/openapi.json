@@ -451,6 +451,141 @@
         "title": "ApiResponse[Page[KnowledgeBaseOut]]",
         "type": "object"
       },
+      "ApiResponse_Page_ReembeddingJobOut__": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Page_ReembeddingJobOut_"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[Page[ReembeddingJobOut]]",
+        "type": "object"
+      },
+      "ApiResponse_ReembeddingJobOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReembeddingJobOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ReembeddingJobOut]",
+        "type": "object"
+      },
+      "ApiResponse_ReembeddingPreviewOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReembeddingPreviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[ReembeddingPreviewOut]",
+        "type": "object"
+      },
       "ApiResponse_SearchOut_": {
         "properties": {
           "code": {
@@ -801,6 +936,11 @@
             },
             "title": "Strategies",
             "type": "array"
+          },
+          "supports_base_metadata": {
+            "default": true,
+            "title": "Supports Base Metadata",
+            "type": "boolean"
           }
         },
         "required": [
@@ -1704,6 +1844,26 @@
         "title": "KnowledgeBaseIn",
         "type": "object"
       },
+      "KnowledgeBaseMetadataIn": {
+        "additionalProperties": false,
+        "description": "管理员提交的库名或描述。",
+        "minProperties": 1,
+        "properties": {
+          "description": {
+            "maxLength": 1000,
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "KnowledgeBaseMetadataIn",
+        "type": "object"
+      },
       "KnowledgeBaseOut": {
         "description": "一个库的样子。",
         "properties": {
@@ -1762,6 +1922,18 @@
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
+            "type": "string"
+          },
+          "vector_status": {
+            "default": "unindexed",
+            "enum": [
+              "unindexed",
+              "ready",
+              "legacy_unverified",
+              "model_unavailable",
+              "space_mismatch"
+            ],
+            "title": "Vector Status",
             "type": "string"
           }
         },
@@ -1930,6 +2102,37 @@
         "title": "Page[KnowledgeBaseOut]",
         "type": "object"
       },
+      "Page_ReembeddingJobOut_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReembeddingJobOut"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "size",
+          "total"
+        ],
+        "title": "Page[ReembeddingJobOut]",
+        "type": "object"
+      },
       "ParsingCapabilityOut": {
         "description": "解析那一层此刻装了哪几路后端（ADR-0043）。\n\n⚠ 外部那一路**没接就是空表**，不摆一个看着能用的占位：占位的表现是\n「界面上写着接了 MinerU，传上去却报一句谁也看不懂的错」。",
         "properties": {
@@ -1954,6 +2157,203 @@
           }
         },
         "title": "ParsingCapabilityOut",
+        "type": "object"
+      },
+      "PlatformSourcePatch": {
+        "additionalProperties": false,
+        "description": "平台路径、记录标识、标题及分页参数的部分更新。",
+        "minProperties": 1,
+        "properties": {
+          "id_field": {
+            "$ref": "#/components/schemas/_OptionalText"
+          },
+          "page_param": {
+            "$ref": "#/components/schemas/_OptionalText"
+          },
+          "path": {
+            "$ref": "#/components/schemas/_OptionalText"
+          },
+          "size_param": {
+            "$ref": "#/components/schemas/_OptionalText"
+          },
+          "title_field": {
+            "$ref": "#/components/schemas/_OptionalText"
+          }
+        },
+        "title": "PlatformSourcePatch",
+        "type": "object"
+      },
+      "ReembeddingJobOut": {
+        "properties": {
+          "base_id": {
+            "format": "uuid",
+            "title": "Base Id",
+            "type": "string"
+          },
+          "completed_chunks": {
+            "title": "Completed Chunks",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "pending",
+              "running",
+              "succeeded",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_dimensions": {
+            "title": "Target Dimensions",
+            "type": "integer"
+          },
+          "target_model": {
+            "title": "Target Model",
+            "type": "string"
+          },
+          "total_chunks": {
+            "title": "Total Chunks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "base_id",
+          "status",
+          "target_model",
+          "target_dimensions",
+          "total_chunks",
+          "completed_chunks",
+          "created_at",
+          "finished_at",
+          "error_message"
+        ],
+        "title": "ReembeddingJobOut",
+        "type": "object"
+      },
+      "ReembeddingPreviewOut": {
+        "properties": {
+          "can_start": {
+            "title": "Can Start",
+            "type": "boolean"
+          },
+          "content_revision": {
+            "title": "Content Revision",
+            "type": "integer"
+          },
+          "note": {
+            "title": "Note",
+            "type": "string"
+          },
+          "target_dimensions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Dimensions"
+          },
+          "target_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Model"
+          },
+          "target_space_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Space Id"
+          },
+          "total_chunks": {
+            "title": "Total Chunks",
+            "type": "integer"
+          },
+          "total_documents": {
+            "title": "Total Documents",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target_model",
+          "target_dimensions",
+          "target_space_id",
+          "content_revision",
+          "total_documents",
+          "total_chunks",
+          "can_start",
+          "note"
+        ],
+        "title": "ReembeddingPreviewOut",
+        "type": "object"
+      },
+      "ReembeddingStartIn": {
+        "additionalProperties": false,
+        "properties": {
+          "expected_revision": {
+            "minimum": 0.0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "target_space_id": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Target Space Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_space_id",
+          "expected_revision"
+        ],
+        "title": "ReembeddingStartIn",
         "type": "object"
       },
       "RegisterDocumentIn": {
@@ -2095,6 +2495,25 @@
         "title": "SourceIn",
         "type": "object"
       },
+      "SourceMetadataIn": {
+        "additionalProperties": false,
+        "description": "平台来源名称与配置的部分更新。",
+        "minProperties": 1,
+        "properties": {
+          "config": {
+            "$ref": "#/components/schemas/PlatformSourcePatch",
+            "title": "Config"
+          },
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "title": "SourceMetadataIn",
+        "type": "object"
+      },
       "SourceOut": {
         "description": "一路来源的样子。",
         "properties": {
@@ -2102,6 +2521,10 @@
             "format": "uuid",
             "title": "Base Id",
             "type": "string"
+          },
+          "can_change_identity": {
+            "title": "Can Change Identity",
+            "type": "boolean"
           },
           "config": {
             "additionalProperties": true,
@@ -2147,6 +2570,7 @@
           "id",
           "base_id",
           "kind",
+          "can_change_identity",
           "name",
           "config",
           "last_synced_at",
@@ -2317,6 +2741,9 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "_OptionalText": {
+        "type": "string"
       }
     }
   },
@@ -3296,6 +3723,58 @@
         "tags": [
           "library"
         ]
+      },
+      "patch": {
+        "description": "更新提交的管理信息，空描述用于清除原描述。\n\nArgs: session, container, _actor, base_id, body。",
+        "operationId": "update_metadata_api_v1_knowledge_knowledge_bases__base_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KnowledgeBaseMetadataIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_KnowledgeBaseOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "修改知识库名称或描述",
+        "tags": [
+          "library"
+        ]
       }
     },
     "/api/v1/knowledge/knowledge-bases/{base_id}/chunks/{chunk_id}": {
@@ -3373,6 +3852,289 @@
         "summary": "Read Chunk",
         "tags": [
           "search"
+        ]
+      }
+    },
+    "/api/v1/knowledge/knowledge-bases/{base_id}/reembeddings": {
+      "get": {
+        "description": "列出本库任务，最近创建的在前。\n\nArgs: base_id, session, _manager, page。",
+        "operationId": "list_jobs_api_v1_knowledge_knowledge_bases__base_id__reembeddings_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_Page_ReembeddingJobOut__"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "列出整库重嵌任务",
+        "tags": [
+          "knowledge-reembedding"
+        ]
+      },
+      "post": {
+        "description": "先提交可恢复任务，再返回任务位置。\n\nArgs: request, session, selection, response, container。",
+        "operationId": "start_api_v1_knowledge_knowledge_bases__base_id__reembeddings_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "pattern": "^[!-~][ -~]*$",
+              "title": "Idempotency-Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReembeddingStartIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReembeddingJobOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "启动整库重嵌",
+        "tags": [
+          "knowledge-reembedding"
+        ]
+      }
+    },
+    "/api/v1/knowledge/knowledge-bases/{base_id}/reembeddings/{job_id}": {
+      "get": {
+        "description": "读取一份管理任务。\n\nArgs: base_id, job_id, session, _manager。",
+        "operationId": "read_api_v1_knowledge_knowledge_bases__base_id__reembeddings__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReembeddingJobOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "查看整库重嵌进度",
+        "tags": [
+          "knowledge-reembedding"
+        ]
+      }
+    },
+    "/api/v1/knowledge/knowledge-bases/{base_id}/reembeddings/{job_id}:cancel": {
+      "post": {
+        "description": "取消在途任务并保留当前索引。\n\nArgs: base_id, job_id, session, actor, request。",
+        "operationId": "cancel_api_v1_knowledge_knowledge_bases__base_id__reembeddings__job_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReembeddingJobOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "取消整库重嵌",
+        "tags": [
+          "knowledge-reembedding"
+        ]
+      }
+    },
+    "/api/v1/knowledge/knowledge-bases/{base_id}/reembeddings:preview": {
+      "post": {
+        "description": "返回当前目标、源修订与工作量。\n\nArgs: base_id, session, _manager, selection。",
+        "operationId": "preview_api_v1_knowledge_knowledge_bases__base_id__reembeddings_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "base_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Base Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_ReembeddingPreviewOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "预览整库重嵌",
+        "tags": [
+          "knowledge-reembedding"
         ]
       }
     },
@@ -3596,6 +4358,95 @@
         "summary": "就绪探针",
         "tags": [
           "probe"
+        ]
+      }
+    },
+    "/api/v1/knowledge/sources/{source_id}": {
+      "delete": {
+        "description": "停止后续同步，保留已导入资料。\n\nArgs: source_id, session, _manager。",
+        "operationId": "detach_api_v1_knowledge_sources__source_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "解绑平台来源",
+        "tags": [
+          "source"
+        ]
+      },
+      "patch": {
+        "description": "修改名称及指定的配置字段。Args: source_id, body, session, _manager。",
+        "operationId": "edit_api_v1_knowledge_sources__source_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Source Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SourceMetadataIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiResponse_SourceOut_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "编辑平台来源",
+        "tags": [
+          "source"
         ]
       }
     },

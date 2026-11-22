@@ -49,7 +49,6 @@ class AppSettings(EnvSettings):
     app_http_port: int = 8000
     # 优雅关停时等待在途工作的上限，必须小于编排器的宽限期
     app_drain_timeout_s: float = 20.0
-    app_trace_sample_ratio: float = Field(default=0.1, ge=0.0, le=1.0)
 
     @field_validator("app_log_level", mode="before")
     @classmethod
@@ -64,6 +63,15 @@ class AppSettings(EnvSettings):
         if level not in logging.getLevelNamesMapping():
             raise ValueError(f"不认识的日志级别：{value}")
         return level
+
+
+class HttpAppSettings(AppSettings):
+    """已接入 HTTP 摘流的服务配置。"""
+
+    # HTTP 摘除就绪与停止监听之间的时间
+    app_readiness_withdraw_s: float = Field(
+        default=2.0, gt=0, allow_inf_nan=False
+    )
 
 
 class PostgresSettings(EnvSettings):

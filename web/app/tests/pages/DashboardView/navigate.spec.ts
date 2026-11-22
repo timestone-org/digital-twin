@@ -219,3 +219,57 @@ describe('页签栏认出自己在哪张屏', () => {
     wrapper.unmount()
   })
 })
+
+it('历史互斥规则从真实页签初选重放，共享图元在任一命中组都可见', async () => {
+  const board = payloadWithTabs()
+  const tab = board.nodes[0]
+  if (tab === undefined) throw new Error('缺少合成页签')
+  const titles = ['共同内容', '本屏详情', '其它详情']
+  board.nodes.push(
+    ...titles.map((text, i) => ({
+      ...tab,
+      id: 'card-' + i,
+      moduleType: 'text-block',
+      isVisible: false,
+      configJson: { text },
+      y: 80 + i * 70,
+    })),
+  )
+  board.chromeJson = {
+    interactions: [
+      {
+        id: '共同图元',
+        source: { nodeId: tab.id, event: 'select' },
+        action: {
+          type: 'setActive',
+          groups: [
+            { value: 'here', targets: ['card-0', 'card-1'] },
+            { value: 'there', targets: ['card-0', 'card-2'] },
+          ],
+        },
+      },
+    ],
+  }
+  dashboard.value = board
+  const wrapper = mount(DashboardView)
+  try {
+    await flushPromises()
+    await vi.waitFor(() =>
+      expect(wrapper.findAll('.dt-tabs__item')).toHaveLength(2),
+    )
+    const visible = (label: string) =>
+      wrapper
+        .findAll('.dt-node')
+        .some((el) => el.text().includes(label) && el.isVisible())
+    await vi.waitFor(() => expect(visible('共同内容')).toBe(true))
+    expect(visible('其它详情')).toBe(true)
+    expect(visible('本屏详情')).toBe(false)
+    await wrapper.findAll('.dt-tabs__item')[0]?.trigger('click')
+    expect(visible('共同内容')).toBe(true)
+    await vi.waitFor(() => expect(visible('本屏详情')).toBe(true))
+    expect(visible('其它详情')).toBe(false)
+    expect(push).not.toHaveBeenCalled()
+  } finally {
+    wrapper.unmount()
+  }
+})

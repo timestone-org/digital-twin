@@ -5,10 +5,11 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.crud import content_lock
 from knowledge_server.apps.knowledge.models import KnowledgeBase
 
 
@@ -26,6 +27,7 @@ class BaseWrite:
     embedding_model: str | None
     dimensions: int | None
     retrieval_strategy: str
+    embedding_space_id: str | None = None
 
 
 async def insert_base(session: AsyncSession, write: BaseWrite) -> KnowledgeBase:
@@ -41,6 +43,7 @@ async def insert_base(session: AsyncSession, write: BaseWrite) -> KnowledgeBase:
         description=write.description,
         owner_id=write.owner_id,
         embedding_model=write.embedding_model,
+        embedding_space_id=write.embedding_space_id,
         dimensions=write.dimensions,
         retrieval_strategy=write.retrieval_strategy,
     )
@@ -77,6 +80,27 @@ async def get_base(
         select(KnowledgeBase).where(KnowledgeBase.id == base_id)
     )
     return found.scalar_one_or_none()
+
+
+async def update_metadata(
+    session: AsyncSession,
+    base_id: uuid.UUID,
+    name: str | None,
+    description: str | None,
+) -> KnowledgeBase | None:
+    """只写提交的库名和描述。Args: session, base_id, name, description。"""
+    changes: dict[str, str] = {}
+    if name is not None:
+        changes["name"] = name
+    if description is not None:
+        changes["description"] = description
+    return await session.scalar(
+        update(KnowledgeBase)
+        .where(KnowledgeBase.id == base_id)
+        .values(**changes)
+        .returning(KnowledgeBase)
+        .execution_options(populate_existing=True)
+    )
 
 
 async def list_bases(
@@ -135,9 +159,32 @@ async def delete_base(session: AsyncSession, base_id: uuid.UUID) -> int:
 
     Args: session, base_id。
     """
+    await content_lock.base(session, base_id)
     done = await session.execute(
         delete(KnowledgeBase).where(KnowledgeBase.id == base_id)
     )
     # cast 的理由 —— DML 的 execute 运行期返回 CursorResult，而 AsyncSession
     # 的静态签名只承诺 Result，`rowcount` 在后者上不存在
     return max(0, cast("CursorResult[Any]", done).rowcount)
+
+
+async def unverified_vectors(
+    session: AsyncSession, bases: list[uuid.UUID]
+) -> set[uuid.UUID]:
+    """一次探测缺少历史模型名的库是否确有原索引。Args: session, bases。"""
+    if not bases:
+        return set()
+    rows = await session.scalars(
+        text("""
+        SELECT ids.base FROM unnest(CAST(:bases AS uuid[])) ids(base)
+        WHERE EXISTS (
+            SELECT FROM knowledge.kb_chunk_embeddings e
+            JOIN knowledge.kb_chunks c ON c.id=e.chunk_id
+            JOIN knowledge.kb_documents d ON d.id=c.document_id
+            WHERE e.base_id=ids.base
+              AND coalesce(d.source_revision_state, 'current')='current'
+        )
+    """),
+        {"bases": bases},
+    )
+    return set(rows)

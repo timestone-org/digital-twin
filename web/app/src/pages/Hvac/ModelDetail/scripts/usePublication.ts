@@ -3,7 +3,7 @@
  *
  * 状态在 `publicationState.ts`，动作在 `publicationActions.ts`。
  */
-import { watch } from 'vue'
+import { onScopeDispose, watch } from 'vue'
 import type { AcModel } from '@dt/contracts'
 
 import { emptyDraft } from '@/features/hvac/publication'
@@ -20,8 +20,13 @@ export function usePublication(
   model: () => AcModel | null,
 ) {
   const state = createPublicationState()
-  const derived = derive(state, model)
-  const actions = createPublicationActions(state, derived, modelId)
+  const derived = derive(state, model, modelId)
+  const { dispose, ...actions } = createPublicationActions(
+    state,
+    derived,
+    modelId,
+  )
+  onScopeDispose(dispose)
 
   // 换实例就换节点清单
   watch(

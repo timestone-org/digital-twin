@@ -119,7 +119,10 @@ async def test_a_written_vector_comes_back_first(
             ),
         )
         found = await index.search(
-            session, VectorQuery(base_id=base_id, vector=near, limit=5)
+            session,
+            VectorQuery(
+                model_tag="fake", base_id=base_id, vector=near, limit=5
+            ),
         )
     assert found[0].chunk_id == chunk_ids[0]
     assert "向量近邻" in found[0].why
@@ -148,6 +151,7 @@ async def test_writing_the_same_chunk_twice_keeps_one_row(
         found = await index.search(
             session,
             VectorQuery(
+                model_tag="fake",
                 base_id=base_id,
                 vector=_vector(db_dimensions, 1.0),
                 limit=10,
@@ -179,7 +183,8 @@ async def test_vectors_never_leak_across_bases(
                 ),
             )
         found = await index.search(
-            session, VectorQuery(base_id=mine, vector=probe, limit=10)
+            session,
+            VectorQuery(model_tag="fake", base_id=mine, vector=probe, limit=10),
         )
     assert [one.chunk_id for one in found] == [my_chunks[0]]
 
@@ -231,7 +236,10 @@ async def test_deleting_a_chunk_takes_its_vector_with_it(
         # 整份文档的块整体替换成空 = 删块；向量随外键级联走
         await crud.chunk.replace_chunks(session, base_id, document_id, [])
         found = await index.search(
-            session, VectorQuery(base_id=base_id, vector=probe, limit=5)
+            session,
+            VectorQuery(
+                model_tag="fake", base_id=base_id, vector=probe, limit=5
+            ),
         )
     assert found == []
 

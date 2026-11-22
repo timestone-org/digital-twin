@@ -10,7 +10,11 @@
 import type { PublicDashboardPayload } from '@dt/contracts'
 import { ref, type Ref } from 'vue'
 
-import { getPublicDashboard } from '@/api/dashboardShare'
+import { BizError } from '@/api/client'
+import {
+  DASHBOARD_NOT_PUBLISHED_CODE,
+  getPublicDashboard,
+} from '@/api/dashboardShare'
 import { describeError } from '@/composables/useAsyncList'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 
@@ -20,8 +24,18 @@ export interface PublicDashboardDoc {
   error: Ref<string | null>
   /** 按令牌加载；被更晚的一次加载顶掉时什么都不写。 */
   load: (publicToken: string) => Promise<void>
+  /** 复核公开状态，明确撤回时返回 true。 */
+  recheck: (publicToken: string) => Promise<boolean>
   /** 卸载时掐掉在途请求。 */
   dispose: () => void
+}
+
+function isUnpublished(caught: unknown): boolean {
+  return (
+    caught instanceof BizError &&
+    caught.status === 404 &&
+    caught.code === DASHBOARD_NOT_PUBLISHED_CODE
+  )
 }
 
 /** 装一份公开大屏的加载状态。须在 setup 内调用（只为拿到响应式引用）。 */
@@ -30,9 +44,11 @@ export function usePublicDashboardDoc(): PublicDashboardDoc {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const raced = useRacedFetch()
+  let isChecking = false
 
   async function load(publicToken: string): Promise<void> {
     if (publicToken === '') return
+    isChecking = false
     loading.value = true
     error.value = null
     await raced.run((signal) => getPublicDashboard(publicToken, signal), {
@@ -53,5 +69,28 @@ export function usePublicDashboardDoc(): PublicDashboardDoc {
     })
   }
 
-  return { dashboard, loading, error, load, dispose: raced.cancel }
+  async function recheck(publicToken: string): Promise<boolean> {
+    if (publicToken === '' || loading.value || isChecking) return false
+    isChecking = true
+    let isWithdrawn = false
+    await raced.run((signal) => getPublicDashboard(publicToken, signal), {
+      ok: (payload) => {
+        if (dashboard.value !== null) return
+        dashboard.value = payload
+        error.value = null
+      },
+      fail: (caught) => {
+        if (!isUnpublished(caught)) return
+        dashboard.value = null
+        error.value = describeError(caught)
+        isWithdrawn = true
+      },
+      settled: () => {
+        isChecking = false
+      },
+    })
+    return isWithdrawn
+  }
+
+  return { dashboard, loading, error, load, recheck, dispose: raced.cancel }
 }

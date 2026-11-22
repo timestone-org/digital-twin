@@ -8,8 +8,15 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
 from lib.errors.base import AppError, FieldError, ValidationFailed
+from lib.errors.payload import error_payload
+from lib.logging.context import LogContext, use_log_context
 from lib.logging.logger import get_logger
-from lib.web.response import error_payload
+from lib.logging.trace import (
+    current_traceparent,
+    new_span_id,
+    new_trace_id,
+    parse_traceparent,
+)
 
 if TYPE_CHECKING:
     from starlette.responses import Response
@@ -111,15 +118,24 @@ async def _handle_http_exception(
     )
 
 
-async def _handle_unexpected(_request: Request, error: Exception) -> "Response":
-    # ⚠ 兜底处理器自身绝不能抛：这里只做定长字段拼装，不碰用户数据
-    _logger.error("unhandled_exception", "未捕获异常", error=error)
-    return JSONResponse(
-        status_code=SERVER_ERROR_STATUS,
-        content=error_payload(
-            code=FALLBACK_CODE, message=GENERIC_SERVER_MESSAGE
-        ),
-    )
+async def _handle_unexpected(request: Request, error: Exception) -> "Response":
+    # 外层可能在请求上下文中间件运行之前就遇到异常。
+    context = getattr(request.state, "request_log_context", None)
+    if not isinstance(context, LogContext):
+        context = LogContext(
+            trace_id=parse_traceparent(request.headers.get("traceparent"))
+            or new_trace_id(),
+            span_id=new_span_id(),
+        )
+    with use_log_context(context):
+        _logger.error("unhandled_exception", "未捕获异常", error=error)
+        return JSONResponse(
+            status_code=SERVER_ERROR_STATUS,
+            content=error_payload(
+                code=FALLBACK_CODE, message=GENERIC_SERVER_MESSAGE
+            ),
+            headers={"traceparent": current_traceparent()},
+        )
 
 
 def register_exception_handlers(app: FastAPI) -> None:

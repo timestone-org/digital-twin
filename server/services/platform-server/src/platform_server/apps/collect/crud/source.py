@@ -22,6 +22,17 @@ class SourceCrud(CrudBase[CollectSource]):
     def __init__(self) -> None:
         super().__init__(CollectSource)
 
+    async def get_for_update(
+        self, session: AsyncSession, source_id: uuid.UUID
+    ) -> CollectSource | None:
+        """读取最新来源配置并锁定该行。Args: session, source_id。"""
+        return await session.get(
+            CollectSource,
+            source_id,
+            with_for_update=True,
+            populate_existing=True,
+        )
+
     async def get_by_code(
         self, session: AsyncSession, code: str
     ) -> CollectSource | None:

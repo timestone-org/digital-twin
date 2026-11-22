@@ -12,6 +12,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -96,6 +97,8 @@ class KnowledgeDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     chunk_count: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
+    source_revision_state: Mapped[str | None] = mapped_column(String(16))
+    embedding_deferred: Mapped[bool | None] = mapped_column(Boolean)
     ready_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -105,6 +108,10 @@ class KnowledgeDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "status IN ('pending', 'parsing', 'chunking', 'embedding', "
             "'indexing', 'ready', 'failed')",
             name="status_known",
+        ),
+        CheckConstraint(
+            "source_revision_state IN ('current','pending','historical')",
+            name="source_revision_state",
         ),
         CheckConstraint("length(title) > 0", name="title_present"),
         CheckConstraint("length(content_hash) = 64", name="hash_sized"),

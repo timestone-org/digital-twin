@@ -27,6 +27,15 @@ _FIELD_TRACEPARENT = "traceparent"
 _FIELD_GENERATION = "ingest_generation"
 
 
+def source_version_group(target: StreamGroup) -> StreamGroup:
+    """来源版本只交给能保留历史块的 worker。Args: target。"""
+    return StreamGroup(
+        stream=target.stream + ":source-versions",
+        group=target.group,
+        consumer=target.consumer,
+    )
+
+
 @dataclass(frozen=True)
 class IngestMessage:
     """一次摄取任务。"""

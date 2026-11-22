@@ -4,7 +4,7 @@
 的取值；把覆盖行读成默认值，运维改完刷新一看又变回去了，两边都不报错。
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -206,3 +206,17 @@ def test_the_bounds_travel_with_the_value() -> None:
     spec = spec_of(WINDOW_KEY)
     item = param_service.to_param_out(spec, settings=build_settings(), row=None)
     assert (item.minimum, item.maximum) == (spec.minimum, spec.maximum)
+
+
+def test_a_name_snapshot_is_visible_only_for_the_current_write() -> None:
+    row = row_of(WINDOW_KEY, 1500)
+    row.updated_by_name = "signed_operator"
+    row.updated_by_name_at = CHANGED_AT
+    settings = build_settings()
+    spec = spec_of(WINDOW_KEY)
+    current = param_service.to_param_out(spec, settings=settings, row=row)
+    assert current.updated_by_name == "signed_operator"
+    row.updated_at = CHANGED_AT + timedelta(seconds=1)
+    current = param_service.to_param_out(spec, settings=settings, row=row)
+    assert current.updated_by == row.updated_by
+    assert current.updated_by_name is None

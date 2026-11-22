@@ -46,6 +46,15 @@ PLAN_PAGE_ROWS: Final[int] = 2000
 
 
 @dataclass(frozen=True)
+class PointLookup:
+    """可组合的点位配置筛选条件。"""
+
+    source_id: uuid.UUID | None = None
+    keyword: str | None = None
+    code: str | None = None
+
+
+@dataclass(frozen=True)
 class PlanPointRow:
     """构建采集计划所需的点位字段。"""
 
@@ -115,18 +124,15 @@ class PointCrud(CrudBase[CollectPoint]):
         self,
         session: AsyncSession,
         *,
-        filters: tuple[uuid.UUID | None, str | None],
+        lookup: PointLookup,
         after: PointCursor | None,
         limit: int,
     ) -> list[PointCandidate]:
         """按稳定锚点读取一批候选。
 
-        Args: session, filters, after, limit。
+        Args: session, lookup, after, limit。
         """
-        source_id, keyword = filters
-        statement = self.build_query(
-            source_id=source_id, keyword=keyword
-        ).with_only_columns(
+        statement = self.build_query(lookup).with_only_columns(
             CollectPoint.id, CollectPoint.source_id, CollectPoint.code
         )
         if after is not None:
@@ -144,21 +150,38 @@ class PointCrud(CrudBase[CollectPoint]):
             for point_id, source_id, code in rows.tuples()
         ]
 
+    async def get_for_update(
+        self, session: AsyncSession, point_id: uuid.UUID
+    ) -> CollectPoint | None:
+        """读取点位的最新配置并锁定该行。Args: session, point_id。"""
+        return await session.get(
+            CollectPoint, point_id, with_for_update=True, populate_existing=True
+        )
+
     async def list_by_ids(
-        self, session: AsyncSession, point_ids: Sequence[uuid.UUID]
+        self,
+        session: AsyncSession,
+        point_ids: Sequence[uuid.UUID],
+        *,
+        should_lock: bool = False,
     ) -> list[CollectPoint]:
         """按主键取这一批点位，顺序同列表面。
 
-        Args: session, point_ids。
+        Args: session, point_ids, should_lock。
         """
         if not point_ids:
             return []
-        rows = await session.execute(
+        query = (
             select(CollectPoint)
             .where(CollectPoint.id.in_(list(point_ids)))
             .order_by(*DEFAULT_ORDER)
         )
-        return list(rows.scalars().all())
+        if should_lock:
+            query = query.with_for_update().execution_options(
+                populate_existing=True
+            )
+        rows = await session.scalars(query)
+        return list(rows.all())
 
     async def delete_many(
         self, session: AsyncSession, point_ids: Sequence[uuid.UUID]
@@ -262,6 +285,24 @@ class PointCrud(CrudBase[CollectPoint]):
             await rows.close()
         return codes
 
+    async def lock_source_page(
+        self,
+        session: AsyncSession,
+        source_id: uuid.UUID,
+        after: uuid.UUID | None,
+    ) -> list[CollectPoint]:
+        """锁定待级联删除的点位一页。Args: session, source_id, after。"""
+        query = select(CollectPoint).where(CollectPoint.source_id == source_id)
+        if after is not None:
+            query = query.where(CollectPoint.id > after)
+        rows = await session.scalars(
+            query.order_by(CollectPoint.id)
+            .limit(500)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return list(rows.all())
+
     async def count_by_source(
         self, session: AsyncSession, source_id: uuid.UUID
     ) -> int:
@@ -277,20 +318,22 @@ class PointCrud(CrudBase[CollectPoint]):
         return int(rows.scalar_one())
 
     @staticmethod
-    def build_query(
-        *, source_id: uuid.UUID | None, keyword: str | None
-    ) -> Select[tuple[CollectPoint]]:
+    def build_query(lookup: PointLookup) -> Select[tuple[CollectPoint]]:
         """按过滤条件构造列表查询。
 
-        Args: source_id, keyword（Agent 按名字找点用）。
+        Args: lookup。
         """
         statement = select(CollectPoint)
-        if source_id is not None:
-            statement = statement.where(CollectPoint.source_id == source_id)
-        if keyword:
+        if lookup.source_id is not None:
             statement = statement.where(
-                CollectPoint.name.icontains(keyword, autoescape=True)
-                | CollectPoint.code.icontains(keyword, autoescape=True)
+                CollectPoint.source_id == lookup.source_id
+            )
+        if lookup.code is not None:
+            statement = statement.where(CollectPoint.code == lookup.code)
+        if lookup.keyword:
+            statement = statement.where(
+                CollectPoint.name.icontains(lookup.keyword, autoescape=True)
+                | CollectPoint.code.icontains(lookup.keyword, autoescape=True)
             )
         return statement
 

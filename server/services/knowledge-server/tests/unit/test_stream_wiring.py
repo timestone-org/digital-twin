@@ -1,4 +1,4 @@
-"""摄取队列按运行角色装配读取预算。"""
+"""摄取队列按运行角色装配读取预算与确认策略。"""
 
 import pytest
 
@@ -10,12 +10,19 @@ from lib.stream import RedisStream
 
 
 @pytest.fixture
-def budgets(monkeypatch: pytest.MonkeyPatch) -> dict[str, float]:
-    observed: dict[str, float] = {}
+def redis_options(monkeypatch: pytest.MonkeyPatch) -> dict[str, float | bool]:
+    observed: dict[str, float | bool] = {}
 
-    def stream(*, url: str, timeout_s: float) -> RedisStream:
+    def stream(
+        *, url: str, timeout_s: float, should_delete_on_ack: bool
+    ) -> RedisStream:
         observed["stream"] = timeout_s
-        return RedisStream(url=url, timeout_s=timeout_s)
+        observed["should_delete_on_ack"] = should_delete_on_ack
+        return RedisStream(
+            url=url,
+            timeout_s=timeout_s,
+            should_delete_on_ack=should_delete_on_ack,
+        )
 
     def cache(*, url: str, timeout_s: float) -> Cache:
         observed["cache"] = timeout_s
@@ -35,9 +42,9 @@ def budgets(monkeypatch: pytest.MonkeyPatch) -> dict[str, float]:
         (ROLE_WORKER, 20.0, 5_000, 20.0),
     ],
 )
-async def test_stream_budget_covers_only_worker_blocking_reads(
+async def test_stream_wiring_uses_role_specific_budget_and_ack_policy(
     settings: Settings,
-    budgets: dict[str, float],
+    redis_options: dict[str, float | bool],
     budget: tuple[str, float, int, float],
 ) -> None:
     role, redis_timeout_s, block_ms, expected_timeout_s = budget
@@ -50,9 +57,10 @@ async def test_stream_budget_covers_only_worker_blocking_reads(
     )
     built = build_container(configured)
     try:
-        assert budgets == {
+        assert redis_options == {
             "stream": expected_timeout_s,
             "cache": redis_timeout_s,
+            "should_delete_on_ack": role == ROLE_WORKER,
         }
     finally:
         await built.stream.close()

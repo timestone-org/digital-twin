@@ -23,6 +23,7 @@ import type { CardPartRow } from './cells'
 import type { CardAlarm } from './groups'
 
 const props = defineProps<{
+  isDuplicate?: boolean
   cell: CardCellView
   meta: CardPartMeta
   parts: readonly CardPartRow[]
@@ -131,7 +132,7 @@ function onPick(event: MouseEvent): void {
       <span
         class="dc-cell__status"
         :class="`dc-cell__status--${issue.state}`"
-        tabindex="0"
+        :tabindex="isDuplicate ? undefined : 0"
         :aria-label="issue.reason"
         >{{ issue.mark }}</span
       >

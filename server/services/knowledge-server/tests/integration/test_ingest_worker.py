@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import pytest
+from integration.embedding_support import CertifiedTestEmbedder
 
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.services import ingest_queue
@@ -65,7 +66,7 @@ class _Source:
 
 
 @dataclass(frozen=True)
-class _Embedder:
+class _Embedder(CertifiedTestEmbedder):
     """按正文长度造一条宽度正好的假向量。"""
 
     dimensions: int

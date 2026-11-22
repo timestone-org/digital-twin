@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from platform_server.apps.dataset.services import ColumnSpec, EffectiveRow
 from platform_server.apps.report.schemas.document import DocumentNode
 from platform_server.apps.report.schemas.template import TemplateBody
+from platform_server.apps.report.services.aggregation import format_value
 from platform_server.apps.report.services.document import validate_template
 from platform_server.apps.report.services.metrics import PreviewContext
 from platform_server.apps.report.services.preview import preview
@@ -117,3 +118,20 @@ async def test_an_unconfigured_text_node_renders_a_placeholder_not_a_failure(
     assert [node.text for node in result.nodes.values()] == ["[数据未配置]"]
     assert result.is_valid
     _require_complete(result)
+
+
+@pytest.mark.parametrize(
+    ("value", "kind", "expected"),
+    [
+        (True, "bool", "true"),
+        (False, "bool", "false"),
+        (None, "bool", "—"),
+        ("True", "string", "True"),
+        ("旧数据", "bool", "旧数据"),
+        (True, "boolean", "true"),
+    ],
+)
+def test_ledger_boolean_text_preserves_other_kinds(
+    value: object, kind: str, expected: str
+) -> None:
+    assert format_value(value, kind) == expected

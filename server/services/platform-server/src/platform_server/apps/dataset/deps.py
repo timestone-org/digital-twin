@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.utils.timeutils import to_utc
@@ -26,6 +27,7 @@ from platform_server.apps.dataset.services import (
     RecordLocator,
     RecordWriter,
 )
+from platform_server.apps.dataset.services.sessions import Sessions
 from platform_server.container import Container
 from platform_server.deps import (
     WriteGate,
@@ -46,6 +48,7 @@ __all__ = [
     "get_override_writer",
     "get_recompute_runner",
     "get_record_locator",
+    "get_record_sessions",
     "get_record_writer",
     "get_session",
     "require",
@@ -56,17 +59,19 @@ def get_manage_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(DATASET_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteGate:
     """增删改台账与列用的写上下文。
 
     ⚠ 直接用 `WriteGate` 而不另立子类：台账面不碰现场设备、也不广播采集计划，
     没有第三个协作者要带，空子类只是一层没有内容的间接。
-    Args: container, caller, idempotency_key。
+    Args: container, caller, idempotency_key, session。
     """
     return WriteGate(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+        receipt_session=session,
     )
 
 
@@ -74,41 +79,52 @@ def get_formula_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(FORMULA_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteGate:
     """建改删库公式用的写上下文。
 
     ⚠ 与台账的 `manage` 分成两个码：改一条库公式会同时改掉**所有**引用它的
     台账列，爆炸半径比改单张表的一列大一个量级（§9）。
-    Args: container, caller, idempotency_key。
+    Args: container, caller, idempotency_key, session。
     """
     return WriteGate(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+        receipt_session=session,
     )
+
+
+def get_record_sessions(
+    container: Annotated[Container, Depends(get_container)],
+) -> Sessions:
+    """取台账记录读模型所用的短事务工厂。Args: container。"""
+    return container.database
 
 
 def get_record_writer(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(DATASET_RECORD_WRITE))],
+    sessions: Annotated[Sessions, Depends(get_record_sessions)],
 ) -> RecordWriter:
     """录入 / 编辑 / 删除单行用的写上下文。
 
-    Args: container, caller。
+    Args: container, caller, sessions。
     """
-    return _writer(container, caller)
+    return _writer(container, caller, sessions)
 
 
 def get_override_writer(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(DATASET_OVERRIDE))],
+    sessions: Annotated[Sessions, Depends(get_record_sessions)],
 ) -> RecordWriter:
     """人工修正用的写上下文。
 
     ⚠ 与录入分成两个码：修正值优先于点位聚合值，等同于篡改台账（§9）。
-    Args: container, caller。
+    Args: container, caller, sessions。
     """
-    return _writer(container, caller)
+    return _writer(container, caller, sessions)
 
 
 def get_backfill_gate(
@@ -143,25 +159,32 @@ def get_record_locator(
     table_id: uuid.UUID,
     row_id: uuid.UUID,
     ts: Annotated[datetime | None, Query()] = None,
+    locator_ts: Annotated[
+        datetime | None, Query(description="数据行精确时间，优先于 ts")
+    ] = None,
 ) -> RecordLocator:
     """从路径与查询参数拼出一行的定位。
 
-    ⚠ `ts` 是分区键：带上直接命中 chunk，不带就是跨 chunk 扫描（§6.1）。
-    Args: table_id, row_id, ts。
+    Args: table_id, row_id, ts, locator_ts。
     """
+    stamp = locator_ts if locator_ts is not None else ts
     return RecordLocator(
         table_id=table_id,
         row_id=row_id,
-        ts=None if ts is None else to_utc(ts),
+        ts=None if stamp is None else to_utc(stamp),
+        is_legacy=locator_ts is None,
     )
 
 
-def _writer(container: Container, caller: CallerContext) -> RecordWriter:
+def _writer(
+    container: Container, caller: CallerContext, sessions: Sessions
+) -> RecordWriter:
     """把组合根里的报脏口与时区、加上调用者，拧成一个写上下文。
 
-    Args: container, caller。
+    Args: container, caller, sessions。
     """
     return RecordWriter(
+        sessions=sessions,
         dirty=container.dataset.dirty,
         timezone=container.dataset.timezone,
         actor=Actor(user_id=str(caller.user_id), name=caller.username),

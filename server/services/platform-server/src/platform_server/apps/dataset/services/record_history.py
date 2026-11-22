@@ -6,7 +6,7 @@
 """
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime, tzinfo
 from typing import Any
 
@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.dataset.crud import (
     RecordWindow,
-    WholeStatsRow,
     record_crud,
 )
 from platform_server.apps.dataset.errors import DatasetRecordInvalid
@@ -32,7 +31,7 @@ from platform_server.apps.dataset.formula import (
 from platform_server.apps.dataset.models import DatasetRecord
 from platform_server.apps.dataset.services import analysis_provider
 from platform_server.apps.dataset.services.effective import to_snapshot
-from platform_server.apps.dataset.services.sessions import BorrowedSessions
+from platform_server.apps.dataset.services.sessions import Sessions
 
 MAX_FORMULA_HISTORY_ROWS = 200_000
 
@@ -47,6 +46,9 @@ class ComputeScope:
     #: 业务时区。⚠ 月/年窗口按它的日历回推，换成 UTC 会让东八区凌晨那几个
     #: 小时的行静默落进上一个月
     timezone: tzinfo
+    models: dict[str, AnalysisModel | AnalysisUnavailable] = field(
+        default_factory=dict[str, AnalysisModel | AnalysisUnavailable]
+    )
 
     @property
     def max_prev(self) -> int:
@@ -125,7 +127,7 @@ async def load_history(
     Args: session, scope, target。
     """
     cache = HistoryCache(tz=scope.timezone)
-    cache.models = await load_models(session, scope)
+    cache.models = scope.models
     if not scope.plan.needs_history:
         return cache
     span = RowSpan(table_id=target.table_id, start=target.ts, end=target.ts)
@@ -138,16 +140,14 @@ async def load_history(
     return cache
 
 
-async def load_models(
-    session: AsyncSession, scope: ComputeScope
-) -> dict[str, AnalysisModel | AnalysisUnavailable]:
-    """把这张表用到的模型定义装出来。一次重算装一次，全批复用。
-
-    Args: session, scope。
-    """
-    return await analysis_provider.load_models(
-        BorrowedSessions(session), frozenset(scope.plan.model_refs)
+async def prepare_models(
+    sessions: Sessions, scope: ComputeScope
+) -> ComputeScope:
+    """在写事务开始前加载已冻结公式所需的模型。Args: sessions, scope。"""
+    models = await analysis_provider.load_models(
+        sessions, frozenset(scope.plan.model_refs)
     )
+    return replace(scope, models=models)
 
 
 async def load_whole_stats(
@@ -241,22 +241,8 @@ async def _stats_of(
         keys=[item.column for item in refs],
         exclude_row_id=exclude_row_id,
     )
-    return {item.reference: _to_stats(found.get(item.column)) for item in refs}
-
-
-def _to_stats(row: WholeStatsRow | None) -> WholeStats:
-    """库里的一行底数 → 求值器认得的形态。
-
-    Args: row。
-    """
-    if row is None:
-        return WholeStats()
-    return WholeStats(
-        minimum=row.minimum,
-        maximum=row.maximum,
-        total=row.total,
-        count=row.count,
-    )
+    empty = WholeStats()
+    return {item.reference: found.get(item.column, empty) for item in refs}
 
 
 async def _load_prev(

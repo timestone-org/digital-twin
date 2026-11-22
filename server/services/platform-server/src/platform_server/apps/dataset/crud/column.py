@@ -1,9 +1,12 @@
 """列定义的数据访问。"""
 
 import uuid
+from collections.abc import Sequence
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Text, cast, func, or_, select
+from sqlalchemy.dialects.postgresql import JSONB, JSONPATH
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from lib.db import CrudBase
 from platform_server.apps.dataset.models import DatasetColumn, DatasetTable
@@ -36,6 +39,66 @@ class ColumnCrud(CrudBase[DatasetColumn]):
             .order_by(*DEFAULT_ORDER)
         )
         return list(rows.scalars().all())
+
+    async def list_by_tables(
+        self, session: AsyncSession, table_ids: set[uuid.UUID]
+    ) -> list[DatasetColumn]:
+        """按表批量取完整的列定义供公式试编译。Args: session, table_ids。"""
+        rows = await session.scalars(
+            select(DatasetColumn)
+            .where(DatasetColumn.table_id.in_(table_ids))
+            .order_by(DatasetColumn.table_id, *DEFAULT_ORDER)
+        )
+        return list(rows)
+
+    async def keys_in_tables(
+        self, session: AsyncSession, table_codes: set[str]
+    ) -> set[tuple[str, str]]:
+        """一次取候选来源表中已有的列标识。Args: session, table_codes。"""
+        rows = await session.execute(
+            select(DatasetTable.code, DatasetColumn.key)
+            .join(DatasetColumn, DatasetColumn.table_id == DatasetTable.id)
+            .where(DatasetTable.code.in_(table_codes))
+        )
+        return set(rows.tuples())
+
+    async def count_point_references(
+        self, session: AsyncSession, node_keys: Sequence[str]
+    ) -> dict[str, int]:
+        """按点位键一次取所有台账列的引用数。
+
+        Args: session, node_keys。
+        """
+        if not node_keys:
+            return {}
+        stored_key = DatasetColumn.node_key
+        identity = func.platform.dataset_point_identity(
+            stored_key, type_=Text()
+        )
+        rows = await session.execute(
+            select(identity, func.count())
+            .where(
+                stored_key.is_not(None),
+                identity.in_(node_keys),
+                DatasetColumn.source == "point",
+            )
+            .group_by(identity)
+        )
+        return dict(rows.tuples().all())
+
+    async def get_for_update(
+        self, session: AsyncSession, table_id: uuid.UUID, column_id: uuid.UUID
+    ) -> DatasetColumn | None:
+        """锁定并刷新列当前引用。Args: session, table_id, column_id。"""
+        return await session.scalar(
+            select(DatasetColumn)
+            .where(
+                DatasetColumn.id == column_id,
+                DatasetColumn.table_id == table_id,
+            )
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
 
     async def get_by_key(
         self, session: AsyncSession, table_id: uuid.UUID, key: str
@@ -91,33 +154,55 @@ class ColumnCrud(CrudBase[DatasetColumn]):
         return list(rows.scalars().all())
 
     async def external_dependents_of(
-        self, session: AsyncSession, *, table: DatasetTable, key: str
+        self,
+        session: AsyncSession,
+        *,
+        table: DatasetTable,
+        key: str | None = None,
     ) -> list[tuple[DatasetColumn, DatasetTable]]:
-        """别的台账里公式引用了这一列的列，连同它们所在的台账。
+        """查外部公式引用及所属台账。省略 key 时覆盖整张表。
 
         ⚠ 跨表引用不进 `referenced_keys`：直接引用记在 `external`，窗口与整列
         聚合记在 `window`/`whole`、键是 `表code.列key`，三处都要查，漏一处那几列
         会在删列后静默算空。
         Args: session, table, key。
         """
-        qualified = f"{table.code}.{key}"
-        deps = DatasetColumn.formula_deps
         rows = await session.execute(
             select(DatasetColumn, DatasetTable)
             .join(DatasetTable, DatasetTable.id == DatasetColumn.table_id)
             .where(
                 DatasetColumn.table_id != table.id,
-                or_(
-                    deps.contains(
-                        {"external": [{"table": table.code, "key": key}]}
-                    ),
-                    deps.contains({"window": [{"key": qualified}]}),
-                    deps.contains({"whole": [{"key": qualified}]}),
-                ),
+                _external_reference(table.code, key),
             )
             .order_by(DatasetTable.code.asc(), *DEFAULT_ORDER)
         )
         return [(column, owner) for column, owner in rows.tuples().all()]
+
+
+def _external_reference(code: str, key: str | None) -> ColumnElement[bool]:
+    """匹配一列或整张台账的跨表取值与聚合依赖。Args: code, key。"""
+    deps = DatasetColumn.formula_deps
+    if key is not None:
+        qualified = f"{code}.{key}"
+        return or_(
+            deps.contains({"external": [{"table": code, "key": key}]}),
+            deps.contains({"window": [{"key": qualified}]}),
+            deps.contains({"whole": [{"key": qualified}]}),
+        )
+    prefix = cast({"prefix": f"{code}."}, JSONB)
+    return or_(
+        deps.contains({"external": [{"table": code}]}),
+        func.jsonb_path_exists(
+            deps,
+            cast("$.window[*].key ? (@ starts with $prefix)", JSONPATH),
+            prefix,
+        ),
+        func.jsonb_path_exists(
+            deps,
+            cast("$.whole[*].key ? (@ starts with $prefix)", JSONPATH),
+            prefix,
+        ),
+    )
 
 
 column_crud = ColumnCrud()

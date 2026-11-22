@@ -84,7 +84,7 @@ def get_open_model_deps(
         cache=container.cache,
         sessions=sessions,
         store=container.object_store,
-        artifacts=container.modeling_artifacts,
+        inference=container.model_inference,
     )
 
 
@@ -104,15 +104,17 @@ def get_manage_context(
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(MODELING_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteGate:
     """建改删流水线、校验、导入用的写上下文。
 
-    Args: container, caller, idempotency_key。
+    Args: container, caller, idempotency_key, session。
     """
     return WriteGate(
         idempotency=container.idempotency,
         idempotency_key=idempotency_key,
         caller=caller,
+        receipt_session=session,
     )
 
 

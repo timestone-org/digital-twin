@@ -7,8 +7,9 @@
 """
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, tzinfo
+from decimal import Context, Decimal
 
 from platform_server.apps.dataset.formula.analysis import (
     AnalysisModel,
@@ -22,7 +23,11 @@ from platform_server.apps.dataset.formula.errors import FormulaError
 from platform_server.apps.dataset.formula.evaluator import ExternalKey
 from platform_server.apps.dataset.formula.refs import FormulaDeps, WindowRef
 from platform_server.apps.dataset.formula.snapshot import RowSnapshot
-from platform_server.apps.dataset.formula.values import finite, to_number
+from platform_server.apps.dataset.formula.values import (
+    finite,
+    is_blank,
+    to_number,
+)
 from platform_server.apps.dataset.formula.window_index import (
     WindowIndex,
     WindowSlice,
@@ -30,43 +35,83 @@ from platform_server.apps.dataset.formula.window_index import (
 )
 from platform_server.apps.dataset.formula.windows import window_lower_bound
 
+# binary64 采样最小至 1e-324，bigint 行数的总量小于 1e328。
+_AGGREGATE_PRECISION = 660
+
+
+def _extreme(
+    left: float | None,
+    right: float | None,
+    pick: Callable[[float, float], float],
+) -> float | None:
+    """合并两组可能为空的极值。Args: left, right, pick。"""
+    if left is None:
+        return right
+    return left if right is None else pick(left, right)
+
 
 @dataclass(frozen=True)
 class WholeStats:
-    """某一列在**整表**上的聚合底数。
-
-    只存四个可加的原始量，五个 `*_ALL` 都由它们导出——于是一列查一次就够。
-    """
+    """一列的数值样本、极值、总和与其他非空值数。"""
 
     minimum: float | None = None
     maximum: float | None = None
-    total: float | None = None
-    count: int = 0
+    total: Decimal | float | None = None
+    count: int = 0  # 有限数值样本数
+    non_numeric_count: int = 0
 
-    def fold(self, value: object) -> "WholeStats":
-        """把一个尚未入库的值并进统计。
+    @property
+    def present_count(self) -> int:
+        """全部在场值的个数。"""
+        return self.count + self.non_numeric_count
 
-        ⚠ 新建或编辑一行时，这一行还不在库里（或库里是旧值）。不并进来的话，
-        当这一行正好是新的极值时，`({值}-MIN_ALL)/(MAX_ALL-MIN_ALL)` 会算出
-        越界的数（docs/DATASET_DESIGN.md §5.6）。
-        Args: value。
-        """
+    def average(self) -> float | None:
+        """仅以可转成有限数值的样本为分母。"""
+        if (
+            self.total is None
+            or self.count == 0
+            or finite(float(self.total)) is None
+        ):
+            return None
+        return float(
+            Context(prec=_AGGREGATE_PRECISION).divide(
+                Decimal(str(self.total)), Decimal(self.count)
+            )
+        )
+
+    def merge(self, other: "WholeStats") -> "WholeStats":
+        """合并两组底数。Args: other。"""
+        total = self.total if other.total is None else other.total
+        if self.total is not None and other.total is not None:
+            total = Context(prec=_AGGREGATE_PRECISION).add(
+                Decimal(str(self.total)), Decimal(str(other.total))
+            )
+        return WholeStats(
+            minimum=_extreme(self.minimum, other.minimum, min),
+            maximum=_extreme(self.maximum, other.maximum, max),
+            total=total,
+            count=self.count + other.count,
+            non_numeric_count=self.non_numeric_count + other.non_numeric_count,
+        )
+
+    def fold(self, value: object, *, occurrences: int = 1) -> "WholeStats":
+        """将一个值或若干相同值并入底数。Args: value, occurrences。"""
+        if is_blank(value) or (
+            isinstance(value, float) and finite(value) is None
+        ):
+            return self
         try:
             number = to_number(value, where="整列聚合")
         except FormulaError:
-            return self
+            number = None
         if number is None:
-            return self
-        return WholeStats(
-            minimum=(
-                number if self.minimum is None else min(self.minimum, number)
-            ),
-            maximum=(
-                number if self.maximum is None else max(self.maximum, number)
-            ),
-            total=number if self.total is None else self.total + number,
-            count=self.count + 1,
+            return replace(
+                self, non_numeric_count=self.non_numeric_count + occurrences
+            )
+        subtotal = Context(prec=_AGGREGATE_PRECISION).multiply(
+            Decimal(str(number)), Decimal(occurrences)
         )
+        return self.merge(WholeStats(number, number, subtotal, occurrences))
 
 
 @dataclass
@@ -83,6 +128,8 @@ class HistoryCache:
     window_rows: dict[str, list[RowSnapshot]] = field(
         default_factory=dict[str, list[RowSnapshot]]
     )
+    #: 批量重算的本表窗口中，当前行的旧快照下标。
+    window_excluded: int | None = None
     #: {列key: 整列聚合底数}
     whole_stats: dict[str, WholeStats] = field(
         default_factory=dict[str, WholeStats]
@@ -189,8 +236,13 @@ def _window_aggregate(
     """
     lower = window_lower_bound(ts, ref.spec, cache.tz)
     start, end = ts_bounds(rows, lower, ts, is_closed=ref.spec.is_today)
+    excluded = cache.window_excluded if ref.table_code is None else None
     if ref.spec.step_s is not None:
-        picked = [*rows[start:end], *([] if extra is None else [extra])]
+        picked = [*rows[start:end]]
+        if excluded is not None and start <= excluded < end:
+            picked.pop(excluded - start)
+        if extra is not None:
+            picked.append(extra)
         return sum_complete_window(
             ((row.ts, row.get(ref.column_key)) for row in picked),
             lower,
@@ -199,7 +251,8 @@ def _window_aggregate(
         )
     column = cache.window_index.column(rows, ref.column_key)
     return _aggregate(
-        ref.func, WindowSlice(column, start, end, ref.column_key, extra)
+        ref.func,
+        WindowSlice(column, start, end, ref.column_key, extra, excluded),
     )
 
 
@@ -231,10 +284,10 @@ _SERIES_REDUCERS: dict[str, Callable[[list[float]], float]] = {
 _WHOLE_DERIVERS: dict[str, Callable[[WholeStats], float | None]] = {
     "MIN_ALL": lambda stats: stats.minimum,
     "MAX_ALL": lambda stats: stats.maximum,
-    "SUM_ALL": lambda stats: stats.total,
-    "AVG_ALL": lambda stats: (
-        None if stats.total is None else stats.total / stats.count
+    "SUM_ALL": lambda stats: (
+        None if stats.total is None else float(stats.total)
     ),
+    "AVG_ALL": WholeStats.average,
 }
 
 
@@ -271,7 +324,7 @@ def _whole_value(func: str, stats: WholeStats | None) -> object:
     if stats is None:
         return None
     if func == "COUNT_ALL":
-        return float(stats.count)
+        return float(stats.present_count)
     if stats.count == 0:
         return None
     deriver = _WHOLE_DERIVERS.get(func)

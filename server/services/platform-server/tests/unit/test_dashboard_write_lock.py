@@ -25,7 +25,7 @@ from platform_server.apps.dashboard.schemas import (
     NodeCreateIn,
     NodeUpdateIn,
 )
-from platform_server.apps.dashboard.schemas.transfer import DashboardExportIn
+from platform_server.apps.dashboard.schemas.transfer import DashboardImportIn
 from platform_server.apps.dashboard.services import (
     binding_service,
     dashboard_service,
@@ -191,10 +191,12 @@ async def _import_over(
     session.expunge_all()
     return await transfer_service.import_dashboard(
         session,
-        project_id=dashboard.project_id,
-        payload=DashboardExportIn.model_validate(document.model_dump()),
+        DashboardImportIn(
+            project_id=dashboard.project_id,
+            payload=document,
+            target_dashboard_id=dashboard.id,
+        ),
         context=CONTEXT,
-        target_dashboard_id=dashboard.id,
     )
 
 

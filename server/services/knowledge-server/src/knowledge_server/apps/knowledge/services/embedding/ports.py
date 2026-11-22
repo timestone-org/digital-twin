@@ -17,6 +17,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
+from llmcore.embedding_snapshot import EmbeddingBatch
+
 
 class EmbeddingUnavailable(RuntimeError):
     """这套部署没接嵌入档。
@@ -69,6 +71,25 @@ class Embedder(Protocol):
 
 
 @dataclass(frozen=True)
+class EmbeddingSpace:
+    """区分端点、模型和维数的嵌入空间。"""
+
+    identity: str
+    model: str
+    dimensions: int
+
+
+@runtime_checkable
+class SnapshotEmbedder(Embedder, Protocol):
+    """可证明每次调用实际使用的空间。"""
+
+    @property
+    def space(self) -> EmbeddingSpace | None: ...
+
+    async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch: ...
+
+
+@dataclass(frozen=True)
 class NullEmbedder:
     """没接嵌入档时的诚实缺席（ADR-0029 决策五）。
 
@@ -81,6 +102,15 @@ class NullEmbedder:
     model: str | None = None
     max_input_tokens: int = 0
     can_embed: bool = False
+
+    @property
+    def space(self) -> EmbeddingSpace | None:
+        return None
+
+    async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch:
+        """缺席时无法取得请求快照。Args: texts。"""
+        del texts
+        raise EmbeddingUnavailable("这套部署没有接嵌入档")
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """恒抛：这套部署没接嵌入档。

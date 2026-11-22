@@ -10,9 +10,6 @@
 那份字节。图随 `:advance` 的 `user_images` 走，白名单在那条路上判。
 """
 
-import asyncio
-import base64
-import binascii
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
@@ -22,20 +19,16 @@ from ai_assistant.apps.chat.schemas.attachment import (
     AttachmentParseIn,
     AttachmentParseOut,
 )
-from ai_assistant.apps.chat.services.perception import (
-    AsText,
-    UnsupportedInput,
-    decode,
-)
-from ai_assistant.deps import require
+from ai_assistant.container import Container
+from ai_assistant.deps import get_container, require
 from ai_assistant.settings import API_PREFIX
 from lib.auth import CallerContext
-from lib.errors import ValidationFailed
 from lib.web import ApiResponse, ok
 
 router = APIRouter(prefix=f"{API_PREFIX}/attachments", tags=["attachment"])
 
 UseDep = Annotated[CallerContext, Depends(require(ASSISTANT_USE))]
+ContainerDep = Annotated[Container, Depends(get_container)]
 
 
 @router.post(
@@ -44,14 +37,15 @@ UseDep = Annotated[CallerContext, Depends(require(ASSISTANT_USE))]
     summary="把上传的文件读成给模型看的文本",
 )
 async def parse_attachment(
-    payload: AttachmentParseIn, _caller: UseDep
+    payload: AttachmentParseIn, _caller: UseDep, container: ContainerDep
 ) -> ApiResponse[AttachmentParseOut]:
     """读一份 xlsx / csv / 纯文本：表格摊成竖线表，文本原样截取。
 
-    Args: payload, _caller。
+    Args: payload, _caller, container。
     """
-    # ⚠ 解析是同步的逐行 CPU 活，放在事件循环里会让同一副本上的流式回合一起卡住
-    parsed = await asyncio.to_thread(_parse, payload)
+    parsed = await container.attachments.parse(
+        payload.filename, payload.content_base64
+    )
     return ok(
         AttachmentParseOut(
             is_truncated=parsed.is_truncated,
@@ -59,27 +53,3 @@ async def parse_attachment(
             summary=parsed.summary,
         )
     )
-
-
-def _parse(payload: AttachmentParseIn) -> AsText:
-    """解码并解析；三类失败都指到具体是哪一步。
-
-    ⚠ 解码失败与「这个格式不认得」要分开说：前者是调用方没按 base64 传，
-    后者是文件本身不对，而两者的下一步动作完全不同。
-
-    ⚠ 图走到这里也要拒：这条端点回的是文本，而图那一路解出来的是 data URI。
-    静默回一段空文本的话，用户会以为「附上了」，而助手一个字都没收到。
-
-    Args: payload。
-    """
-    try:
-        content = base64.b64decode(payload.content_base64, validate=True)
-    except (binascii.Error, ValueError) as error:
-        raise ValidationFailed("文件内容不是合法的 base64") from error
-    try:
-        decoded = decode(payload.filename, content)
-    except UnsupportedInput as error:
-        raise ValidationFailed(str(error)) from error
-    if not isinstance(decoded, AsText):
-        raise ValidationFailed("图片不走这条端点，随消息一起发就行")
-    return decoded

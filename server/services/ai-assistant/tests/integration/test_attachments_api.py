@@ -8,6 +8,7 @@
 """
 
 import base64
+from multiprocessing import active_children
 
 import httpx
 import pytest
@@ -22,6 +23,18 @@ def _body(filename: str, raw: bytes) -> dict[str, str]:
         "filename": filename,
         "content_base64": base64.b64encode(raw).decode(),
     }
+
+
+async def test_attachment_parsing_runs_in_a_child_process(
+    db_client: httpx.AsyncClient,
+) -> None:
+    existing = {process.pid for process in active_children()}
+    response = await db_client.post(
+        PARSE_URL, json=_body("点表.csv", "code,name\na,出口温度\n".encode())
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["summary"] == "2 列 × 1 行"
+    assert {process.pid for process in active_children()} - existing
 
 
 async def test_a_csv_comes_back_as_a_table(

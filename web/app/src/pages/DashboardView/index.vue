@@ -36,7 +36,7 @@ import {
   useSeriesEpoch,
 } from '@/bootstrap/dashboard'
 import { useDashboardDoc } from '@/composables/useDashboardDoc'
-import { parseInteractionRules } from '@/features/dashboard/interactionRules'
+import { loadInteractions } from '@/features/dashboard/loadInteractions'
 import { useDashboardTheme } from '@/features/dashboard/useDashboardTheme'
 import RealtimeOfflineNotice from '@/components/RealtimeOfflineNotice.vue'
 import { useDashboardValues } from '@/composables/useDashboardValues'
@@ -64,11 +64,12 @@ const file = useDashboardDoc()
 
 const channel = useRealtimeChannel()
 
+const subscribe = createPointSubscribe(channel, () => {
+  const current = file.dashboard.value
+  return current === null ? null : dashboardTopic(current.id)
+})
 installDashboardDataSources({
-  subscribe: createPointSubscribe(channel, () => {
-    const current = file.dashboard.value
-    return current === null ? null : dashboardTopic(current.id)
-  }),
+  subscribe,
   fetchHistory: fetchPointHistory,
   fetchDatasetSeries,
 })
@@ -80,7 +81,7 @@ const nodes = computed(() => file.dashboard.value?.nodes ?? [])
 const values = useDashboardValues(
   () => nodes.value,
   () => file.dashboard.value?.id ?? '',
-  { connectionState: () => channel.connectionState.value },
+  { subscribe, connectionState: () => channel.connectionState.value },
 )
 
 // 时序槽的取数与刷新节拍叠在实时那一份之上，整屏一个节拍。
@@ -123,12 +124,11 @@ provide(INTERACTION_KEY, interaction)
 watch(
   () => file.dashboard.value,
   (current) => {
-    interaction.init(
-      current === null ? [] : parseInteractionRules(current.chromeJson),
-      nodes.value.map((node) => ({
-        nodeId: node.id,
-        isVisible: node.isVisible,
-      })),
+    loadInteractions(
+      interaction,
+      current?.chromeJson ?? {},
+      nodes.value,
+      getManifest,
     )
   },
   { immediate: true },

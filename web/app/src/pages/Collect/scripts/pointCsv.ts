@@ -19,7 +19,11 @@ import type {
   CollectPointImportItemInput,
   CollectPointUpdateInput,
 } from '@dt/contracts'
-import { COLLECT_DATA_TYPES, COLLECT_MIN_INTERVAL_MS } from '@dt/contracts'
+import {
+  COLLECT_DATA_TYPES,
+  COLLECT_MIN_ARCHIVE_HEARTBEAT_MS,
+  COLLECT_MIN_INTERVAL_MS,
+} from '@dt/contracts'
 import { pointCodeProblem } from './pointCode'
 
 /** UTF-8 BOM。写出去让 Excel 认出编码，读进来先剥掉。 */
@@ -256,7 +260,7 @@ function readSettings(values: Map<ColumnKey, string>): CollectPointUpdateInput {
     archive_max_interval_ms: positive(
       values.get('archive_max_interval_ms') ?? '',
       60_000,
-      1,
+      COLLECT_MIN_ARCHIVE_HEARTBEAT_MS,
       '归档心跳',
     ),
     archive_retention_days: retention(

@@ -22,6 +22,9 @@ overrides:
   '@umoteam/editor@11.1.1>fast-glob': '-'
   vitest@3.2.7>tinypool: 2.1.2
 
+patchedDependencies:
+  '@tiptap/extension-bubble-menu@3.31.3': 876cab8958e866eb915893eb58cf6f61da673aafe6b6be8b7f14bb7732689be9
+
 importers:
 
   .:
@@ -5407,7 +5410,7 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.31.3(@tiptap/pm@3.31.3)
 
-  '@tiptap/extension-bubble-menu@3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)':
+  '@tiptap/extension-bubble-menu@3.31.3(patch_hash=876cab8958e866eb915893eb58cf6f61da673aafe6b6be8b7f14bb7732689be9)(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)':
     dependencies:
       '@floating-ui/dom': 1.8.0
       '@tiptap/core': 3.31.3(@tiptap/pm@3.31.3)
@@ -5695,7 +5698,7 @@ snapshots:
       '@tiptap/pm': 3.31.3
       vue: 3.5.42(typescript@5.7.3)
     optionalDependencies:
-      '@tiptap/extension-bubble-menu': 3.31.3(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)
+      '@tiptap/extension-bubble-menu': 3.31.3(patch_hash=876cab8958e866eb915893eb58cf6f61da673aafe6b6be8b7f14bb7732689be9)(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)
       '@tiptap/extension-floating-menu': 3.31.3(@floating-ui/dom@1.7.5)(@tiptap/core@3.31.3(@tiptap/pm@3.31.3))(@tiptap/pm@3.31.3)
 
   '@tiptap/y-tiptap@3.0.2(prosemirror-model@1.25.11)(prosemirror-state@1.4.4)(prosemirror-view@1.42.3)(y-protocols@1.0.6(yjs@13.6.29))(yjs@13.6.29)':

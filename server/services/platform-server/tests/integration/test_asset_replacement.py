@@ -8,7 +8,14 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from integration.test_assets_api import ASSETS_URL, GLB, data_of, make_asset
+from integration.asset_fixtures import PNG, glb_bytes
+from integration.test_assets_api import (
+    ASSETS_URL,
+    BYTES,
+    GLB,
+    data_of,
+    make_asset,
+)
 from lib.objectstore import ObjectStoreError
 from lib.testing import FakeObjectStore
 from platform_server.apps.assets import keys
@@ -17,7 +24,7 @@ from platform_server.apps.assets.crud.asset import lock_revision, model_content
 from platform_server.apps.assets.crud.asset_variant import VariantResult
 
 pytestmark = pytest.mark.requires_postgres
-NEW_BYTES = b"new model bytes"
+NEW_BYTES = glb_bytes("fixture 1")
 
 
 @pytest.mark.parametrize(
@@ -94,6 +101,10 @@ async def test_replacement_preserves_name_identity_and_existing_reference(
         assert saved[key] == old[key]
     assert saved["checksum"] != old["checksum"]
     assert saved["size_bytes"] == len(NEW_BYTES)
+    asset_id = uuid.UUID(old["id"])
+    staging = keys.replacement_key(asset_id, uuid.UUID(upload_id))
+    assert await object_store.stat(staging) is None
+    assert await object_store.get_bytes(keys.model_key(asset_id)) == BYTES
     assert {v["status"] for v in saved["variants"]} == {"pending"}
     again = await app_client.post(
         f"{ASSETS_URL}/{old['id']}:replace", json=body
@@ -109,6 +120,26 @@ async def test_replacement_preserves_name_identity_and_existing_reference(
     assert key.startswith(f"models/{old['id']}/revisions/")
     assert key.endswith("/original")
     assert await object_store.get_bytes(key) == NEW_BYTES
+
+
+async def test_cleanup_failure_keeps_the_replacement_committed(
+    app_client: httpx.AsyncClient,
+    object_store: FakeObjectStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old = await make_asset(app_client, object_store)
+    upload_id = await prepare(app_client, object_store, old["id"])
+    staging = keys.replacement_key(uuid.UUID(old["id"]), uuid.UUID(upload_id))
+    remove = AsyncMock(side_effect=ObjectStoreError("unavailable"))
+    monkeypatch.setattr(object_store, "delete", remove)
+    url = f"{ASSETS_URL}/{old['id']}:replace"
+    body = {"upload_id": upload_id, "expected_checksum": old["checksum"]}
+
+    saved = await app_client.post(url, json=body)
+    assert saved.status_code == 200
+    remove.assert_awaited_once_with(staging)
+    assert await object_store.get_bytes(staging) == NEW_BYTES
+    assert data_of(await app_client.post(url, json=body)) == data_of(saved)
 
 
 async def test_upload_failure_leaves_the_original_model_usable(
@@ -134,7 +165,7 @@ async def test_upload_failure_leaves_the_original_model_usable(
     assert data_of(await app_client.get(f"{ASSETS_URL}/{old['id']}")) == old
     assert (
         await object_store.get_bytes(keys.model_key(uuid.UUID(old["id"])))
-        == b"glTF-ish bytes"
+        == BYTES
     )
 
 
@@ -179,6 +210,8 @@ async def test_stale_confirmation_does_not_overwrite_new_content(
         },
     )
     assert result.status_code == 409
+    failed_stage = keys.replacement_key(uuid.UUID(old["id"]), uuid.UUID(second))
+    assert await object_store.get_bytes(failed_stage) == NEW_BYTES
     assert data_of(
         await app_client.get(f"{ASSETS_URL}/{old['id']}")
     ) == data_of(first_result)
@@ -202,6 +235,26 @@ async def test_replacement_rejects_unaccepted_content_types(
         },
     )
     assert response.status_code == 400
+
+
+async def test_replacement_rejects_an_image_with_model_metadata(
+    app_client: httpx.AsyncClient, object_store: FakeObjectStore
+) -> None:
+    old = await make_asset(app_client, object_store)
+    upload_id = await prepare(app_client, object_store, old["id"])
+    asset_id = uuid.UUID(old["id"])
+    stage = keys.replacement_key(asset_id, uuid.UUID(upload_id))
+    await object_store.put_bytes(stage, PNG, content_type=GLB)
+
+    response = await app_client.post(
+        f"{ASSETS_URL}/{old['id']}:replace",
+        json={"upload_id": upload_id, "expected_checksum": old["checksum"]},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["code"] == 41502
+    assert data_of(await app_client.get(f"{ASSETS_URL}/{old['id']}")) == old
+    assert await object_store.list_prefix(f"models/{asset_id}/revisions/") == []
 
 
 async def test_replacement_is_guarded_and_cannot_change_the_name(
@@ -247,26 +300,34 @@ async def test_public_model_resolution_rejects_unknown_variants_and_assets(
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize(
+    ("should_change_content", "expected_status"),
+    [(False, 200), (True, 409)],
+    ids=["same-bytes", "changed-bytes"],
+)
 async def test_concurrent_confirmation_cannot_overwrite_a_published_version(
     app_client: httpx.AsyncClient,
     object_store: FakeObjectStore,
     monkeypatch: pytest.MonkeyPatch,
+    should_change_content: bool,
+    expected_status: int,
 ) -> None:
     old = await make_asset(app_client, object_store)
     upload_id = await prepare(app_client, object_store, old["id"])
     ready, resume = asyncio.Event(), asyncio.Event()
     copy = object_store.copy
 
-    async def delayed_copy(source: str, target: str) -> None:
-        if ready.is_set():
-            await copy(source, target)
-            return
-        captured = await object_store.get_bytes(source)
-        ready.set()
-        await resume.wait()
-        await object_store.put_bytes(target, captured, content_type=GLB)
+    async def delayed_copy(
+        source: str, target: str, *, expected_etag: str | None = None
+    ) -> None:
+        if not ready.is_set():
+            ready.set()
+            await resume.wait()
+        await copy(source, target, expected_etag=expected_etag)
 
     monkeypatch.setattr(object_store, "copy", delayed_copy)
+    latest = glb_bytes("fixture 2") if should_change_content else NEW_BYTES
+    assert len(latest) == len(NEW_BYTES)
     body = {"upload_id": upload_id, "expected_checksum": old["checksum"]}
     first = asyncio.create_task(
         app_client.post(f"{ASSETS_URL}/{old['id']}:replace", json=body)
@@ -275,7 +336,7 @@ async def test_concurrent_confirmation_cannot_overwrite_a_published_version(
         await asyncio.wait_for(ready.wait(), 10)
         await object_store.put_bytes(
             keys.replacement_key(uuid.UUID(old["id"]), uuid.UUID(upload_id)),
-            b"latest uploaded bytes",
+            latest,
             content_type=GLB,
         )
         second = await app_client.post(
@@ -284,15 +345,30 @@ async def test_concurrent_confirmation_cannot_overwrite_a_published_version(
         assert second.status_code == 200
     finally:
         resume.set()
-        await first
+        obsolete = await first
+    assert obsolete.status_code == expected_status
+    if not should_change_content:
+        assert data_of(obsolete) == data_of(second)
+    await _assert_published_replacement(
+        app_client, object_store, old["id"], latest, second
+    )
+
+
+async def _assert_published_replacement(
+    app_client: httpx.AsyncClient,
+    object_store: FakeObjectStore,
+    asset_id: str,
+    content: bytes,
+    replacement: httpx.Response,
+) -> None:
     resolved = await app_client.get(
-        f"/api/v1/platform/public-assets/{old['id']}/original"
+        f"/api/v1/platform/public-assets/{asset_id}/original"
     )
     key = resolved.headers["location"].removeprefix("/oss/")
-    assert await object_store.get_bytes(key) == b"latest uploaded bytes"
-    assert data_of(
-        await app_client.get(f"{ASSETS_URL}/{old['id']}")
-    ) == data_of(second)
+    assert await object_store.get_bytes(key) == content
+    assert data_of(await app_client.get(f"{ASSETS_URL}/{asset_id}")) == data_of(
+        replacement
+    )
 
 
 async def test_copied_content_must_match_validation_before_publishing(
@@ -303,9 +379,12 @@ async def test_copied_content_must_match_validation_before_publishing(
     old = await make_asset(app_client, object_store)
     upload_id = await prepare(app_client, object_store, old["id"])
 
-    async def changed_copy(_source: str, target: str) -> None:
+    async def changed_copy(
+        _source: str, target: str, *, expected_etag: str | None = None
+    ) -> None:
+        assert expected_etag is not None
         await object_store.put_bytes(
-            target, b"changed after validation", content_type=GLB
+            target, glb_bytes("fixture 3"), content_type=GLB
         )
 
     monkeypatch.setattr(object_store, "copy", changed_copy)
@@ -372,7 +451,7 @@ async def test_replacement_refuses_non_model_targets(
         )
     )
     await object_store.put_bytes(
-        ticket["fields"]["key"], b"png", content_type="image/png"
+        ticket["fields"]["key"], PNG, content_type="image/png"
     )
     await app_client.post(
         f"{ASSETS_URL}/{ticket['asset_id']}:finalize", json={"name": "图片.png"}

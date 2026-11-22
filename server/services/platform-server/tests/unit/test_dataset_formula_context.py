@@ -304,3 +304,22 @@ def test_a_whole_column_total_that_overflows_is_blank() -> None:
     cache = HistoryCache(tz=UTC, whole_stats={"a": stats})
     assert compute("SUM_ALL({a})", cache) is None
     assert compute("AVG_ALL({a})", cache) is None
+
+
+def test_count_all_includes_text_but_average_only_uses_finite_numbers() -> None:
+    stats = WholeStats()
+    for value in (True, False, "7", "停机", None, " \t", 0):
+        stats = stats.fold(value)
+    cache = HistoryCache(tz=UTC, whole_stats={"a": stats})
+    assert compute("COUNT_ALL({a})", cache) == 5
+    assert compute("AVG_ALL({a})", cache) == 2
+    assert compute("SUM_ALL({a})", cache) == 8
+
+
+def test_nonfinite_numeric_cells_are_blank_while_nonempty_text_is_present() -> (
+    None
+):
+    stats = WholeStats().fold(float("nan")).fold(float("inf")).fold("NaN")
+    cache = HistoryCache(tz=UTC, whole_stats={"a": stats})
+    assert compute("COUNT_ALL({a})", cache) == 1
+    assert compute("AVG_ALL({a})", cache) is None

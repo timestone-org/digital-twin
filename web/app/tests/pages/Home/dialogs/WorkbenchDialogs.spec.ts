@@ -179,6 +179,10 @@ beforeEach(() => {
   ])
   vi.spyOn(themesApi, 'listProjectThemes').mockResolvedValue([])
   vi.spyOn(runtimeApi, 'listRuntimeParams').mockResolvedValue([])
+  vi.spyOn(templatesApi, 'getDashboardTemplate').mockResolvedValue({
+    ...TEMPLATE,
+    payload: EMPTY_PACKAGE,
+  })
   vi.spyOn(templatesApi, 'listDashboardTemplates').mockResolvedValue(
     templatePage(),
   )

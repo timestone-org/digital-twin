@@ -55,6 +55,16 @@ function call(): [string, Record<string, unknown>] {
 }
 
 describe('线形映射', () => {
+  it('旧出参没有可展示账号名时保持空值', () => {
+    expect(toRuntimeParamItem(ITEM_WIRE)).toHaveProperty('updatedByName', null)
+  })
+
+  it('服务端提供账号名时保持 ID 与显示名独立', () => {
+    expect(
+      toRuntimeParamItem({ ...ITEM_WIRE, updated_by_name: 'operator' }),
+    ).toMatchObject({ updatedBy: 'admin', updatedByName: 'operator' })
+  })
+
   it('字段名转成 camelCase，默认值落在 defaultValue 上', () => {
     expect(toRuntimeParamItem(ITEM_WIRE)).toEqual({
       section: 'dashboard',
@@ -74,6 +84,7 @@ describe('线形映射', () => {
       defaultValue: 1000,
       overridden: true,
       updatedBy: 'admin',
+      updatedByName: null,
       updatedAt: '2026-08-14T00:00:00Z',
       previousValue: 1000,
     })

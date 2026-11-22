@@ -7,6 +7,8 @@
 `LICENSE.txt`。当前只随包提供 Regular，以避免六个简体中文字重约 50 MB
 全部进入发布物；浏览器会为其余字重合成字形。
 
+应用构建为带内容散列的 TrueType 文件生成 gzip 副本。边缘按客户端支持的编码提供字体，同一内容地址可由浏览器长期缓存。解压后的字节与原始字体一致。
+
 大屏读数使用的 `ds-digital/DS-DIGI.TTF` 与 `DIGITAL.TXT` 来自作者
 Dusit Supasawat 发布的原始 DS-Digital 1.0 压缩包，均保持未修改。该字体是
 shareware：授权文本列出的费用是个人使用 20 美元、商业使用 45 美元；正式交付前

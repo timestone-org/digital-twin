@@ -6,6 +6,7 @@
  */
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { h } from 'vue'
 
 import ScrollList from '../../src/shared/ScrollList.vue'
 
@@ -98,7 +99,14 @@ async function render(scene: Scene) {
       autoScroll: scene.autoScroll ?? true,
       secondsPerItem: scene.secondsPerItem ?? 3,
     },
-    slots: { default: '<div class="row">一行</div>' },
+    slots: {
+      default: ({ isDuplicate }: { isDuplicate?: boolean } = {}) =>
+        h(
+          'span',
+          { class: 'row', tabindex: isDuplicate ? undefined : 0 },
+          '一行',
+        ),
+    },
   })
   Object.defineProperty(
     wrapper.get('.dt-scrolllist__copy').element,
@@ -222,6 +230,8 @@ describe('滚起来之后', () => {
     expect(copies).toHaveLength(2)
     expect(copies[1]?.attributes('aria-hidden')).toBe('true')
     expect(copies[1]?.find('.row').exists()).toBe(true)
+    expect(copies[0]?.find('.row').attributes('tabindex')).toBe('0')
+    expect(copies[1]?.find('.row').attributes('tabindex')).toBeUndefined()
     wrapper.unmount()
   })
 

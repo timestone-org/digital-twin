@@ -12,7 +12,7 @@
  * 让「改个名字」被一句「还有 3 个台账列在用它」挡下。
  */
 import { computed, ref, watch } from 'vue'
-import type { DatasetFormulaDef } from '@dt/contracts'
+import type { DatasetFormulaDef, FieldError } from '@dt/contracts'
 import { ERROR_CODES } from '@dt/contracts'
 import {
   DtButton,
@@ -81,6 +81,7 @@ const errors = ref<FormulaFormErrors>(NO_ERRORS)
 /** 后端说公式写不通那一句，落在「公式体」那一格上。 */
 const rejected = ref('')
 const failure = ref<string | null>(null)
+const incompatible = ref<readonly FieldError[]>([])
 const busy = ref(false)
 
 // ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
@@ -119,6 +120,7 @@ function resetTo(formula: DatasetFormulaDef | null): void {
   errors.value = NO_ERRORS
   rejected.value = ''
   failure.value = null
+  incompatible.value = []
   code.value = next.code
   name.value = next.name
   category.value = next.category
@@ -132,6 +134,14 @@ function showFailure(caught: unknown): void {
   if (caught instanceof BizError) {
     if (caught.code === ERROR_CODES.datasetFormulaCodeTaken) {
       errors.value = { ...errors.value, code: '这个标识已被占用，换一个' }
+      return
+    }
+    if (
+      caught.code === ERROR_CODES.datasetFormulaInUse &&
+      caught.details.length
+    ) {
+      incompatible.value = caught.details
+      failure.value = '请先修改以下引用，再保存公式。'
       return
     }
     if (caught.code === ERROR_CODES.datasetFormulaInvalid) {
@@ -171,6 +181,7 @@ async function onSubmit(): Promise<void> {
   busy.value = true
   rejected.value = ''
   failure.value = null
+  incompatible.value = []
   try {
     await save()
     emit('update:modelValue', false)
@@ -242,7 +253,7 @@ async function onSubmit(): Promise<void> {
         :rows="3"
         :error="errors.expression || rejected"
         :maxlength="EXPRESSION_MAX"
-        hint="只能引用上面声明的形参，写作 {形参名}；不能写死某张台账的列"
+        hint="形参写作 {形参名}，跨表取值写作 {台账编码.列标识}。"
       />
 
       <!-- 缺默认值的报错指向的是校验用的样例调用，不是公式体——不说这一句，
@@ -259,7 +270,14 @@ async function onSubmit(): Promise<void> {
         hint="这条公式算的是什么、口径来源"
       />
 
-      <DtNotice v-if="failure" intent="danger">{{ failure }}</DtNotice>
+      <DtNotice v-if="failure" intent="danger">
+        {{ failure }}
+        <ul v-if="incompatible.length" class="list-disc pl-5">
+          <li v-for="item in incompatible" :key="item.field">
+            {{ item.message }}
+          </li>
+        </ul>
+      </DtNotice>
     </form>
 
     <template #footer>

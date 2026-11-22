@@ -8,7 +8,7 @@
 from ai_assistant.upstream.identity import FORWARDED, caller_headers
 
 
-def test_the_seven_signed_headers_go_through() -> None:
+def test_signed_identity_headers_go_through() -> None:
     given = {name: f"v{index}" for index, name in enumerate(FORWARDED)}
     assert caller_headers(given) == given
 

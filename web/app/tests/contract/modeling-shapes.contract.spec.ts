@@ -297,6 +297,7 @@ const VERSION_SUMMARY = {
 const VERSION = {
   ...VERSION_SUMMARY,
   signature: true,
+  has_legacy_utc_time_features: true,
   metrics: true,
   fingerprint: true,
   description: true,

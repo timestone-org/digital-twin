@@ -1022,6 +1022,31 @@ describe('外部取景', () => {
     wrapper.unmount()
   })
 
+  it('配置预览清除自定义机位时重新取景，保留已加载的模型', async () => {
+    const wrapper = mountScene({
+      config: config({
+        cameras: [{ id: 'initial', position: [8, 7, 6], fov: 45 }],
+      }),
+      focusView: { position: [3, 4, 5], target: [1, 1, 1], fov: 30 },
+      preview: { target: null, context: 'detail:custom-view' },
+    })
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(30)
+    })
+
+    await wrapper.setProps({
+      focusView: null,
+      preview: { target: null, context: 'detail:default-view' },
+    })
+    await vi.waitFor(() => {
+      expect(cameraOf().fov).toBe(45)
+    })
+
+    expect(cameraOf().position.x).toBeCloseTo(8)
+    expect(seam.loadTwinModel).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   // ⚠ 取景只在换引用那一下飞一次：每帧套住的话镜头就再也转不动了
   it('取景清成 null 时停在原地，不把镜头拽回去', async () => {
     const wrapper = mountScene()
@@ -1661,6 +1686,38 @@ describe('配置预览', () => {
     expect(wall.visible).toBe(true)
     wrapper.unmount()
   })
+  it('切换覆盖层取景目标只移动相机，继续使用同一模型', async () => {
+    const wrapper = mountScene({
+      config: config({
+        anchors: [
+          { id: 'near', position: [1, 2, 3] },
+          { id: 'far', position: [10, 20, 30] },
+        ],
+      }),
+      preview: { target: { kind: 'anchors', id: 'near' }, context: 'model' },
+    })
+    function expectCameraLooksAt(x: number, y: number, z: number): void {
+      const camera = renderer.renders.at(-1)?.camera
+      expect(camera).toBeDefined()
+      if (camera === undefined) return
+      const direction = new THREE.Vector3(x, y, z)
+        .sub(camera.position)
+        .normalize()
+      expect(
+        camera.getWorldDirection(new THREE.Vector3()).distanceTo(direction),
+      ).toBeLessThan(1e-6)
+    }
+    await vi.waitFor(() => expectCameraLooksAt(1, 2, 3))
+
+    await wrapper.setProps({
+      preview: { target: { kind: 'anchors', id: 'far' }, context: 'model' },
+    })
+
+    await vi.waitFor(() => expectCameraLooksAt(10, 20, 30))
+    expect(seam.loadTwinModel).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
   it('切换画质档重新加载模型', async () => {
     const wrapper = mountScene()
     await flushPromises()

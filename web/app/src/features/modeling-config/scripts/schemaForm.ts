@@ -79,6 +79,13 @@ function asNumber(value: unknown): number | null {
   return typeof value === 'number' ? value : null
 }
 
+function choiceOf(part: string): [string, string] | null {
+  const separator = part.indexOf('=')
+  return separator > 0
+    ? [part.slice(0, separator).trim(), part.slice(separator + 1).trim()]
+    : null
+}
+
 /** 跟着 `$ref` 跳进 `$defs`，把两层合成一层。 */
 function deref(
   field: Record<string, unknown>,
@@ -109,9 +116,8 @@ function labelsFrom(
 ): Map<string, string> {
   const pairs = new Map<string, string>()
   for (const part of hint.split(/[；;]/)) {
-    const at = part.indexOf('=')
-    if (at <= 0) continue
-    pairs.set(part.slice(0, at).trim(), part.slice(at + 1).trim())
+    const choice = choiceOf(part)
+    if (choice !== null) pairs.set(...choice)
   }
   if (!values.every((value) => pairs.has(value)))
     return new Map<string, string>()
@@ -124,6 +130,30 @@ function optionsOf(field: Record<string, unknown>): FormField['options'] {
   const values = raw.filter((item): item is string => typeof item === 'string')
   const labels = labelsFrom(asText(field['description']), values)
   return values.map((value) => ({ value, label: labels.get(value) ?? value }))
+}
+
+/** 保留字段说明中仍需单独展示的部分。 */
+function hintOf(
+  key: string,
+  description: string,
+  options: FormField['options'],
+): string {
+  if (options.length === 0) return description
+  if (key === 'algorithm') {
+    return '选择算法，下方只显示适用参数；切换算法会保留其他参数配置。'
+  }
+  const labels = new Map(options.map(({ value, label }) => [value, label]))
+  const parts = description.split(/[；;]/)
+  const remaining = parts.filter((part) => {
+    const choice = choiceOf(part)
+    return choice === null || labels.get(choice[0]) !== choice[1]
+  })
+  return remaining.length === parts.length
+    ? description
+    : remaining
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .join('；')
 }
 
 const DIRECT_WIDGETS: Readonly<Record<string, FieldWidget | undefined>> = {
@@ -182,10 +212,7 @@ function fieldOf(
   return {
     key,
     label: asText(field['title']) || key,
-    hint:
-      key === 'algorithm' && options.length > 0
-        ? '选择算法，下方只显示适用参数；切换算法会保留其他参数配置。'
-        : asText(field['description']),
+    hint: hintOf(key, asText(field['description']), options),
     widget: widgetOf(field, options, item),
     isRequired: required.has(key),
     options,

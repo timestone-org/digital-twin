@@ -11,11 +11,16 @@ from collections.abc import Sequence
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.db import commit_before_receipt
 from lib.errors.base import FieldError
 from lib.logging import get_logger
 from lib.web import Page, PageParams
 from platform_server.apps.collect.crud import point_crud
-from platform_server.apps.collect.crud.point import DEFAULT_ORDER, SORTABLE
+from platform_server.apps.collect.crud.point import (
+    DEFAULT_ORDER,
+    SORTABLE,
+    PointLookup,
+)
 from platform_server.apps.collect.errors import (
     PointCodeTaken,
     PointInvalid,
@@ -31,7 +36,11 @@ from platform_server.apps.collect.schemas import (
     PointSavedOut,
     PointUpdateIn,
 )
-from platform_server.apps.collect.services import binding_guard, source_service
+from platform_server.apps.collect.services import (
+    audit,
+    binding_guard,
+    source_service,
+)
 from platform_server.apps.collect.services.address_check import (
     check_addresses,
     raise_if_rejected,
@@ -55,17 +64,16 @@ POINT_CODE_CONSTRAINT = "uq_collect_points_source_id_code"
 async def list_points(
     session: AsyncSession,
     *,
-    source_id: uuid.UUID | None,
-    keyword: str | None,
+    lookup: PointLookup,
     page: PageParams,
     sort: str | None,
 ) -> Page[PointOut]:
     """点位列表。Agent 按名字找点也走它。
 
-    Args: session, source_id, keyword, page, sort。
+    Args: session, lookup, page, sort。
     """
     statement = point_crud.order_by_whitelist(
-        point_crud.build_query(source_id=source_id, keyword=keyword),
+        point_crud.build_query(lookup),
         sort=sort,
         allowed=dict(SORTABLE),
         default=DEFAULT_ORDER,
@@ -82,11 +90,15 @@ async def list_points(
 
 
 async def create_points(
-    session: AsyncSession, *, bus: CommandBus, payload: PointCreateIn
+    session: AsyncSession,
+    *,
+    bus: CommandBus,
+    payload: PointCreateIn,
+    actor: audit.AuditActor,
 ) -> PointBatchOut:
     """批量建点。先校验寻址串，再落库。
 
-    Args: session, bus, payload。
+    Args: session, bus, payload, actor。
     """
     source = await source_service.require_source(session, payload.source_id)
     for position, item in enumerate(payload.items):
@@ -102,6 +114,10 @@ async def create_points(
     )
     raise_if_rejected(checks, field_of=_address_fields(payload))
     created = await _insert_points(session, source_id, payload)
+    for point in created:
+        audit.record_configuration(
+            session, actor, point, audit.ConfigurationChange("created")
+        )
     batch = PointBatchOut(
         items=[to_point_out(item) for item in created], address_checks=checks
     )
@@ -115,10 +131,11 @@ async def update_point(
     bus: CommandBus,
     point_id: uuid.UUID,
     payload: PointUpdateIn,
+    actor: audit.AuditActor,
 ) -> PointSavedOut:
     """改点位。改了寻址串就重新校验一次。
 
-    Args: session, bus, point_id, payload。
+    Args: session, bus, point_id, payload, actor。
     """
     point = await require_point(session, point_id)
     source_id, address = point.source_id, payload.address
@@ -126,8 +143,10 @@ async def update_point(
         source = await source_service.require_source(session, source_id)
         validate_http_address(source.protocol, address, field="address")
     check = await _recheck(session, bus, source_id=source_id, address=address)
-    point = await require_point(session, point_id)
+    point = await require_point(session, point_id, should_lock=True)
+    before = audit.snapshot(point)
     point_crud.apply_changes(point, given_changes(payload))
+    audit.record_update(session, actor, point, before, payload.model_fields_set)
     await session.flush()
     saved = PointSavedOut(point=to_point_out(point), address_check=check)
     await _commit(session)
@@ -136,25 +155,32 @@ async def update_point(
 
 
 async def delete_point(
-    session: AsyncSession, *, point_id: uuid.UUID, is_forced: bool = False
+    session: AsyncSession,
+    *,
+    point_id: uuid.UUID,
+    ledger_references: binding_guard.LedgerReferences,
+    actor: audit.AuditActor,
+    is_forced: bool = False,
 ) -> str:
     """删点位，返回它的 `node_key`。
 
-    ⚠ 先问「有没有大屏绑着它」：被绑着就 409 并列出那些大屏。删掉一个还被绑
-    着的点位，大屏上那个槽会静默变成永远没有数据。
-    ⚠ `is_forced` 是显式跳过这道守卫：仍绑着它的大屏引用就此失效——界面要
-    在二次确认里把这句话说出来。
-    Args: session, point_id, is_forced。
+    ⚠ `is_forced` 会跳过引用守卫，强删后大屏和台账将失去该点位的读数。
+    Args: session, point_id, ledger_references, actor, is_forced。
     """
-    point = await require_point(session, point_id)
+    point = await require_point(session, point_id, should_lock=True)
     node_key = compose_node_key(point.source_id, point.code)
     if not is_forced:
-        await binding_guard.raise_if_bound(session, node_key=node_key)
+        await binding_guard.raise_if_bound(
+            session, node_key=node_key, ledger_references=ledger_references
+        )
     _logger.info(
         "collect_point_deleted",
         "点位已删除",
         point_id=str(point.id),
         is_forced=is_forced,
+    )
+    audit.record_configuration(
+        session, actor, point, audit.ConfigurationChange("deleted")
     )
     await point_crud.delete(session, point)
     await _commit(session)
@@ -165,24 +191,23 @@ async def delete_points(
     session: AsyncSession,
     *,
     point_ids: Sequence[uuid.UUID],
+    ledger_references: binding_guard.LedgerReferences,
+    actor: audit.AuditActor,
     is_forced: bool = False,
 ) -> int:
     """批量删点，返回删掉几个。
 
-    ⚠ 整批全删或全不删：只要有一个还被大屏绑着，就整批 409 并点名那几个。
-    部分成功会让界面上剩下的那几条看着像「没勾中」，用户于是再勾一次再删一次。
-    ⚠ 撞见已经不在的点位一律 404，不静默跳过：别人刚删掉其中一条时，静默成功
-    会让人以为自己删的是另一条，而那一条还好好地在表里。
-    ⚠ `is_forced` 是显式跳过这道守卫：仍绑着它们的大屏引用就此失效——界面要
-    在二次确认里把这句话说出来。
-    Args: session, point_ids, is_forced。
+    ⚠ 整批全删或全不删：返回被引用的点位；撞见已删除的点位一律 404。
+    Args: session, point_ids, ledger_references, actor, is_forced。
     """
     wanted = list(dict.fromkeys(point_ids))
-    points = await point_crud.list_by_ids(session, wanted)
+    points = await point_crud.list_by_ids(session, wanted, should_lock=True)
     _raise_if_missing(wanted, points)
     if not is_forced:
         await binding_guard.raise_if_any_bound(
-            session, points=[_point_ref(point) for point in points]
+            session,
+            points=[_point_ref(point) for point in points],
+            ledger_references=ledger_references,
         )
     _logger.info(
         "collect_points_deleted",
@@ -190,19 +215,27 @@ async def delete_points(
         point_total=len(points),
         is_forced=is_forced,
     )
+    for point in points:
+        audit.record_configuration(
+            session, actor, point, audit.ConfigurationChange("deleted")
+        )
     await point_crud.delete_many(session, wanted)
     await _commit(session)
     return len(points)
 
 
 async def require_point(
-    session: AsyncSession, point_id: uuid.UUID
+    session: AsyncSession, point_id: uuid.UUID, *, should_lock: bool = False
 ) -> CollectPoint:
     """取点位，取不到即 404。
 
-    Args: session, point_id。
+    Args: session, point_id, should_lock。
     """
-    point = await point_crud.get(session, point_id)
+    point = (
+        await point_crud.get_for_update(session, point_id)
+        if should_lock
+        else await point_crud.get(session, point_id)
+    )
     if point is None:
         raise PointNotFound("点位不存在")
     return point
@@ -240,7 +273,7 @@ async def _commit(session: AsyncSession) -> None:
     时重拉到的还是旧配置，而它不会再拉第二次。
     Args: session。
     """
-    await session.commit()
+    await commit_before_receipt(session)
 
 
 async def _recheck(

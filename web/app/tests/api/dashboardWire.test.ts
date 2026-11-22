@@ -9,6 +9,8 @@
 import { describe, expect, it } from 'vitest'
 
 import { TransportError } from '@/api/client'
+import { toLayoutInput } from '@/features/dashboard/editorDoc'
+import { createBindingReader } from '@/runtime/bindingReader'
 import {
   fromBindingDetail,
   toBindingDetail,
@@ -329,6 +331,24 @@ describe('时间范围', () => {
 })
 
 describe('派生规格与定值变换写回线形', () => {
+  it('旧计算绑定含非字符串输入时不出数，整树保存和导出保留原规格', () => {
+    const computeJson = { op: 'sum', inputs: ['a', 17], precision: 2 }
+    const wire = bindingWire({
+      source_kind: 'computed',
+      compute_json: computeJson,
+    })
+    const binding = toBinding(wire)
+    expect(createBindingReader(() => undefined)(binding, { a: 37 })).toEqual({
+      state: 'ok',
+      value: null,
+    })
+    const node = toNode({ ...nodeWire(), bindings: [wire] })
+    expect(toLayoutInput([node])[0]?.bindings[0]?.compute_json).toEqual(
+      computeJson,
+    )
+    expect(fromComputeSpec(binding.computeJson)).toEqual(computeJson)
+  })
+
   it('派生规格带小数位时写出去，不带就不写这个键', () => {
     expect(fromComputeSpec({ op: 'avg', inputs: ['a'], precision: 2 })).toEqual(
       {

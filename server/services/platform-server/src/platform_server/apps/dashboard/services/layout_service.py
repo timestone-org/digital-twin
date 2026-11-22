@@ -67,7 +67,7 @@ async def replace_layout(
     raise_if_invalid(
         await collect_issues(
             nodes=plan.node_drafts(),
-            bindings=plan.binding_drafts(),
+            bindings=plan.binding_drafts(state),
             context=context,
         )
     )

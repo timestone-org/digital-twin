@@ -11,6 +11,14 @@ from typing import Any
 import httpx
 import pytest
 
+from integration.asset_fixtures import (
+    JPEG,
+    PNG,
+    SVG,
+    WEBP,
+    glb_bytes,
+    gltf_bytes,
+)
 from lib.testing import FakeObjectStore
 from platform_server.apps.assets import keys
 
@@ -24,7 +32,7 @@ HTTP_NOT_FOUND = 404
 HTTP_CONFLICT = 409
 
 GLB = "model/gltf-binary"
-BYTES = b"glTF-ish bytes"
+BYTES = glb_bytes("fixture 0")
 
 
 def data_of(response: httpx.Response) -> Any:
@@ -59,7 +67,8 @@ async def upload(
     store: FakeObjectStore, key: str, *, content_type: str = GLB
 ) -> None:
     """替浏览器把字节放进暂存区。"""
-    await store.put_bytes(key, BYTES, content_type=content_type)
+    data = PNG if content_type == "image/png" else BYTES
+    await store.put_bytes(key, data, content_type=content_type)
 
 
 async def make_asset(
@@ -124,14 +133,150 @@ async def test_finalizing_without_the_bytes_says_so(
     assert (response.status_code, code_of(response)) == (HTTP_CONFLICT, 41505)
 
 
-async def test_finalizing_moves_the_bytes_out_of_staging(
+async def test_finalizing_publishes_bytes_and_preserves_the_upload_key(
     app_client: httpx.AsyncClient, object_store: FakeObjectStore
 ) -> None:
     asset = await make_asset(app_client, object_store)
     asset_id = _uuid(asset["id"])
 
-    assert await object_store.list_prefix("staging/") == []
     assert await object_store.get_bytes(keys.model_key(asset_id)) == BYTES
+    assert (
+        await object_store.get_bytes(keys.staging_key("model", asset_id))
+        == BYTES
+    )
+    assert await object_store.stat(keys.upload_claim_key(asset_id)) is not None
+
+
+async def test_finalize_rejects_an_image_with_model_metadata(
+    app_client: httpx.AsyncClient, object_store: FakeObjectStore
+) -> None:
+    ticket = data_of(await presign(app_client))
+    asset_id = _uuid(ticket["asset_id"])
+    stage = keys.staging_key("model", asset_id)
+    await object_store.put_bytes(stage, PNG, content_type=GLB)
+
+    response = await app_client.post(
+        f"{ASSETS_URL}/{asset_id}:finalize", json={"name": "普通图像"}
+    )
+
+    assert (response.status_code, code_of(response)) == (
+        HTTP_BAD_REQUEST,
+        41502,
+    )
+    assert await object_store.stat(keys.model_key(asset_id)) is None
+    assert (await app_client.get(f"{ASSETS_URL}/{asset_id}")).status_code == (
+        HTTP_NOT_FOUND
+    )
+
+
+@pytest.mark.parametrize(
+    ("kind", "mime", "data"),
+    [
+        ("image", "image/jpeg", JPEG),
+        ("image", "image/webp", WEBP),
+        ("image", "image/svg+xml", SVG),
+        ("icon", "image/png", PNG),
+        ("icon", "image/svg+xml", SVG),
+        ("model", GLB, BYTES),
+        ("model", "model/gltf+json", gltf_bytes("JSON")),
+        ("model", "application/octet-stream", BYTES),
+        ("model", "application/octet-stream", gltf_bytes("Browser fallback")),
+        ("model", "model/gltf+json", gltf_bytes("A" * 20_000)),
+    ],
+)
+async def test_finalize_preserves_supported_formats(
+    app_client: httpx.AsyncClient,
+    object_store: FakeObjectStore,
+    kind: str,
+    mime: str,
+    data: bytes,
+) -> None:
+    ticket = data_of(
+        await presign(
+            app_client, kind=kind, content_type=mime, size_bytes=len(data)
+        )
+    )
+    asset_id = _uuid(ticket["asset_id"])
+    await object_store.put_bytes(
+        keys.staging_key(kind, asset_id), data, content_type=mime
+    )
+    response = await app_client.post(
+        f"{ASSETS_URL}/{asset_id}:finalize", json={"name": "验收素材"}
+    )
+
+    assert response.status_code == 200
+    assert data_of(response)["content_type"] == mime
+    assert await object_store.get_bytes(keys.object_key(kind, asset_id)) == data
+
+
+@pytest.mark.parametrize(
+    ("kind", "mime", "data"),
+    [
+        ("image", "image/svg+xml", b'<?xml version="1.0"?><report/>'),
+        ("image", "image/webp", WEBP[:-1]),
+        ("image", "image/jpeg", PNG),
+        ("model", GLB, BYTES[:-4]),
+        ("model", "model/gltf+json", b'{"category":"inventory"}'),
+    ],
+)
+async def test_rejected_content_stays_in_staging(
+    app_client: httpx.AsyncClient,
+    object_store: FakeObjectStore,
+    kind: str,
+    mime: str,
+    data: bytes,
+) -> None:
+    ticket = data_of(
+        await presign(
+            app_client, kind=kind, content_type=mime, size_bytes=len(data)
+        )
+    )
+    asset_id = _uuid(ticket["asset_id"])
+    stage = keys.staging_key(kind, asset_id)
+    await object_store.put_bytes(stage, data, content_type=mime)
+    response = await app_client.post(
+        f"{ASSETS_URL}/{asset_id}:finalize", json={"name": "验收素材"}
+    )
+
+    assert (response.status_code, code_of(response)) == (
+        HTTP_BAD_REQUEST,
+        41502,
+    )
+    assert await object_store.get_bytes(stage) == data
+    assert await object_store.stat(keys.object_key(kind, asset_id)) is None
+
+
+async def test_changed_upload_requires_a_fresh_confirmation(
+    app_client: httpx.AsyncClient,
+    object_store: FakeObjectStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    asset_id = _uuid(data_of(await presign(app_client))["asset_id"])
+    stage = keys.staging_key("model", asset_id)
+    final = keys.model_key(asset_id)
+    await upload(object_store, stage)
+    newer = glb_bytes("fixture 1")
+    assert len(newer) == len(BYTES)
+    copy = object_store.copy
+
+    async def refresh_upload(
+        source: str, target: str, *, expected_etag: str | None = None
+    ) -> None:
+        await object_store.put_bytes(stage, newer, content_type=GLB)
+        await copy(source, target, expected_etag=expected_etag)
+
+    with monkeypatch.context() as settings:
+        settings.setattr(object_store, "copy", refresh_upload)
+        rejected = await app_client.post(
+            f"{ASSETS_URL}/{asset_id}:finalize", json={"name": "机组"}
+        )
+    assert (rejected.status_code, code_of(rejected)) == (HTTP_CONFLICT, 41505)
+    assert await object_store.stat(final) is None
+    accepted = await app_client.post(
+        f"{ASSETS_URL}/{asset_id}:finalize", json={"name": "机组"}
+    )
+    assert accepted.status_code == 200
+    assert await object_store.get_bytes(final) == newer
 
 
 async def test_the_stored_size_comes_from_the_store_not_the_caller(

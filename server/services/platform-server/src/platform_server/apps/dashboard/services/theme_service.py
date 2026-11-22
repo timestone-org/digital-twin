@@ -11,13 +11,16 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.logging import get_logger
 from lib.utils.ids import uuid7
 from platform_server.apps.dashboard.errors import (
+    LOCK_WAIT_EXPIRED,
     ProjectNotFound,
     ThemeNotFound,
+    VersionConflict,
 )
 from platform_server.apps.dashboard.models import DashboardProject
 from platform_server.apps.dashboard.schemas.theme import (
@@ -129,12 +132,19 @@ async def locked_project(
     读到的数组却还是旧的，于是照样覆盖。
     Args: session, project_id。
     """
-    rows = await session.execute(
-        select(DashboardProject)
-        .where(DashboardProject.id == project_id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
-    )
+    try:
+        rows = await session.execute(
+            select(DashboardProject)
+            .where(DashboardProject.id == project_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    except DBAPIError as error:
+        if getattr(error.orig, "sqlstate", None) not in LOCK_WAIT_EXPIRED:
+            raise
+        raise VersionConflict(
+            "项目主题正在被其他人保存，请稍后重新加载再试"
+        ) from error
     project = rows.scalar_one_or_none()
     if project is None:
         raise ProjectNotFound("项目不存在")

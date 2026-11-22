@@ -15,6 +15,7 @@ from knowledge_server.apps.knowledge.services.embedding import (
     RemoteEmbedder,
     build_embedder,
 )
+from llmcore.embedding_snapshot import EmbeddingBatch
 from llmcore.endpoints import EmbeddingEndpoint
 from llmcore.errors import ModelUnavailable
 
@@ -86,3 +87,42 @@ async def test_an_unreachable_endpoint_becomes_model_unavailable() -> None:
     )
     with pytest.raises(ModelUnavailable):
         await made.embed(["甲"])
+
+
+async def test_request_uses_the_space_of_the_answered_batch() -> None:
+    class Switching:
+        id = "synthetic"
+        model = "equal-name"
+        dimensions = 2
+        is_ready = True
+        identity = "first"
+
+        async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+            return [[1.0, 0.0] for _ in texts]
+
+        async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch:
+            answered_by = self.identity
+            self.identity = "second"
+            return EmbeddingBatch(
+                answered_by, self.model, await self.embed(texts)
+            )
+
+    remote = RemoteEmbedder(Switching(), WINDOW)
+    starting = remote.space
+    assert starting is not None
+    assert starting.identity == "first"
+    batch = await remote.embed_batch(["合成输入"])
+    assert batch.identity == "first"
+    assert batch.vectors == [[1.0, 0.0]]
+    assert remote.space is not None
+    assert remote.space.identity == "second"
+
+
+async def test_absent_or_uncertified_adapter_cannot_claim_a_space() -> None:
+    assert NullEmbedder().space is None
+    with pytest.raises(EmbeddingUnavailable):
+        await NullEmbedder().embed_batch(["甲"])
+    remote = RemoteEmbedder(_DownAdapter(), WINDOW)
+    assert remote.space is None
+    with pytest.raises(EmbeddingUnavailable):
+        await remote.embed_batch(["甲"])

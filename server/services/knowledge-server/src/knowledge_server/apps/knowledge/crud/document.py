@@ -10,6 +10,7 @@ from sqlalchemy import Select, delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.crud import content_lock
 from knowledge_server.apps.knowledge.models import KnowledgeDocument
 
 
@@ -27,6 +28,7 @@ class DocumentWrite:
     byte_size: int
     content_hash: str
     ingest_generation: uuid.UUID | None = None
+    source_revision_state: str | None = None
 
 
 async def insert_document(session: AsyncSession, write: DocumentWrite) -> None:
@@ -38,6 +40,7 @@ async def insert_document(session: AsyncSession, write: DocumentWrite) -> None:
 
     Args: session, write。
     """
+    await content_lock.base(session, write.base_id)
     session.add(
         KnowledgeDocument(
             id=write.document_id,
@@ -50,6 +53,7 @@ async def insert_document(session: AsyncSession, write: DocumentWrite) -> None:
             byte_size=write.byte_size,
             content_hash=write.content_hash,
             ingest_generation=write.ingest_generation,
+            source_revision_state=write.source_revision_state,
         )
     )
     await session.flush()
@@ -72,7 +76,9 @@ def _filtered(
     base_id: uuid.UUID, status: str
 ) -> Select[tuple[KnowledgeDocument]]:
     query = select(KnowledgeDocument).where(
-        KnowledgeDocument.base_id == base_id
+        KnowledgeDocument.base_id == base_id,
+        func.coalesce(KnowledgeDocument.source_revision_state, "current")
+        == "current",
     )
     return (
         query if not status else query.where(KnowledgeDocument.status == status)
@@ -96,7 +102,11 @@ async def counts_by_base(
         return {}
     rows = await session.execute(
         select(KnowledgeDocument.base_id, func.count())
-        .where(KnowledgeDocument.base_id.in_(base_ids))
+        .where(
+            KnowledgeDocument.base_id.in_(base_ids),
+            func.coalesce(KnowledgeDocument.source_revision_state, "current")
+            == "current",
+        )
         .group_by(KnowledgeDocument.base_id)
     )
     return {base_id: int(count) for base_id, count in rows.all()}
@@ -138,9 +148,15 @@ async def mark_status(
 
     Args: session, document_id, status, reason（失败原因，成功时空串）。
     """
+    await content_lock.document(session, document_id)
     done = await session.execute(
         update(KnowledgeDocument)
-        .where(KnowledgeDocument.id == document_id)
+        .where(
+            KnowledgeDocument.id == document_id,
+            KnowledgeDocument.source_revision_state.is_distinct_from(
+                "historical"
+            ),
+        )
         .values(status=status, failure_reason=reason)
     )
     # cast 的理由 —— DML 的 execute 运行期返回 CursorResult，而 AsyncSession
@@ -157,11 +173,15 @@ async def claim_ingest(
 
     Args: session, document_id, generation（None 只兼容存量 v1 消息）。
     """
+    await content_lock.document(session, document_id)
     statement = (
         update(KnowledgeDocument)
         .where(
             KnowledgeDocument.id == document_id,
             KnowledgeDocument.status.not_in(("ready", "failed")),
+            KnowledgeDocument.source_revision_state.is_distinct_from(
+                "historical"
+            ),
         )
         .values(status="parsing", failure_reason="")
         .returning(KnowledgeDocument)
@@ -191,6 +211,7 @@ async def mark_deferred(
 
     Args: session, document_id, generation, reason（给人看的一句）。
     """
+    await content_lock.document(session, document_id)
     statement = (
         update(KnowledgeDocument)
         .where(
@@ -217,11 +238,15 @@ async def mark_requeued(
 
     Args: session, document_id, generation。
     """
+    await content_lock.document(session, document_id)
     done = await session.execute(
         update(KnowledgeDocument)
         .where(
             KnowledgeDocument.id == document_id,
             KnowledgeDocument.status.in_(("pending", "ready", "failed")),
+            KnowledgeDocument.source_revision_state.is_distinct_from(
+                "historical"
+            ),
         )
         .values(
             status="pending",
@@ -243,11 +268,13 @@ async def mark_ready(
 
     Args: session, document_id, chunk_count, ready_at。
     """
+    await content_lock.document(session, document_id)
     done = await session.execute(
         update(KnowledgeDocument)
         .where(KnowledgeDocument.id == document_id)
         .values(
             status="ready",
+            embedding_deferred=False,
             failure_reason="",
             chunk_count=chunk_count,
             ready_at=ready_at,
@@ -263,6 +290,7 @@ async def delete_document(session: AsyncSession, document_id: uuid.UUID) -> int:
 
     Args: session, document_id。
     """
+    await content_lock.document(session, document_id)
     done = await session.execute(
         delete(KnowledgeDocument).where(KnowledgeDocument.id == document_id)
     )

@@ -3,10 +3,12 @@
 import asyncio
 from collections.abc import Callable
 from concurrent.futures import Executor, Future
+from concurrent.futures.process import BrokenProcessPool
 from typing import Any
 
 import pytest
 
+from platform_server.apps.modeling.operators import OperatorError
 from platform_server.apps.modeling.services.node_task import (
     NodePayload,
     NodeResult,
@@ -138,7 +140,9 @@ async def test_a_job_over_its_limit_recycles_the_pool() -> None:
         pool.shutdown()
 
 
-async def test_failure_recycles_pool_and_next_job_can_finish() -> None:
+async def test_broken_process_pool_is_replaced_and_next_job_can_finish() -> (
+    None
+):
     executors: list[PendingExecutor] = []
 
     def factory() -> PendingExecutor:
@@ -151,13 +155,39 @@ async def test_failure_recycles_pool_and_next_job_can_finish() -> None:
     try:
         task = asyncio.create_task(runner.run(payload()))
         await asyncio.wait_for(executors[0].entered.wait(), timeout=5)
-        executors[0].pending[0].set_exception(RuntimeError("计算池损坏"))
-        with pytest.raises(RuntimeError, match="计算池损坏"):
+        executors[0].pending[0].set_exception(BrokenProcessPool("计算池损坏"))
+        with pytest.raises(BrokenProcessPool, match="计算池损坏"):
             await task
         assert executors[0].closed
         next_task = asyncio.create_task(runner.run(payload()))
         await asyncio.wait_for(executors[1].entered.wait(), timeout=5)
         executors[1].pending[0].set_result(NodeResult(outputs={"ok": True}))
         assert (await next_task).outputs == {"ok": True}
+    finally:
+        pool.shutdown()
+
+
+@pytest.mark.parametrize(
+    "error", [OperatorError("算子输入无效"), TimeoutError("算子输入无效")]
+)
+async def test_a_completed_job_failure_leaves_its_executor_available(
+    error: Exception,
+) -> None:
+    executor = PendingExecutor()
+    pool = NodePool(factory=lambda: executor)
+    runner = PooledRunner(pool, timeout_s=5)
+    try:
+        task = asyncio.create_task(runner.run(payload()))
+        await asyncio.wait_for(executor.entered.wait(), timeout=5)
+        executor.pending[0].set_exception(error)
+        with pytest.raises(type(error), match="算子输入无效"):
+            await task
+        assert not executor.closed
+
+        executor.entered.clear()
+        next_task = asyncio.create_task(runner.run(payload()))
+        await asyncio.wait_for(executor.entered.wait(), timeout=5)
+        executor.pending[1].set_result(NodeResult(outputs={"next": True}))
+        assert (await next_task).outputs == {"next": True}
     finally:
         pool.shutdown()

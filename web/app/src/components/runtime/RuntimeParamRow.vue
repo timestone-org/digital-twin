@@ -88,8 +88,11 @@ function display(value: number | boolean | null): string {
     >
       <DtTag size="sm" mono>{{ item.envName }}</DtTag>
       <span>默认 {{ display(item.defaultValue) }}</span>
-      <span v-if="item.overridden && item.updatedBy">
-        由 {{ item.updatedBy }} 改自 {{ display(item.previousValue) }}
+      <span v-if="item.overridden && item.updatedByName">
+        由 {{ item.updatedByName }} 改自 {{ display(item.previousValue) }}
+      </span>
+      <span v-else-if="item.overridden">
+        修改者未知 · 原值 {{ display(item.previousValue) }}
       </span>
     </p>
   </div>

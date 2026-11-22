@@ -5,6 +5,7 @@
  * 换成驼峰就要多一份映射，而映射写错时 typecheck 与 lint 双双放行。
  */
 import { ERROR_CODES } from './envelope'
+import type { KnowledgeVectorStatus } from './knowledgeEmbedding'
 
 /** 检索策略。与后端注册表的名字逐字一致，未登记的值后端一律 400。 */
 export const KNOWLEDGE_STRATEGIES = ['naive', 'hybrid', 'agentic'] as const
@@ -84,6 +85,7 @@ export interface KnowledgeRerankCapability {
 
 /** 这套部署的知识库此刻能干什么。 */
 export interface KnowledgeCapability {
+  supports_base_metadata?: boolean
   /**
    * 嵌入档接上了吗。
    * ⚠ 为假时检索**如实回答「这个库还没建索引」**，不是返回空表——
@@ -108,6 +110,12 @@ export interface KnowledgeCapability {
   rerank: KnowledgeRerankCapability
 }
 
+/** 管理员提交的库名或描述，至少提供一项。 */
+export interface KnowledgeBaseMetadataPatch {
+  name?: string
+  description?: string
+}
+
 /** 一个知识库。 */
 export interface KnowledgeBase {
   id: string
@@ -121,6 +129,7 @@ export interface KnowledgeBase {
    */
   embedding_model: string | null
   dimensions: number | null
+  vector_status?: KnowledgeVectorStatus
   owner_id: string
   document_count: number
   created_at: string
@@ -129,6 +138,7 @@ export interface KnowledgeBase {
 
 /** 一个库下的一路来源。文件上传只是其中一路。 */
 export interface KnowledgeSource {
+  can_change_identity?: boolean
   id: string
   base_id: string
   kind: string
@@ -142,6 +152,21 @@ export interface KnowledgeSource {
    */
   last_error: string
   created_at: string
+}
+
+/** 平台来源配置中实际提交的字段。 */
+export interface KnowledgePlatformSourcePatch {
+  path?: string
+  id_field?: string
+  title_field?: string
+  page_param?: string
+  size_param?: string
+}
+
+/** 名称或平台来源配置的修改。 */
+export interface KnowledgeSourceMetadataPatch {
+  name?: string
+  config?: KnowledgePlatformSourcePatch
 }
 
 /** 一份文档。 */

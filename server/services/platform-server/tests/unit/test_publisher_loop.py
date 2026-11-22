@@ -330,7 +330,8 @@ async def test_a_stalled_lane_cannot_outlive_the_lease() -> None:
     harness = build_harness(lease_ttl_s=0.2)
     harness.publisher.stall_s = 5.0
     await asyncio.wait_for(harness.runtime.tick(), timeout=1.0)
-    assert harness.collect.ticks == 0
+    assert harness.collect.ticks == 1
+    assert not harness.publisher.reached.is_set()
 
 
 async def test_an_overrun_tick_drops_every_lane_cache() -> None:
@@ -360,3 +361,38 @@ async def test_a_stalled_param_read_cannot_outlive_the_lease() -> None:
     ).read  # 理由 —— 换读口
     await asyncio.wait_for(harness.runtime.tick(), timeout=1.0)
     assert harness.runtime._options.window_s == WINDOW_S  # 理由 —— 沿用原节奏
+
+
+async def test_collect_publishes_while_dashboard_lane_is_waiting() -> None:
+    harness = build_harness()
+    entered = asyncio.Event()
+    finished = asyncio.Event()
+
+    async def slow_dashboard() -> None:
+        entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            finished.set()
+
+    runtime = PublisherRuntime(
+        lease=harness.lease,
+        lanes=(
+            Lane(
+                "dashboard",
+                harness.publisher.reconcile,
+                slow_dashboard,
+                harness.publisher.forget_all,
+            ),
+            harness.collect.as_lane(),
+        ),
+        options=LoopOptions(window_s=0.01, reconcile_interval_s=30),
+    )
+    tick = asyncio.create_task(runtime.tick())
+    try:
+        await asyncio.wait_for(entered.wait(), timeout=1)
+        await asyncio.wait_for(harness.collect.reached.wait(), timeout=1)
+    finally:
+        tick.cancel()
+        await asyncio.gather(tick, return_exceptions=True)
+    assert finished.is_set()

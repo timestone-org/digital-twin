@@ -21,12 +21,11 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ai_assistant.app import build_app
-from ai_assistant.container import IDEMPOTENCY_NAMESPACE, Container
+from ai_assistant.container import Container
 from ai_assistant.deps import get_session
 from ai_assistant.settings import Settings
 from lib.config import load_settings
 from lib.db import run_after_commit_hooks
-from lib.idempotency import IdempotencyStore
 from lib.testing import InMemoryCache
 
 HeaderFactory = Callable[..., dict[str, str]]
@@ -87,9 +86,7 @@ def _wire(
     application.dependency_overrides[get_session] = _session_override(maker)
     application.state.container = replace(
         built,
-        idempotency=IdempotencyStore(
-            cache=InMemoryCache(), namespace=IDEMPOTENCY_NAMESPACE
-        ),
+        idempotency=replace(built.idempotency, cache=InMemoryCache()),
     )
     return maker
 
@@ -136,7 +133,9 @@ async def db_stack(
     if not _reachable(db_settings.postgres_host, db_settings.postgres_port):
         pytest.skip("本机连不到 Postgres")
     application = build_app(db_settings)
-    database = application.state.container.database
+    container = application.state.container
+    assert isinstance(container, Container)
+    database = container.database
     connection = await database.engine.connect()
     transaction = await connection.begin()
     maker = _wire(application, connection)
@@ -148,6 +147,7 @@ async def db_stack(
     ) as client:
         client.headers.update(sign())
         yield DbStack(client=client, app=application, sessions=maker)
+    await container.attachments.close()
     await transaction.rollback()
     await connection.close()
     await database.dispose()

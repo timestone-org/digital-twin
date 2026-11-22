@@ -4,7 +4,8 @@
 （docs/MODELING_DESIGN.md §5.3、§6.1）。
 """
 
-from collections import deque
+from collections import defaultdict, deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, cast
 
@@ -13,6 +14,7 @@ from pydantic import ValidationError
 from platform_server.apps.modeling.operators import (
     ColumnKeys,
     ColumnsByPort,
+    PredictionPostprocess,
     registry,
 )
 from platform_server.apps.modeling.schemas.graph import GraphNode, PipelineGraph
@@ -204,10 +206,49 @@ def _incoming_ports(
     return edges
 
 
-def topological_order(graph: PipelineGraph) -> list[str]:
+def prediction_path(graph: PipelineGraph, model_id: str) -> set[str]:
+    """收集模型的推理上游、模型及打分后的步骤。Args: graph, model_id。"""
+    nodes = graph.node_by_id()
+    operator = registry.get(nodes[model_id].operator)
+    uses_train_input = operator.MODEL_TASK in {
+        "regression",
+        "classification",
+    } and any(port.name == "train" for port in operator.INPUTS)
+    upstream: dict[str, list[str]] = defaultdict(list)
+    postprocess: dict[str, list[str]] = defaultdict(list)
+    for edge in graph.edges:
+        if (
+            uses_train_input
+            and edge.to_node == model_id
+            and edge.to_port != "train"
+        ):
+            continue
+        upstream[edge.to_node].append(edge.from_node)
+        if edge.from_port == "scored" and edge.to_port == "scored":
+            target = registry.get(nodes[edge.to_node].operator)
+            if issubclass(target, PredictionPostprocess):
+                postprocess[edge.from_node].append(edge.to_node)
+    return _reachable(upstream, model_id) | _reachable(postprocess, model_id)
+
+
+def _reachable(edges: dict[str, list[str]], start: str) -> set[str]:
+    """沿指定方向收集节点。Args: edges, start。"""
+    seen: set[str] = set()
+    pending = [start]
+    while pending:
+        node = pending.pop()
+        if node not in seen:
+            seen.add(node)
+            pending.extend(edges.get(node, ()))
+    return seen
+
+
+def topological_order(
+    graph: PipelineGraph, *, precedes: Mapping[str, str] | None = None
+) -> list[str]:
     """拓扑序的节点 id。有环时只回环外的那些。
 
-    Args: graph。
+    Args: graph, precedes（另外需要先执行的节点，按消费节点索引）。
     """
     indegree = {node.id: 0 for node in graph.nodes}
     outgoing: dict[str, list[str]] = {node.id: [] for node in graph.nodes}
@@ -215,6 +256,9 @@ def topological_order(graph: PipelineGraph) -> list[str]:
         if edge.from_node in outgoing and edge.to_node in indegree:
             outgoing[edge.from_node].append(edge.to_node)
             indegree[edge.to_node] += 1
+    for node_id, source in (precedes or {}).items():
+        outgoing[source].append(node_id)
+        indegree[node_id] += 1
     queue = deque(sorted(key for key, value in indegree.items() if value == 0))
     order: list[str] = []
     while queue:

@@ -12,6 +12,7 @@ from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.database_fakes import MakerSessions
 
 from platform_server.apps.hvac.crud import (
     ac_startup_batch_crud,
@@ -203,13 +204,13 @@ async def seed_batch(
 
 
 async def test_a_day_lands_in_the_current_batch(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """当天的开机事件补进当前批次，并顺延批次窗口与事件计数。"""
     room_id = await make_room(db_session, "日增")
     batch = await seed_batch(db_session, room_id)
     run = await append_day(
-        db_session,
+        worker_sessions,
         context_for(one_startup(STARTED_AT, COMPLIED_AT)),
         room_id=room_id,
         day=DAY,
@@ -221,12 +222,13 @@ async def test_a_day_lands_in_the_current_batch(
     assert [item.started_at for item in episodes] == [STARTED_AT]
     assert episodes[0].outcome == OUTCOME_USABLE
     assert episodes[0].duration_minutes == 20
+    await db_session.refresh(batch)
     assert batch.window_end == day_bounds(DAY, SHANGHAI).end
     assert batch.episode_count == 1
 
 
 async def test_rerunning_the_same_day_changes_nothing(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """重跑同一天不许留下第二条——队列是 at-least-once。"""
     room_id = await make_room(db_session, "重跑")
@@ -234,7 +236,7 @@ async def test_rerunning_the_same_day_changes_nothing(
     context = context_for(one_startup(STARTED_AT, COMPLIED_AT))
     for _ in range(3):
         await append_day(
-            db_session,
+            worker_sessions,
             context,
             room_id=room_id,
             day=DAY,
@@ -242,11 +244,12 @@ async def test_rerunning_the_same_day_changes_nothing(
         )
     episodes = await ac_startup_episode_crud.list_by_batch(db_session, batch.id)
     assert len(episodes) == 1
+    await db_session.refresh(batch)
     assert batch.episode_count == 1
 
 
 async def test_a_shifted_start_replaces_the_old_row_instead_of_doubling(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """重判后起始时刻平移了，旧那一行必须消失。
 
@@ -256,7 +259,7 @@ async def test_a_shifted_start_replaces_the_old_row_instead_of_doubling(
     room_id = await make_room(db_session, "平移")
     batch = await seed_batch(db_session, room_id)
     await append_day(
-        db_session,
+        worker_sessions,
         context_for(one_startup(STARTED_AT, COMPLIED_AT)),
         room_id=room_id,
         day=DAY,
@@ -264,7 +267,7 @@ async def test_a_shifted_start_replaces_the_old_row_instead_of_doubling(
     )
     moved = STARTED_AT + timedelta(minutes=7)
     await append_day(
-        db_session,
+        worker_sessions,
         context_for(one_startup(moved, moved + timedelta(minutes=20))),
         room_id=room_id,
         day=DAY,
@@ -275,7 +278,7 @@ async def test_a_shifted_start_replaces_the_old_row_instead_of_doubling(
 
 
 async def test_last_nights_tail_is_rejudged_by_tonights_run(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """22:20 之后开的机在第二晚被重判，而不是永久定格。
 
@@ -288,7 +291,7 @@ async def test_last_nights_tail_is_rejudged_by_tonights_run(
     tail_start = day_bounds(DAY, SHANGHAI).end - timedelta(minutes=30)
     rows = one_startup(tail_start, tail_start + timedelta(minutes=40))
     run = await append_day(
-        db_session,
+        worker_sessions,
         context_for(rows),
         room_id=room_id,
         day=DAY + timedelta(days=1),
@@ -301,12 +304,12 @@ async def test_last_nights_tail_is_rejudged_by_tonights_run(
 
 
 async def test_a_room_without_a_current_batch_is_skipped_with_a_reason(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """没有当前批次就没有可追加的地方——跳过并说清为什么。"""
     room_id = await make_room(db_session, "无批次")
     run = await append_day(
-        db_session,
+        worker_sessions,
         context_for([]),
         room_id=room_id,
         day=DAY,
@@ -317,7 +320,7 @@ async def test_a_room_without_a_current_batch_is_skipped_with_a_reason(
 
 
 async def test_a_fingerprint_mismatch_skips_instead_of_mixing_two_rulesets(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """批次是按别的参数算的，就不许往里追。
 
@@ -327,7 +330,7 @@ async def test_a_fingerprint_mismatch_skips_instead_of_mixing_two_rulesets(
     room_id = await make_room(db_session, "指纹")
     batch = await seed_batch(db_session, room_id, fingerprint="f" * 64)
     run = await append_day(
-        db_session,
+        worker_sessions,
         context_for(one_startup(STARTED_AT, COMPLIED_AT)),
         room_id=room_id,
         day=DAY,
@@ -339,14 +342,14 @@ async def test_a_fingerprint_mismatch_skips_instead_of_mixing_two_rulesets(
     assert episodes == []
 
 
-async def test_an_older_logic_version_skips_too(
-    db_session: AsyncSession,
+@pytest.mark.parametrize("logic_version", [2, 5], ids=["older", "future"])
+async def test_an_incompatible_logic_version_skips(
+    db_session: AsyncSession, worker_sessions: MakerSessions, logic_version: int
 ) -> None:
-    """抽取逻辑升过版的批次同样不许往里追。"""
     room_id = await make_room(db_session, "版本")
-    await seed_batch(db_session, room_id, logic_version=LOGIC_VERSION - 1)
+    await seed_batch(db_session, room_id, logic_version=logic_version)
     run = await append_day(
-        db_session,
+        worker_sessions,
         context_for(one_startup(STARTED_AT, COMPLIED_AT)),
         room_id=room_id,
         day=DAY,
@@ -356,8 +359,23 @@ async def test_an_older_logic_version_skips_too(
     assert "抽取逻辑" in (run.reason or "")
 
 
+async def test_default_daily_extraction_can_continue_a_compatible_v3_batch(
+    db_session: AsyncSession, worker_sessions: MakerSessions
+) -> None:
+    room_id = await make_room(db_session, "兼容版本")
+    await seed_batch(db_session, room_id, logic_version=3)
+    run = await append_day(
+        worker_sessions,
+        context_for(one_startup(STARTED_AT, COMPLIED_AT)),
+        room_id=room_id,
+        day=DAY,
+        timezone=SHANGHAI,
+    )
+    assert run.outcome == DAILY_RUN_APPENDED
+
+
 async def test_a_manual_exclusion_survives_the_window_replace(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """人工排除挂在自然键上，整窗替换删不掉它。
 
@@ -375,7 +393,7 @@ async def test_a_manual_exclusion_survives_the_window_replace(
     )
     await db_session.flush()
     await append_day(
-        db_session,
+        worker_sessions,
         context_for(one_startup(STARTED_AT, COMPLIED_AT)),
         room_id=room_id,
         day=DAY,
@@ -397,21 +415,23 @@ async def test_a_manual_exclusion_survives_the_window_replace(
 
 
 async def test_the_window_end_only_moves_forward(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """补跑历史某一天不许把批次窗口缩回去。"""
     room_id = await make_room(db_session, "回补")
     batch = await seed_batch(db_session, room_id)
     context = context_for(one_startup(STARTED_AT, COMPLIED_AT))
     await append_day(
-        db_session, context, room_id=room_id, day=DAY, timezone=SHANGHAI
+        worker_sessions, context, room_id=room_id, day=DAY, timezone=SHANGHAI
     )
+    await db_session.refresh(batch)
     reached = batch.window_end
     await append_day(
-        db_session,
+        worker_sessions,
         context,
         room_id=room_id,
         day=DAY - timedelta(days=5),
         timezone=SHANGHAI,
     )
+    await db_session.refresh(batch)
     assert batch.window_end == reached

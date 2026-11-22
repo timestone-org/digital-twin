@@ -276,7 +276,7 @@ def _build_redis(settings: Settings) -> RedisFaces:
             url=redis_url, timeout_s=settings.redis_timeout_s
         ),
         transport=RedisCommandTransport(
-            url=redis_url, block_s=settings.command_block_s
+            url=redis_url, lease=lease, timeout_s=settings.redis_timeout_s
         ),
     )
 

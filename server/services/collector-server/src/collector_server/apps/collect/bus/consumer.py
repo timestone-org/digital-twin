@@ -41,7 +41,11 @@ from collectwire import (
     REASON_BROWSE_CONTINUATION_INVALID,
     REASON_BROWSE_PAGE_TOO_LARGE,
     REASON_DRIVER_FAILED,
+    REASON_DRIVER_NOT_CONNECTED,
+    REASON_POINT_NOT_LOADED,
     REASON_UNKNOWN_ACTION,
+    REASON_WRITE_OUTCOME_UNKNOWN,
+    REASON_WRITE_REJECTED,
     STATUS_ERROR,
     STATUS_OK,
 )
@@ -72,7 +76,11 @@ RETRY_PAUSE_S = 1.0
 _EXPECTED_REASONS = (
     REASON_BROWSE_CONTINUATION_INVALID,
     REASON_BROWSE_PAGE_TOO_LARGE,
+    REASON_DRIVER_NOT_CONNECTED,
+    REASON_POINT_NOT_LOADED,
     REASON_UNKNOWN_ACTION,
+    REASON_WRITE_OUTCOME_UNKNOWN,
+    REASON_WRITE_REJECTED,
 )
 
 
@@ -146,8 +154,7 @@ class CommandConsumer:
     async def stop(self) -> None:
         """停收新命令。
 
-        ⚠ 最坏要等满一次阻塞取（`block_s`）：那是取请求那一跳的固有代价，
-        把它算进关停预算里，不要为了快而在阻塞中途硬断连接。
+        ⚠ 把当次取请求和处理计入关停预算，避免中断已取出的请求。
         """
         self._stopped.set()
         task, self._task = self._task, None
@@ -222,6 +229,14 @@ class CommandConsumer:
                 data = await self._dispatch(request)
         except CollectError as error:
             await self._reply_error(request, error.reason, type(error).__name__)
+            return
+        except TimeoutError as error:
+            reason = (
+                REASON_WRITE_OUTCOME_UNKNOWN
+                if request.action == ACTION_WRITE
+                else REASON_DRIVER_FAILED
+            )
+            await self._reply_error(request, reason, type(error).__name__)
             return
         except Exception as error:
             await self._reply_error(

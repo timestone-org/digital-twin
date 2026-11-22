@@ -13,6 +13,7 @@ from typing import Protocol, cast
 import pytest
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.database_fakes import MakerSessions
 
 from lib.stream import StreamEntry, StreamGroup, StreamLike
 from platform_server.apps.hvac.crud import (
@@ -56,8 +57,8 @@ from platform_server.apps.hvac.services.ac_startup_service import (
 from platform_server.apps.hvac.startups import (
     BATCH_STATUS_FAILED,
     BATCH_STATUS_READY,
+    SHARD_STATUS_DONE,
     SHARD_STATUS_FAILED,
-    SHARD_STATUS_SKIPPED,
 )
 
 
@@ -185,7 +186,7 @@ def context_for(rows: Sequence[SourceRow]) -> ExtractionContext:
 
 
 async def test_a_batch_becomes_current_only_after_every_shard_is_done(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """还没跑完就切换，页面会看到半份数据——那比看到旧数据危险得多。"""
     room_id = await make_room(db_session, "半份")
@@ -197,10 +198,10 @@ async def test_a_batch_becomes_current_only_after_every_shard_is_done(
         timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
-    await run_shard(db_session, context, plan.messages[0])
+    await run_shard(worker_sessions, context, plan.messages[0])
     assert await finalize_if_complete(db_session, plan.batch.id) is None
     assert await ac_startup_batch_crud.find_current(db_session, room_id) is None
-    await run_shard(db_session, context, plan.messages[1])
+    await run_shard(worker_sessions, context, plan.messages[1])
     finished = await finalize_if_complete(db_session, plan.batch.id)
     assert finished is not None
     assert finished.status == BATCH_STATUS_READY
@@ -212,7 +213,7 @@ async def test_a_batch_becomes_current_only_after_every_shard_is_done(
 
 
 async def test_finalizing_twice_does_not_redo_the_swap(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """两个 worker 同时跑完最后两片时，收尾只能生效一次。"""
     room_id = await make_room(db_session, "并发收尾")
@@ -225,13 +226,13 @@ async def test_finalizing_twice_does_not_redo_the_swap(
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
-        await run_shard(db_session, context, message)
+        await run_shard(worker_sessions, context, message)
     assert await finalize_if_complete(db_session, plan.batch.id) is not None
     assert await finalize_if_complete(db_session, plan.batch.id) is None
 
 
 async def test_a_failed_shard_leaves_the_previous_batch_serving(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """⚠ 一片失败只让新批次判失败，上一批次一动不动，页面照常显示完整数据。"""
     room_id = await make_room(db_session, "失败")
@@ -244,7 +245,7 @@ async def test_a_failed_shard_leaves_the_previous_batch_serving(
     )
     context = context_for(crossing_rows())
     for message in first.messages:
-        await run_shard(db_session, context, message)
+        await run_shard(worker_sessions, context, message)
     await finalize_if_complete(db_session, first.batch.id)
 
     second = await request_rebuild(
@@ -254,7 +255,7 @@ async def test_a_failed_shard_leaves_the_previous_batch_serving(
         rules=RULES,
         timezone="Asia/Shanghai",
     )
-    await run_shard(db_session, context, second.messages[0])
+    await run_shard(worker_sessions, context, second.messages[0])
     await ac_startup_shard_crud.mark(
         db_session,
         await _shard_of(db_session, second.batch.id, "2026-02"),
@@ -281,7 +282,7 @@ async def _shard_of(
 
 
 async def test_unmatched_exclusions_are_counted_on_the_batch(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """⚠ 对不上的人工排除必须报出来，否则人工判断会静默地烂掉。"""
     room_id = await make_room(db_session, "排除计数")
@@ -311,14 +312,14 @@ async def test_unmatched_exclusions_are_counted_on_the_batch(
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
-        await run_shard(db_session, context, message)
+        await run_shard(worker_sessions, context, message)
     finished = await finalize_if_complete(db_session, plan.batch.id)
     assert finished is not None
     assert finished.unmatched_exclusion_count == 1
 
 
 async def test_finalizing_keeps_only_the_three_newest_batches(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """每个房间保留最近三个批次，更老的在收尾时一并清理。"""
     room_id = await make_room(db_session, "保留")
@@ -338,7 +339,7 @@ async def test_finalizing_keeps_only_the_three_newest_batches(
         )
         batch_ids.append(plan.batch.id)
         for message in plan.messages:
-            await run_shard(db_session, context, message)
+            await run_shard(worker_sessions, context, message)
         await finalize_if_complete(db_session, plan.batch.id)
     kept = await ac_startup_batch_crud.list_by_room(
         db_session, room_id, limit=10
@@ -346,14 +347,10 @@ async def test_finalizing_keeps_only_the_three_newest_batches(
     assert [item.id for item in kept] == batch_ids[:0:-1]
 
 
-async def test_a_late_message_for_a_finished_batch_is_recorded_as_skipped(
-    db_session: AsyncSession,
+async def test_late_delivery_skips_work_but_preserves_the_completed_shard(
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
-    """⚠ 迟到的消息不写孤儿事件，但也**绝不能让分片停在 pending**。
-
-    消息马上就要被确认，分片行再停在待跑就永远没人回来跑它：批次卡在 43/45，
-    队列里却一条消息都没有——线上两轮重算就是这么挂住的。
-    """
+    """终态批次的重复投递不改已完成的分片。"""
     room_id = await make_room(db_session, "迟到")
     plan = await request_rebuild(
         db_session,
@@ -364,19 +361,19 @@ async def test_a_late_message_for_a_finished_batch_is_recorded_as_skipped(
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
-        await run_shard(db_session, context, message)
+        await run_shard(worker_sessions, context, message)
     await finalize_if_complete(db_session, plan.batch.id)
 
-    late = await run_shard(db_session, context, plan.messages[0])
+    late = await run_shard(worker_sessions, context, plan.messages[0])
     assert late.outcome == SHARD_RUN_SKIPPED
     assert late.episode_count == 0
     shard = await _shard_of(db_session, plan.batch.id, "2026-01")
-    assert shard.status == SHARD_STATUS_SKIPPED
-    assert shard.error is not None
+    assert shard.status == SHARD_STATUS_DONE
+    assert shard.error is None
 
 
 async def test_a_message_for_a_vanished_batch_reports_itself_orphaned(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """批次被清理掉之后没有可落状态的地方，只能报出来而不是假装跑完了。"""
     room_id = await make_room(db_session, "无主")
@@ -387,13 +384,13 @@ async def test_a_message_for_a_vanished_batch_reports_itself_orphaned(
         month="2026-01",
         traceparent="00-" + "0" * 32 + "-" + "0" * 16 + "-01",
     )
-    run = await run_shard(db_session, context, ghost)
+    run = await run_shard(worker_sessions, context, ghost)
     assert run.outcome == SHARD_RUN_ORPHANED
     assert run.episode_count == 0
 
 
 async def test_a_room_with_no_bound_units_yields_no_episodes(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """没有一台空调绑了数据源时，这一片一分钟数据都读不到。"""
     workshop = Workshop(name=f"空房车间{uuid.uuid4().hex[:8]}")
@@ -410,7 +407,7 @@ async def test_a_room_with_no_bound_units_yields_no_episodes(
         timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
-    run = await run_shard(db_session, context, plan.messages[0])
+    run = await run_shard(worker_sessions, context, plan.messages[0])
     # 读不到数据是「跑完了但一条没有」，不是跳过：这一片确实跑过
     assert run.outcome == SHARD_RUN_EXTRACTED
     assert run.episode_count == 0
@@ -484,7 +481,9 @@ async def test_a_very_long_failure_reason_is_trimmed(
 
 
 async def test_a_configuration_change_is_not_logged_as_a_shard_failure(
-    db_session: AsyncSession, caplog: pytest.LogCaptureFixture
+    db_session: AsyncSession,
+    caplog: pytest.LogCaptureFixture,
+    worker_sessions: MakerSessions,
 ) -> None:
     """⚠ 抽取期间改了配置是人的操作，不能在日志里记成「有分片失败」的 ERROR。"""
     room_id = await make_room(db_session, "改配置")
@@ -497,7 +496,7 @@ async def test_a_configuration_change_is_not_logged_as_a_shard_failure(
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
-        await run_shard(db_session, context, message)
+        await run_shard(worker_sessions, context, message)
     await db_session.execute(
         update(AcMetricLimit)
         .where(AcMetricLimit.metric == "workshop_temp_avg")
@@ -513,7 +512,7 @@ async def test_a_configuration_change_is_not_logged_as_a_shard_failure(
 
 
 async def test_a_fetch_that_hits_the_row_limit_fails_the_shard(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """⚠ 取数撞上行数上限说明尾部被截掉了，不能悄悄把这一片记成跑完。"""
     room_id = await make_room(db_session, "截断")
@@ -528,7 +527,7 @@ async def test_a_fetch_that_hits_the_row_limit_fails_the_shard(
         reader=StubReader(crossing_rows()), rules=RULES, max_rows=5
     )
     with pytest.raises(ValueError, match="上限"):
-        await run_shard(db_session, context, plan.messages[0])
+        await run_shard(worker_sessions, context, plan.messages[0])
 
 
 async def test_an_empty_failure_reason_still_records_the_failure(

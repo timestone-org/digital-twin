@@ -198,5 +198,22 @@
       "twin2d.patch_config",
       "twin2d.diagnose"
     ]
+  },
+  {
+    "name": "collect-inspect",
+    "title": "检查采集信息",
+    "surface_kinds": [
+      "collect-source"
+    ],
+    "required_codes": [
+      "collect:view"
+    ],
+    "server_tools": [
+      "points.list_sources",
+      "points.search",
+      "points.detail",
+      "points.resolve"
+    ],
+    "client_tools": []
   }
 ]

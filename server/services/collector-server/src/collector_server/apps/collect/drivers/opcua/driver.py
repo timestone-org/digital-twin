@@ -7,6 +7,11 @@ from typing import cast
 
 from asyncua import Client, Node, ua
 from asyncua.common.subscription import Subscription, SubscriptionHandler
+from asyncua.ua.uaerrors import (
+    BadNotWritable,
+    BadTypeMismatch,
+    BadUserAccessDenied,
+)
 
 from collector_server.apps.collect.drivers.base import (
     BrowseItem,
@@ -22,6 +27,7 @@ from collector_server.apps.collect.drivers.base import (
     Sample,
     SubscribeResult,
     ValueSink,
+    WriteRejected,
 )
 from collector_server.apps.collect.drivers.opcua import mapping
 from collector_server.apps.collect.drivers.opcua.browse import BrowsePager
@@ -423,8 +429,11 @@ class OpcuaDriver:
         """
         client = self._require_client()
         node_id = mapping.node_id_of(self._point_of(point_code).address)
-        async with asyncio.timeout(self._connection.timeouts.request_s):
-            await client.get_node(node_id).write_value(value)
+        try:
+            async with asyncio.timeout(self._connection.timeouts.request_s):
+                await client.get_node(node_id).write_value(value)
+        except (BadNotWritable, BadTypeMismatch, BadUserAccessDenied) as error:
+            raise WriteRejected("设备明确拒绝此写值请求") from error
 
     async def browse(self, parent: str | None) -> list[BrowseItem]:
         """兼容旧浏览调用，大目录明确要求使用分页。Args: parent。"""

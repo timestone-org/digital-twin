@@ -81,18 +81,18 @@ async def read_publication(
 async def put_publication(
     model_id: uuid.UUID,
     payload: PublicationPutIn,
-    session: SessionDep,
+    sessions: SessionsDep,
     nodes: NodesDep,
     _manager: ManageDep,
 ) -> ApiResponse[PublicationOut]:
     """整份保存。保存前会问一遍 opcua-server：节点还在不在、类型对不对。
 
-    Args: model_id, payload, session, nodes, _manager。
+    Args: model_id, payload, sessions, nodes, _manager。
     """
     return ok(
         _present(
             await ac_publication_service.put_publication(
-                session, nodes, model_id=model_id, payload=payload
+                sessions, nodes, model_id=model_id, payload=payload
             )
         )
     )

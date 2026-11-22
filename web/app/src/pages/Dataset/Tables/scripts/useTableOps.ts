@@ -1,15 +1,5 @@
 /**
- * @fileoverview 台账列表页的写动作：开建表 / 改表弹窗，与两段式删除。
- *
- * ⚠ 删除是**两段式**，第二段的文案由后端的 409 回执撑起来：先发一次不带
- * `force` 的删除，后端说「下面还有 N 行数据」时再问一次，确认词从「删除」
- * 变成「仍然删除」（docs/DATASET_DESIGN.md §7.5）。
- * 刻意不在点删除之前先查一次行数：查完到用户点确认之间，行数可能已经变了。
- * ⚠ 删除的两步是模块级函数、只收一份 `deps`：塞回 composable 里会让它涨成一个
- * 谁也不敢动的大函数。
- * ⚠ 新建成功后**直接进详情的列配置**：刚建出来的台账一列都没有，落不下任何一行
- * 数据；停在列表上等于让人自己再找一次入口，而弹窗刚说完「先建表，再给它配列」。
- * 编辑那次不跳——改完一个名字被扔进详情页是没道理的。
+ * @fileoverview 台账列表页的建改与两段式删除。删除影响以服务端 409 为准，见台账设计 §7.5。
  */
 
 import { ref, type Ref } from 'vue'
@@ -44,17 +34,17 @@ export interface TableOps {
   afterSaved: (message: string, createdId: string | null) => Promise<void>
 }
 
-/**
- * 后端是不是因为「下面还有数据行」拒绝的。
- * ⚠ 按码分支，不按 message：文案会改、会翻译。而返回的**是** message ——
- * 有多少行只在那句话里，前端不许自己再查一遍（设计 §7.5）。
- * @param caught 抛出来的东西
- */
-function recordsBlockedReason(caught: unknown): string | null {
-  const isBlocked =
-    caught instanceof BizError &&
-    caught.code === ERROR_CODES.datasetTableNotEmpty
-  return isBlocked ? caught.message : null
+/** 取删除可能影响的历史和公式，供用户再次确认。 */
+function blockedReason(caught: unknown): string | null {
+  if (!(caught instanceof BizError)) return null
+  if (caught.code === ERROR_CODES.datasetTableNotEmpty)
+    return `${caught.message}，会连同这些历史一并删除，且不可恢复。`
+  if (caught.code !== ERROR_CODES.datasetTableInUse) return null
+  return (
+    [caught.message, ...caught.details.map((detail) => detail.message)].join(
+      '。',
+    ) + '。'
+  )
 }
 
 /**
@@ -71,10 +61,7 @@ function askRemove(
   const head = `将删除台账「${table.name}」及它的全部列定义。`
   return deps.confirm.ask({
     title: '删除台账',
-    message:
-      blocked === null
-        ? `${head}这一步不可撤销。`
-        : `${head}${blocked}，会连同这些历史一并删除，且不可恢复。`,
+    message: blocked === null ? `${head}这一步不可撤销。` : `${head}${blocked}`,
     confirmText: blocked === null ? '删除' : '仍然删除',
     danger: true,
   })
@@ -107,7 +94,7 @@ async function removeTable(
   try {
     await dataset.deleteDatasetTable(table.id)
   } catch (caught) {
-    const blocked = recordsBlockedReason(caught)
+    const blocked = blockedReason(caught)
     if (blocked === null) {
       deps.toast.error(describeError(caught))
       return

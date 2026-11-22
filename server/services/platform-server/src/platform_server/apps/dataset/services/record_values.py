@@ -63,16 +63,13 @@ def sanitize(
     *,
     actor: Actor,
     reason: str | None = None,
-    is_strict: bool = True,
 ) -> SanitizedValues:
     """把提交上来的一行值按列的 `source` 三分派。未定义的列 key 一律丢弃。
 
-    Args: raw, columns, actor, reason, is_strict（False 跳过必填校验）。
+    Args: raw, columns, actor, reason。
     """
     values, submitted = _entered(raw, columns)
     overrides, cleared = _corrected(raw, columns, actor=actor, reason=reason)
-    if is_strict:
-        _require_filled(values, columns)
     return SanitizedValues(
         values=values,
         overrides=overrides,
@@ -212,7 +209,7 @@ def _corrected(
     return overrides, cleared
 
 
-def _require_filled(
+def require_filled(
     values: dict[str, Any], columns: Sequence[DatasetColumn]
 ) -> None:
     """必填的人工录入列一个都不许空。
@@ -272,6 +269,14 @@ def _as_bool(value: Any, column: DatasetColumn) -> bool:
 
     Args: value, column。
     """
+    parsed = parse_boolean(value)
+    if parsed is not None:
+        return parsed
+    raise rejected(column.key, f"列「{column.name}」需要布尔值，收到 {value!r}")
+
+
+def parse_boolean(value: object) -> bool | None:
+    """按台账布尔列的输入约定转换，无法识别时返回空。Args: value。"""
     if isinstance(value, bool):
         return value
     if isinstance(value, int | float):
@@ -279,6 +284,4 @@ def _as_bool(value: Any, column: DatasetColumn) -> bool:
     text = str(value).strip().lower()
     if text in _TRUE_WORDS:
         return True
-    if text in _FALSE_WORDS:
-        return False
-    raise rejected(column.key, f"列「{column.name}」需要布尔值，收到 {value!r}")
+    return False if text in _FALSE_WORDS else None

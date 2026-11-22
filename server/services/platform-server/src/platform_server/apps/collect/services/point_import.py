@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.db import commit_before_receipt
 from lib.errors.base import FieldError
 from lib.logging import get_logger
 from platform_server.apps.collect.crud import point_crud
@@ -16,6 +17,7 @@ from platform_server.apps.collect.schemas.point_import import (
     PointImportOut,
 )
 from platform_server.apps.collect.services import (
+    audit,
     point_service,
     source_service,
 )
@@ -37,9 +39,13 @@ _logger = get_logger("platform.collect.point_import")
 
 
 async def import_points(
-    session: AsyncSession, *, bus: CommandBus, payload: PointImportIn
+    session: AsyncSession,
+    *,
+    bus: CommandBus,
+    payload: PointImportIn,
+    actor: audit.AuditActor,
 ) -> PointImportOut:
-    """导入一批点位并提交。Args: session, bus, payload。"""
+    """导入一批点位并提交。Args: session, bus, payload, actor。"""
     point_service.raise_if_duplicated_codes(
         [item.code for item in payload.items]
     )
@@ -66,8 +72,8 @@ async def import_points(
         else []
     )
     raise_if_rejected(checks, field_of=addresses)
-    result = await _save_import(session, payload, checks)
-    await session.commit()
+    result = await _save_import(session, payload, checks, actor)
+    await commit_before_receipt(session)
     _logger.info(
         "collect_points_imported",
         "点位已导入",
@@ -79,10 +85,16 @@ async def import_points(
 
 
 async def _save_import(
-    session: AsyncSession, payload: PointImportIn, checks: list[AddressCheckOut]
+    session: AsyncSession,
+    payload: PointImportIn,
+    checks: list[AddressCheckOut],
+    actor: audit.AuditActor,
 ) -> PointImportOut:
-    """锁定匹配项后应用非空字段。Args: session, payload, checks。"""
-    await source_service.require_source(session, payload.source_id)
+    """锁定匹配项后应用非空字段。Args: session, payload, checks, actor。"""
+    # 与来源级联删除采用相同的加锁顺序。
+    await source_service.require_source(
+        session, payload.source_id, should_lock=True
+    )
     found = await point_crud.lock_by_codes(
         session,
         payload.source_id,
@@ -90,7 +102,8 @@ async def _save_import(
     )
     existing = {point.code: point for point in found}
     points: list[CollectPoint] = []
-    created_count = updated_count = 0
+    created: list[CollectPoint] = []
+    updated_count = 0
     for position, item in enumerate(payload.items):
         point = existing.get(item.code)
         if point is None:
@@ -99,17 +112,26 @@ async def _save_import(
                 source_id=payload.source_id, **validated.model_dump()
             )
             point_crud.add(session, point)
-            created_count += 1
-        elif not payload.is_skipping_existing and _apply_item(point, item):
-            updated_count += 1
+            created.append(point)
+        elif not payload.is_skipping_existing:
+            before = audit.snapshot(point)
+            if _apply_item(point, item):
+                updated_count += 1
+                audit.record_update(
+                    session, actor, point, before, item.model_fields_set
+                )
         points.append(point)
     await _flush_import(session)
+    for point in created:
+        audit.record_configuration(
+            session, actor, point, audit.ConfigurationChange("created")
+        )
     return PointImportOut(
         items=[to_point_out(point) for point in points],
         address_checks=checks,
-        created_count=created_count,
+        created_count=len(created),
         updated_count=updated_count,
-        unchanged_count=len(points) - created_count - updated_count,
+        unchanged_count=len(points) - len(created) - updated_count,
     )
 
 

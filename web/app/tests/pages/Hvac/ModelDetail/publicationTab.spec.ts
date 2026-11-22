@@ -6,7 +6,16 @@
  * 组件真挂起来才拦得住。
  */
 import { createPinia, setActivePinia } from 'pinia'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from 'vitest'
+import { effectScope } from 'vue'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import type { AcModelPublication, ModelPublishResult } from '@dt/contracts'
 import { DtButton, useConfirm, useToast } from '@dt/ui'
@@ -14,7 +23,9 @@ import { DtButton, useConfirm, useToast } from '@dt/ui'
 import { BizError } from '@/api/client'
 import * as hvac from '@/api/hvac'
 import * as opcua from '@/api/opcua'
+import PublicationPanel from '@/pages/Hvac/ModelDetail/components/PublicationPanel.vue'
 import DetailPage from '@/pages/Hvac/ModelDetail/index.vue'
+import { usePublication } from '@/pages/Hvac/ModelDetail/scripts/usePublication'
 import { useAuthStore } from '@/stores/auth'
 import { STAMP, model, predictionPage } from '@/testing/modelFixtures'
 
@@ -230,6 +241,20 @@ async function openTab() {
   return wrapper
 }
 
+async function openPublication() {
+  const scope = effectScope()
+  onTestFinished(() => scope.stop())
+  const controller = scope.run(() => usePublication(() => 'm1', model))
+  if (controller === undefined) throw new Error('发布配置页签未初始化')
+  const wrapper = mount(PublicationPanel, {
+    attachTo: document.body,
+    props: { publication: controller },
+  })
+  await controller.load()
+  await flushPromises()
+  return { controller, wrapper }
+}
+
 describe('点位绑定页签', () => {
   it('⚠ 不点进去就不打 opcua-server——页签是懒加载的', async () => {
     mount(DetailPage, { attachTo: document.body })
@@ -243,7 +268,7 @@ describe('点位绑定页签', () => {
       .mockResolvedValue(publication())
     await openTab()
     expect(opcua.listInstances).toHaveBeenCalled()
-    expect(read).toHaveBeenCalledWith('m1')
+    expect(read).toHaveBeenCalledWith('m1', expect.any(AbortSignal))
   })
 
   it('绑齐时把「已绑几个」说出来', async () => {
@@ -275,11 +300,11 @@ describe('点位绑定页签', () => {
 
   it('还没配过时不报错，只是一份空表单', async () => {
     vi.spyOn(hvac, 'getModelPublication').mockRejectedValue(
-      new BizError(40401, 'not found', 404, 'trace'),
+      new BizError(41625, 'not configured', 404, 'trace'),
     )
     const wrapper = await openTab()
     expect(wrapper.text()).toContain('还没下发过')
-    expect(wrapper.text()).not.toContain('not found')
+    expect(wrapper.text()).not.toContain('not configured')
   })
 
   it('⚠ 读配置的其他失败照实报错，不许冒充「没配过」', async () => {
@@ -288,6 +313,95 @@ describe('点位绑定页签', () => {
     )
     const wrapper = await openTab()
     expect(wrapper.text()).toContain('平台暂时不可用')
+  })
+
+  it.each([
+    new BizError(50001, '发布配置暂时不可用', 503, 'trace'),
+    new BizError(40401, '路由或模型不存在', 404, 'trace'),
+  ])('配置读取未确认时，即便有草稿也不能保存', async (failure) => {
+    vi.spyOn(hvac, 'getModelPublication').mockRejectedValue(failure)
+    const put = vi
+      .spyOn(hvac, 'putModelPublication')
+      .mockResolvedValue(publication())
+    const { controller, wrapper } = await openPublication()
+
+    controller.selectInstance(publication().opcua_instance_id)
+    await flushPromises()
+
+    expect(await controller.save()).toBe(false)
+    expect(put).not.toHaveBeenCalled()
+    const saveButton = wrapper
+      .findAll('button')
+      .find((button) => button.text() === '保存绑定')
+    expect(saveButton?.attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).toContain(failure.message)
+  })
+
+  it('曾读过的配置在重读失败后继续展示，保存先等待确认', async () => {
+    vi.spyOn(hvac, 'getModelPublication')
+      .mockResolvedValueOnce(publication())
+      .mockRejectedValueOnce(
+        new BizError(50001, '发布配置暂时不可用', 503, 'trace'),
+      )
+    const put = vi
+      .spyOn(hvac, 'putModelPublication')
+      .mockResolvedValue(publication())
+    const { controller } = await openPublication()
+
+    await controller.load()
+    expect(controller.saved.value?.recommendation_node_id).toBe(
+      publication().recommendation_node_id,
+    )
+    controller.setEnabled(!controller.draft.value.isEnabled)
+
+    expect(await controller.save()).toBe(false)
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  it('重读后恢复既有推荐点，修改后才允许保存', async () => {
+    const read = vi
+      .spyOn(hvac, 'getModelPublication')
+      .mockRejectedValueOnce(
+        new BizError(50001, '发布配置暂时不可用', 503, 'trace'),
+      )
+      .mockResolvedValueOnce(publication())
+    const put = vi
+      .spyOn(hvac, 'putModelPublication')
+      .mockResolvedValue(publication())
+    const { controller, wrapper } = await openPublication()
+    const retry = wrapper
+      .findAll('button')
+      .find((button) => button.text() === '重新读取绑定')
+    expect(retry).toBeDefined()
+    await retry?.trigger('click')
+    await flushPromises()
+
+    expect(controller.draft.value.recommendationNodeId).toBe(
+      publication().recommendation_node_id,
+    )
+    controller.setEnabled(!controller.draft.value.isEnabled)
+    expect(await controller.save()).toBe(true)
+    expect(read).toHaveBeenCalledTimes(2)
+    expect(put).toHaveBeenCalledWith(
+      'm1',
+      expect.objectContaining({
+        recommendation_node_id: publication().recommendation_node_id,
+      }),
+    )
+  })
+
+  it('专用未配置 404 确认后可以首次保存绑定', async () => {
+    vi.spyOn(hvac, 'getModelPublication').mockRejectedValue(
+      new BizError(41625, '还没有配置', 404, 'trace'),
+    )
+    const put = vi
+      .spyOn(hvac, 'putModelPublication')
+      .mockResolvedValue(publication())
+    const { controller } = await openPublication()
+
+    controller.selectInstance(publication().opcua_instance_id)
+    expect(await controller.save()).toBe(true)
+    expect(put).toHaveBeenCalledOnce()
   })
 
   it('上一拍失败时把原因摆出来', async () => {

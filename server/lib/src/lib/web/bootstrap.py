@@ -62,12 +62,12 @@ def _mount_probes(
         return JSONResponse(status_code=200, content={"status": "alive"})
 
     async def ready() -> JSONResponse:
+        failed = await _probe_all(probes) if gate.is_ready else []
         if not gate.is_ready:
             return JSONResponse(
                 status_code=503,
                 content={"status": "not_ready", "reason": gate.reason},
             )
-        failed = await _probe_all(probes)
         if failed:
             return JSONResponse(
                 status_code=503,
@@ -124,6 +124,7 @@ def create_app(
         openapi_url=f"{prefix}/openapi.json",
         lifespan=lifespan,
     )
+    app.state.lifespan_runner = runner
     app.add_middleware(
         RequestContextMiddleware, health_paths=_health_paths(prefix)
     )

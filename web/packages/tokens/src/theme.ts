@@ -27,32 +27,63 @@ export function readToken(
   return value || fallback
 }
 
-/** 换肤只会动这两个属性：内联变量写在 style 上，明暗档位挂在 class 上。 */
+/** 主题可能由内联样式或样式类改变。 */
 const THEME_ATTRS = ['style', 'class']
 
+interface ThemeObservation {
+  themeTarget?: Element
+  onLayoutChange?: () => void
+}
+
+/** 读取级联变量与图表兜底前景色。 */
+function computedTheme(target: Element): Map<string, string> {
+  const style = getComputedStyle(target)
+  const values = new Map([['color', style.color]])
+  for (let index = 0; index < style.length; index += 1) {
+    const name = style.item(index)
+    if (name.startsWith('--')) values.set(name, style.getPropertyValue(name))
+  }
+  return values
+}
+
+/** 比较两次级联结果，忽略属性排列顺序。 */
+function themeChanged(
+  previous: Map<string, string>,
+  current: Map<string, string>,
+): boolean {
+  if (previous.size !== current.size) return true
+  for (const [name, value] of current) {
+    if (previous.get(name) !== value) return true
+  }
+  return false
+}
+
 /**
- * 侦测换肤：主题引擎把 token 写成宿主元素的内联变量，任一祖先的 `style` /
- * `class` 变了就意味着当前级联下的取值可能变了。返回取消观察的函数。
- * ⚠ 从 `host` 的**父节点**起算：写变量的是舞台根而不是 host 自己，
- * 只观察 host 会一次回调都收不到。
+ * 观察祖先的换肤并返回解除函数。
  * @param host 起算元素，通常是组件根
- * @param onChange 主题可能变化时的回调，同一批变更可能连着来多次
+ * @param onChange 当前生效的主题变化时回调
+ * @param options 读取主题的元素，以及需要复查布局时的回调
  */
 export function observeThemeChange(
   host: Element,
   onChange: () => void,
+  { themeTarget = host, onLayoutChange }: ThemeObservation = {},
 ): () => void {
   if (typeof MutationObserver === 'undefined') return () => {}
-  const observers: MutationObserver[] = []
+  let previous = computedTheme(themeTarget)
+  const observer = new MutationObserver(() => {
+    const current = computedTheme(themeTarget)
+    if (!themeChanged(previous, current)) {
+      onLayoutChange?.()
+      return
+    }
+    previous = current
+    onChange()
+  })
   let node = host.parentElement
   while (node) {
-    const observer = new MutationObserver(onChange)
     observer.observe(node, { attributes: true, attributeFilter: THEME_ATTRS })
-    observers.push(observer)
-    if (node === document.documentElement) break
     node = node.parentElement
   }
-  return () => {
-    for (const observer of observers) observer.disconnect()
-  }
+  return () => observer.disconnect()
 }

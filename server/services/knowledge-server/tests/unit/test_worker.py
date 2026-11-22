@@ -134,7 +134,7 @@ def test_consumers_are_an_explicit_tuple(settings: Settings) -> None:
 
     runtime = build_runtime(build_container(settings), wait)
     assert isinstance(runtime.consumers, tuple)
-    assert len(runtime.consumers) == 1
+    assert len(runtime.consumers) == 2
     assert runtime.pool is not None
     runtime.pool.close()
 

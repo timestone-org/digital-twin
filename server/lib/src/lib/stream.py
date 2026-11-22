@@ -41,25 +41,33 @@ local touched = redis.call(
 return #touched
 """
 
+# 清理失败时仍返回已成功的确认，条目留在流里。
+_DELETE_IF_SINGLE_GROUP = """
+local function delete_if_single_group(stream, entry_id)
+  local ok, groups = pcall(redis.call, 'XINFO', 'GROUPS', stream)
+  if ok and #groups == 1 then
+    pcall(redis.call, 'XDEL', stream, entry_id)
+  end
+end
+"""
+
 # XACK 不看 owner；同一 Lua 原子段先核对，避免旧消费者确认新 owner 的活。
-# 给了 ARGV[4]='1' 时确认成功后顺手删掉条目
-_ACK_IF_OWNED_SCRIPT = """
+_ACK_IF_OWNED_SCRIPT = _DELETE_IF_SINGLE_GROUP + """
 local pending = redis.call('XPENDING', KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
 if #pending == 0 or pending[1][2] ~= ARGV[2] then
   return 0
 end
 local acked = redis.call('XACK', KEYS[1], ARGV[1], ARGV[3])
 if acked == 1 and ARGV[4] == '1' then
-  redis.call('XDEL', KEYS[1], ARGV[3])
+  delete_if_single_group(KEYS[1], ARGV[3])
 end
 return acked
 """
 
-# 确认并删除，同一 Lua 原子段：只确认不删的话条目永远留在流里
-_ACK_AND_DELETE_SCRIPT = """
+_ACK_AND_DELETE_SCRIPT = _DELETE_IF_SINGLE_GROUP + """
 local acked = redis.call('XACK', KEYS[1], ARGV[1], ARGV[2])
 if acked == 1 then
-  redis.call('XDEL', KEYS[1], ARGV[2])
+  delete_if_single_group(KEYS[1], ARGV[2])
 end
 return acked
 """
@@ -111,8 +119,8 @@ class StreamLike(Protocol):
 class RedisStream:
     """Redis Stream 客户端。驱动异常一律收敛成 `DependencyUnavailable`。
 
-    ⚠ `should_delete_on_ack` 只给**单消费组**的作业流开：确认即删，流才不会
-    单调涨；多个消费组共读一条流时，先确认的那组会把别组还没读的条目删掉。
+    `should_delete_on_ack` 供独占消费组的作业流使用。只有确认成功且流上
+    仅有一个消费组时才清理条目；清理需要允许 XINFO GROUPS 和 XDEL。
     """
 
     def __init__(

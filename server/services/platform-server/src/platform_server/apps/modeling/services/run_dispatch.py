@@ -63,6 +63,7 @@ class DispatchOptions:
     bdm_connection: BdmConnection | None = None
     pool: NodePool | None = None
     stale_after_s: float = 3600
+    business_timezone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -131,6 +132,7 @@ async def _run_claimed(
             execution=Execution(
                 sources=sources,
                 tz_offset_minutes=options.tz_offset_minutes,
+                business_timezone=options.business_timezone,
                 runner=options.runner,
                 should_cancel=lambda: _is_cancelled(sessions, run_id),
                 on_node_finished=lambda node: _persist(
@@ -140,6 +142,7 @@ async def _run_claimed(
                     _Sinks(
                         store=options.store,
                         is_keeping_frames=claimed.is_keeping_frames,
+                        pool=options.pool,
                     ),
                 ),
             ),
@@ -272,6 +275,7 @@ class _Sinks:
 
     store: ObjectStore | None
     is_keeping_frames: bool
+    pool: NodePool | None
 
 
 async def _persist(
@@ -296,7 +300,7 @@ async def _persist(
     )
     frames = (
         await frame_export.write_all(
-            sinks.store, str(run_id), node.node_id, node.frames
+            sinks.store, str(run_id), node.node_id, node.frames, pool=sinks.pool
         )
         if sinks.is_keeping_frames
         else {}

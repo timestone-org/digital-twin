@@ -34,7 +34,7 @@ FUNCTION_DOCS: tuple[FunctionDoc, ...] = (
         name="ROUND",
         category="math",
         signature="ROUND(x, n)",
-        description="四舍五入到 n 位小数，n 省略即取整",
+        description="四舍五入到 n 位，中点远离零。省略 n 时取整。",
         example="ROUND({流量}, 2)",
         args=("x", "小数位"),
     ),

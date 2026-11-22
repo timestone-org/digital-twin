@@ -32,6 +32,7 @@ from knowledge_server.apps.chat.services import scope as scope_service
 from knowledge_server.apps.chat.services.citations import CARRIED_KEY
 from knowledge_server.apps.chat.services.scope import BaseScope
 from lib.auth import CallerContext
+from lib.db import commit_before_receipt
 from lib.logging import get_logger
 from lib.web import Page, PageParams
 
@@ -131,13 +132,16 @@ async def create_session(
     )
     session_crud.add(session, chat_session)
     await session.flush()
+    result = await _presented(session, chat_session)
+    # 幂等层会在服务返回时缓存结果，须先确认这次建会话已经提交。
+    await commit_before_receipt(session)
     _logger.info(
         "kb_chat_session_created",
         "对话已创建",
-        session_id=str(chat_session.id),
+        session_id=str(result.id),
         is_scoped=chosen is not None,
     )
-    return await _presented(session, chat_session)
+    return result
 
 
 async def update_session(

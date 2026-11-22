@@ -24,6 +24,7 @@ class RecoveringPubSub(PubSub):
         self.messages: asyncio.Queue[dict[str, object] | Exception] = (
             asyncio.Queue()
         )
+        self.attempts: asyncio.Queue[None] = asyncio.Queue()
         self.failed = asyncio.Event()
         self.finished = asyncio.Event()
 
@@ -31,6 +32,7 @@ class RecoveringPubSub(PubSub):
         self, channels: Sequence[str]
     ) -> AsyncIterator[tuple[str, dict[str, object]]]:
         assert channels == ["ch"]
+        self.attempts.put_nowait(None)
         try:
             while True:
                 message = await self.messages.get()
@@ -121,6 +123,49 @@ async def test_recovery_reconnects_clients_that_missed_initial_values() -> None:
         async with asyncio.timeout(2):
             await arrived.wait()
         assert close.await_args_list == [((1013,),), ((1013,),)]
+    finally:
+        await listener.stop()
+
+
+@pytest.mark.usefixtures("fast_reconnect")
+async def test_persistent_outage_closes_clients_only_at_transitions() -> None:
+    pubsub = RecoveringPubSub()
+    connections = ConnectionRegistry()
+    arrived = asyncio.Event()
+    initial = make_connection([], arrived)
+    first_close = AsyncMock()
+    initial.close = first_close
+    await connections.add(initial)
+    listener = FanoutListener(
+        pubsub=pubsub, connections=connections, channel="ch"
+    )
+    await listener.start()
+    try:
+        async with asyncio.timeout(2):
+            await pubsub.attempts.get()
+            pubsub.messages.put_nowait(DependencyUnavailable("离线"))
+            await pubsub.attempts.get()
+            first_close.assert_awaited_once_with(1013)
+            await connections.remove(initial.id)
+
+            reconnecting = make_connection([], arrived)
+            retry_close = AsyncMock()
+            reconnecting.close = retry_close
+            await connections.add(reconnecting)
+            await connections.bind(reconnecting.id, "test:1")
+            for _ in range(2):
+                pubsub.messages.put_nowait(DependencyUnavailable("离线"))
+                await pubsub.attempts.get()
+            retry_close.assert_not_awaited()
+
+            pubsub.messages.put_nowait({"topic": "test:1", "seq": 1})
+            await arrived.wait()
+            retry_close.assert_awaited_once_with(1013)
+
+            arrived.clear()
+            pubsub.messages.put_nowait({"topic": "test:1", "seq": 2})
+            await arrived.wait()
+            retry_close.assert_awaited_once_with(1013)
     finally:
         await listener.stop()
 

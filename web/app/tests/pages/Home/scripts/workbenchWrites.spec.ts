@@ -272,3 +272,38 @@ describe('读导入文件', () => {
     await expect(readExportFile(file)).rejects.toThrow()
   })
 })
+
+it('把新建和覆盖的包内联动选择交给同一导入入口', async () => {
+  const spy = vi
+    .spyOn(transferApi, 'importDashboard')
+    .mockResolvedValue(imported('包内对照'))
+  for (const targetDashboardId of [null, 'd7']) {
+    await importInto('p1', PACKAGE, {
+      newName: '屏',
+      targetDashboardId,
+      interactionNodeMap: { old: 'key' },
+    })
+    expect(spy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ interactionNodeMap: { old: 'key' } }),
+    )
+  }
+})
+
+it('模板创建入口保留已确认的联动节点对照', async () => {
+  const spy = vi
+    .spyOn(templatesApi, 'instantiateDashboardTemplate')
+    .mockResolvedValue(imported('模板新屏'))
+  await createDashboardFrom({
+    startMode: 'template',
+    projectId: 'p1',
+    templateId: 't',
+    name: '',
+    designWidth: 1920,
+    designHeight: 1080,
+    interactionNodeMap: { x: 'a' },
+  })
+  expect(spy).toHaveBeenCalledWith(
+    't',
+    expect.objectContaining({ interactionNodeMap: { x: 'a' } }),
+  )
+})

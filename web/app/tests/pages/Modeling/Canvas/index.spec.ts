@@ -134,6 +134,39 @@ async function open(path = '/modeling/pipelines/p1', isAddingNode = true) {
 }
 
 describe('普通未保存画布离开', () => {
+  it('确认建模页后另一守卫拒绝离开，保留尚未应用的参数草稿', async () => {
+    vi.mocked(modeling.listModelingOperators).mockResolvedValue([
+      {
+        ...OPERATOR,
+        config_schema: {
+          properties: {
+            values: {
+              type: 'array',
+              items: { type: 'integer', minimum: 1 },
+              default: [1],
+            },
+          },
+        },
+      },
+    ])
+    const { router, wrapper } = await open()
+    await wrapper
+      .findAll('.dt-ml-node__action')
+      .find((button) => button.text() === '参数')
+      ?.trigger('click')
+    await wrapper.get('.dt-ml-form input').setValue('0')
+    router.beforeEach((to) => to.path !== '/workbench')
+    const leaving = router.push('/workbench')
+    await flushPromises()
+    expect(useConfirm().pending.value?.title).toBe('放弃未保存的画布？')
+    useConfirm().resolve(true)
+    await leaving
+    expect(router.currentRoute.value.path).toBe('/modeling/pipelines/p1')
+    expect(
+      wrapper.get<HTMLInputElement>('.dt-ml-form input').element.value,
+    ).toBe('0')
+  })
+
   it('算子和画布之间提供分隔线并保留画布节点', async () => {
     const { wrapper } = await open()
     const splitter = wrapper.get('[role="separator"]')

@@ -31,8 +31,13 @@ from platform_server.apps.hvac.services.ac_startup_extract import (
     extract_window,
     to_episode_row,
 )
-from platform_server.apps.hvac.services.ac_startup_rules import LOGIC_VERSION
+from platform_server.apps.hvac.services.ac_startup_rules import (
+    LOGIC_VERSION,
+    Episode,
+    fingerprint_logic_version,
+)
 from platform_server.apps.hvac.services.ac_startup_shards import daily_range
+from platform_server.apps.hvac.services.sessions import Sessions
 
 _logger = get_logger("platform.hvac.ac_startup_daily")
 
@@ -100,7 +105,7 @@ def day_bounds(day: date, timezone: str) -> TimeWindow:
 
 
 async def append_day(
-    session: AsyncSession,
+    sessions: Sessions,
     context: ExtractionContext,
     *,
     room_id: uuid.UUID,
@@ -111,8 +116,48 @@ async def append_day(
 
     ⚠ 全程幂等：整窗替换，同一天跑多少遍结果都一样。
 
-    Args: session, context, room_id, day, timezone。
+    Args: sessions, context, room_id, day, timezone。
     """
+    async with sessions.session() as read:
+        prepared = await _daily_snapshot(read, context, room_id, timezone)
+    if isinstance(prepared, DailyRun):
+        return prepared
+    batch_id, frozen = prepared
+    bounds = day_bounds(day, timezone)
+    window = daily_range(bounds.start, bounds.end, rules=context.rules)
+    episodes = await extract_window(frozen, window=window)
+    async with sessions.session() as write:
+        current = await load_configuration(
+            write,
+            room_id,
+            timezone=timezone,
+            rules=context.rules,
+            should_lock_units=True,
+        )
+        batch = await ac_startup_batch_crud.find_current(write, room_id)
+        if (
+            batch is None
+            or batch.id != batch_id
+            or current.fingerprint() != batch.params_fingerprint
+        ):
+            return DailyRun(
+                outcome=DAILY_RUN_SKIPPED,
+                reason="抽取期间当前批次或配置发生变化，请全量重算",
+            )
+        return await _append(
+            write,
+            batch=batch,
+            window=TimeWindow(start=window.write_start, end=window.write_end),
+            episodes=episodes,
+        )
+
+
+async def _daily_snapshot(
+    session: AsyncSession,
+    context: ExtractionContext,
+    room_id: uuid.UUID,
+    timezone: str,
+) -> tuple[uuid.UUID, ExtractionContext] | DailyRun:
     batch = await ac_startup_batch_crud.find_current(session, room_id)
     if batch is None:
         return DailyRun(
@@ -131,13 +176,7 @@ async def append_day(
     mismatch = _fingerprint_mismatch(batch, context)
     if mismatch is not None:
         return DailyRun(outcome=DAILY_RUN_SKIPPED, reason=mismatch)
-    return await _append(
-        session,
-        batch_context(batch, context),
-        batch=batch,
-        day=day,
-        timezone=timezone,
-    )
+    return batch.id, batch_context(batch, context)
 
 
 def _fingerprint_mismatch(
@@ -150,7 +189,9 @@ def _fingerprint_mismatch(
 
     Args: batch, context。
     """
-    if batch.logic_version != LOGIC_VERSION:
+    if fingerprint_logic_version(batch.logic_version) != (
+        fingerprint_logic_version(LOGIC_VERSION)
+    ):
         return (
             f"当前批次按抽取逻辑 v{batch.logic_version} 算，"
             f"现在是 v{LOGIC_VERSION}，请先全量重算"
@@ -170,39 +211,19 @@ def _fingerprint_mismatch(
 
 async def _append(
     session: AsyncSession,
-    context: ExtractionContext,
     *,
     batch: AcStartupBatch,
-    day: date,
-    timezone: str,
+    window: TimeWindow,
+    episodes: list[Episode],
 ) -> DailyRun:
-    """取数、抽取、整窗替换、顺延批次窗口。
-
-    Args: session, context, batch, day, timezone。
-    """
-    bounds = day_bounds(day, timezone)
-    window = daily_range(bounds.start, bounds.end, rules=context.rules)
-    episodes = await extract_window(
-        session, context, room_id=batch.room_id, window=window
-    )
-    current = await load_configuration(
-        session,
-        batch.room_id,
-        timezone=timezone,
-        rules=context.rules,
-        should_lock_units=True,
-    )
-    if current.fingerprint() != batch.params_fingerprint:
-        return DailyRun(
-            outcome=DAILY_RUN_SKIPPED, reason="抽取期间配置发生变化，请全量重算"
-        )
+    """按业务日替换事件，顺延批次。Args: session, batch, window, episodes。"""
     replaced = await ac_startup_episode_crud.replace_window(
         session,
         batch_id=batch.id,
-        window=TimeWindow(start=window.write_start, end=window.write_end),
+        window=window,
         episodes=[to_episode_row(batch, episode) for episode in episodes],
     )
-    await _extend(session, batch, until=bounds.end)
+    await _extend(session, batch, until=window.end)
     return DailyRun(
         outcome=DAILY_RUN_APPENDED,
         appended=len(episodes),

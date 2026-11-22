@@ -122,7 +122,7 @@ async def delete_table(
     _write: ManageDep,
     is_forced: Annotated[bool, Query(alias="force")] = False,
 ) -> Response:
-    """删台账。下面还有数据行时先确认；`force` 连历史一起删。
+    """删除台账。409 列出历史数据和其他台账的公式引用。确认后用 `force` 删除。
 
     Args: table_id, session, _write, is_forced。
     """

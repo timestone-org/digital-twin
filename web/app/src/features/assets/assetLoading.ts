@@ -47,13 +47,20 @@ export function messageOf(error: unknown, fallback: string): string {
 /**
  * 类型目录只取一次：它是代码里的常量表，不会在一次会话里变。
  * @param state 素材库状态
+ * @param signal 当前加载失效时取消写回
  */
-async function ensureKinds(state: LibraryState): Promise<void> {
+async function ensureKinds(
+  state: LibraryState,
+  signal: AbortSignal,
+): Promise<void> {
   if (state.kinds.value.length > 0) return
   try {
-    state.kinds.value = await listAssetKinds()
+    const kinds = await listAssetKinds()
+    if (!signal.aborted) state.kinds.value = kinds
   } catch (caught) {
-    state.error.value = messageOf(caught, '素材类型取不到')
+    if (!signal.aborted) {
+      state.error.value = messageOf(caught, '素材类型取不到')
+    }
   }
 }
 
@@ -85,21 +92,26 @@ export function createLoader(
     state.activeKind.value = kind
     state.isLoading.value = true
     state.error.value = ''
-    await ensureKinds(state)
     const offset = mode === 'append' ? state.loaded.value : 0
     const q = state.keyword.value
-    await raced.run(() => listAssets(kind, { limit: PAGE_SIZE, offset, q }), {
-      // 慢的那次后返回时整个丢弃：写回去就是「点了图标却出模型」
-      ok: (rows) => {
-        state.assets.value =
-          mode === 'append' ? appended(state.assets.value, rows) : rows
-        state.loaded.value = offset + rows.length
-        state.hasMore.value = rows.length === PAGE_SIZE
+    await raced.run(
+      async (signal) => {
+        await ensureKinds(state, signal)
+        if (signal.aborted) return []
+        return listAssets(kind, { limit: PAGE_SIZE, offset, q })
       },
-      fail: (caught) => {
-        state.error.value = messageOf(caught, '素材列表取不到')
+      {
+        ok: (rows) => {
+          state.assets.value =
+            mode === 'append' ? appended(state.assets.value, rows) : rows
+          state.loaded.value = offset + rows.length
+          state.hasMore.value = rows.length === PAGE_SIZE
+        },
+        fail: (caught) => {
+          state.error.value = messageOf(caught, '素材列表取不到')
+        },
+        settled: () => (state.isLoading.value = false),
       },
-      settled: () => (state.isLoading.value = false),
-    })
+    )
   }
 }

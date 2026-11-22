@@ -91,6 +91,7 @@ describe('outcomeLabel / outcomeIntent', () => {
     ['set_changed', '中途改了组合'],
     ['timeout', '超时未达标'],
     ['data_gap', '数据有缺口'],
+    ['unassessed', '未评估'],
   ])('%s 说成「%s」', (outcome, label) => {
     expect(outcomeLabel(outcome)).toBe(label)
   })
@@ -105,10 +106,11 @@ describe('outcomeLabel / outcomeIntent', () => {
     expect(outcomeIntent('data_gap')).toBe('danger')
   })
 
-  it('筛选选项含「全部」，四个结局一个不少', () => {
+  it('筛选选项含「全部」与未评估', () => {
     const options = outcomeOptions()
     expect(options[0]?.value).toBe('')
-    expect(options).toHaveLength(5)
+    expect(options).toContainEqual({ value: 'unassessed', label: '未评估' })
+    expect(options).toHaveLength(6)
   })
 })
 

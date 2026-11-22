@@ -44,6 +44,7 @@ class RouteRuleCache:
     clock: Clock = utcnow
     _rules: list[RuleView] = field(default_factory=list[RuleView])
     _loaded_at: datetime | None = None
+    _generation: int = 0
 
     async def rules(self, session: AsyncSession) -> list[RuleView]:
         """取判定用的规则集，必要时回源。
@@ -55,13 +56,18 @@ class RouteRuleCache:
             age = (now - self._loaded_at).total_seconds()
             if age < self.ttl_s:
                 return self._rules
+        generation = self._generation
         rows = await route_rule_crud.list_enabled(session)
-        self._rules = [_to_view(row) for row in rows]
-        self._loaded_at = now
-        return self._rules
+        views = [_to_view(row) for row in rows]
+        # 提交失效期间读到的旧快照不能再次成为共享缓存。
+        if generation == self._generation:
+            self._rules = views
+            self._loaded_at = now
+        return views
 
     def invalidate(self) -> None:
         """丢弃缓存，下次读立刻回源。"""
+        self._generation += 1
         self._loaded_at = None
 
 

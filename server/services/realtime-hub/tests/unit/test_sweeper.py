@@ -342,7 +342,7 @@ async def test_a_stuck_close_neither_stalls_the_sweep_nor_keeps_the_feed(
 class _SilentSocket:
     """不收帧、关闭也卡住的 socket：对端在 TCP 层停读的样子。"""
 
-    async def receive_text(self) -> str:
+    async def receive(self) -> dict[str, object]:
         await asyncio.Event().wait()
         raise AssertionError("静默连接不会收到入站帧")
 

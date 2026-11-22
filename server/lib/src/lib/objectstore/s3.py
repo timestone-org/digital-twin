@@ -7,8 +7,9 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import closing
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 import boto3
 from boto3.exceptions import Boto3Error, RetriesExceededError
@@ -26,6 +27,7 @@ from botocore.exceptions import (
 )
 
 from lib.objectstore.base import (
+    ObjectChanged,
     ObjectNotFound,
     ObjectStat,
     ObjectStoreError,
@@ -73,6 +75,15 @@ def _is_missing(error: ClientError) -> bool:
     return code in _MISSING_CODES or status == "404"
 
 
+def _is_changed(error: ClientError) -> bool:
+    """识别版本条件未满足。Args: error。"""
+    code = str(error.response.get("Error", {}).get("Code", ""))
+    status = str(
+        error.response.get("ResponseMetadata", {}).get("HTTPStatusCode", "")
+    )
+    return code == "PreconditionFailed" or status == "412"
+
+
 def _is_temporary(error: ClientError) -> bool:
     """只认明确的瞬时服务端故障，身份拒绝保持永久。Args: error。"""
     status = str(
@@ -82,6 +93,10 @@ def _is_temporary(error: ClientError) -> bool:
         return False
     code = str(error.response.get("Error", {}).get("Code", ""))
     return code in _TEMPORARY_CODES or status in _TEMPORARY_STATUSES
+
+
+class _CopyCondition(TypedDict, total=False):
+    CopySourceIfMatch: str
 
 
 class S3ObjectStore:
@@ -107,6 +122,23 @@ class S3ObjectStore:
             ContentType=content_type,
         )
 
+    async def put_if_absent(
+        self, key: str, data: bytes, *, content_type: str
+    ) -> bool:
+        """原子创建对象。Args: key, data, content_type。"""
+        try:
+            await self._call(
+                self._client.put_object,
+                Bucket=self._bucket,
+                Key=key,
+                Body=data,
+                ContentType=content_type,
+                IfNoneMatch="*",
+            )
+        except ObjectChanged:
+            return False
+        return True
+
     async def get_bytes(self, key: str) -> bytes:
         """读一个对象；不存在抛 `ObjectNotFound`。"""
         response = await self._call(
@@ -118,6 +150,40 @@ class S3ObjectStore:
         )
         body = cast(dict[str, Any], response)["Body"]
         return cast(bytes, await self._call(body.read, is_read=True))
+
+    async def read_prefix(
+        self, key: str, *, max_bytes: int, expected_etag: str
+    ) -> bytes:
+        """读取指定版本的前缀。Args: key, max_bytes, expected_etag。"""
+        if max_bytes <= 0:
+            raise ValueError("前缀长度必须为正数")
+        return cast(
+            bytes,
+            await self._call(
+                self._read_prefix,
+                key=key,
+                is_read=True,
+                object_key=key,
+                max_bytes=max_bytes,
+                expected_etag=expected_etag,
+            ),
+        )
+
+    def _read_prefix(
+        self, object_key: str, max_bytes: int, expected_etag: str
+    ) -> bytes:
+        """在线程中读取并关闭响应体。
+
+        Args: object_key, max_bytes, expected_etag。
+        """
+        response = self._client.get_object(
+            Bucket=self._bucket,
+            Key=object_key,
+            Range=f"bytes=0-{max_bytes - 1}",
+            IfMatch=f'"{expected_etag}"',
+        )
+        with closing(response["Body"]) as body:
+            return body.read(max_bytes)
 
     async def download_to(self, key: str, path: Path) -> None:
         """把对象流式写进本地文件，不整份过内存；不存在抛 `ObjectNotFound`。"""
@@ -163,14 +229,24 @@ class S3ObjectStore:
             etag=str(raw.get("ETag", "")).strip('"'),
         )
 
-    async def copy(self, source_key: str, target_key: str) -> None:
-        """服务端内复制，字节不经过本进程；源不存在抛 `ObjectNotFound`。"""
+    async def copy(
+        self,
+        source_key: str,
+        target_key: str,
+        *,
+        expected_etag: str | None = None,
+    ) -> None:
+        """服务端内复制。Args: source_key, target_key, expected_etag。"""
+        condition: _CopyCondition = {}
+        if expected_etag is not None:
+            condition["CopySourceIfMatch"] = f'"{expected_etag}"'
         await self._call(
             self._client.copy_object,
             Bucket=self._bucket,
             Key=target_key,
             CopySource={"Bucket": self._bucket, "Key": source_key},
             key=source_key,
+            **condition,
         )
 
     async def delete(self, key: str) -> None:
@@ -261,6 +337,8 @@ class S3ObjectStore:
         except ClientError as error:
             if key is not None and _is_missing(error):
                 raise ObjectNotFound(f"对象不存在：{key}") from error
+            if _is_changed(error):
+                raise ObjectChanged("对象版本已变化") from error
             if is_read and _is_temporary(error):
                 raise ObjectStoreUnavailable("对象存储暂时不可用") from error
             raise ObjectStoreError("对象存储拒绝了一次操作") from error

@@ -7,6 +7,9 @@ message 面向最终用户，不含表名、SQL、内网地址等内部信息。
 
 from lib.errors import AppError
 
+# 项目行与大屏行等待锁超时的 SQLSTATE
+LOCK_WAIT_EXPIRED = frozenset({"57014", "55P03"})
+
 
 class ProjectNotFound(AppError):
     """项目不存在，或存在但调用者无权看见。"""
@@ -51,7 +54,7 @@ class FieldKeyTaken(AppError):
 
 
 class VersionConflict(AppError):
-    """行版本与库里不符：有人在你之前改过这张大屏，请重新加载。"""
+    """等锁超时或行版本已变化，调用方需重新加载。"""
 
     code = 41007
     http_status = 409

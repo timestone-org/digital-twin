@@ -10,11 +10,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import Database
-from platform_server.apps.collect.crud import point_crud
+from platform_server.apps.collect.crud import point_crud, source_crud
 from platform_server.apps.collect.errors import PointCodeTaken
 from platform_server.apps.collect.models import CollectPoint, CollectSource
 from platform_server.apps.collect.schemas import PointItemIn
 from platform_server.apps.collect.schemas.point_import import PointImportIn
+from platform_server.apps.collect.services.audit import AuditActor
 from platform_server.apps.collect.services.point_import import (
     _flush_import,
     _save_import,
@@ -23,6 +24,7 @@ from platform_server.settings import Settings
 
 pytestmark = pytest.mark.requires_postgres
 SOURCE_ID = uuid.UUID("27a477cf-f741-495a-83ae-a1d258ab477e")
+AUDIT_ACTOR = AuditActor(id=uuid.UUID(int=1), source_ip=None, trace_id="1" * 32)
 
 
 @pytest.fixture
@@ -66,6 +68,8 @@ def simultaneous_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
             await barrier.wait()
         return found
 
+    # 绕开来源锁以构造两次都未命中，由真实唯一约束裁决。
+    monkeypatch.setattr(source_crud, "get_for_update", source_crud.get)
     monkeypatch.setattr(point_crud, "lock_by_codes", synchronized)
 
 
@@ -85,7 +89,7 @@ async def import_batch(database: Database, unique_code: str) -> object:
         }
     )
     async with database.session() as session:
-        return await _save_import(session, payload, [])
+        return await _save_import(session, payload, [], actor=AUDIT_ACTOR)
 
 
 @pytest.mark.usefixtures("simultaneous_lookup")

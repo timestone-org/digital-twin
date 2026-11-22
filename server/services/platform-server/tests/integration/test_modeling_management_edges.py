@@ -39,6 +39,7 @@ from platform_server.apps.modeling.schemas.management import (
     VersionListQuery,
 )
 from platform_server.apps.modeling.services import (
+    Actor,
     deployment_service,
     management_queries,
 )
@@ -375,6 +376,7 @@ async def test_deployment_projection_keeps_patch_metadata_and_exact_filters(
     changed = await deployment_service.update_deployment(
         db_session,
         deployment_id=identity,
+        actor=Actor(user_id="test", name="测试员"),
         payload=ModelDeploymentUpdateIn(
             expected_revision=1,
             name="新名称",

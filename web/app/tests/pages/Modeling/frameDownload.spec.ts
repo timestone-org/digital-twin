@@ -96,6 +96,28 @@ describe('全量结果下载交互', () => {
     expect(saveBytes).not.toHaveBeenCalled()
   })
 
+  it('可以在画布内取消下载并继续看同一份结果', async () => {
+    const pending = deferred()
+    readFrame.mockReturnValue(pending.promise)
+    const wrapper = mount(ResultView, { props: PROPS })
+    const click = async (label: string) => {
+      const button = wrapper
+        .findAll('button')
+        .find((item) => item.text() === label)
+      if (!button) throw new Error('缺少按钮 ' + label)
+      await button.trigger('click')
+    }
+    await click('下载全量结果')
+    await click('取消下载')
+    const signal: unknown = readFrame.mock.calls[0]?.[1]
+    expect(signal instanceof AbortSignal && signal.aborted).toBe(true)
+    pending.resolve(new Blob(['late']))
+    await flushPromises()
+    expect(saveBytes).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('下载全量结果')
+    wrapper.unmount()
+  })
+
   it('卸载后中止请求，迟到响应不再触发文件保存', async () => {
     const pending = deferred()
     readFrame.mockReturnValue(pending.promise)

@@ -52,6 +52,7 @@ class RuntimeParamOut(OutputModel):
     is_overridden: bool
     updated_at: Utc | None
     updated_by: str | None
+    updated_by_name: str | None = None
 
 
 class RuntimeParamWriteIn(InputModel):

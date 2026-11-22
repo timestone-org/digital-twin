@@ -32,7 +32,7 @@ from platform_server.apps.dashboard.services import (
 )
 from platform_server.apps.hvac.deps import get_ac_source_reader
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
-from platform_server.apps.modeling.services.artifact_io import ArtifactCache
+from platform_server.apps.modeling.services.inference_pool import InferencePool
 from platform_server.container import (
     IDEMPOTENCY_NAMESPACE,
     Container,
@@ -157,7 +157,7 @@ def build_container(
         ac_daily_lease=cast(Lease, FakeDependency()),
         nodes=cast(OpcuaClient, FakeNodeWriter()),
         object_store=FakeObjectStore(),
-        modeling_artifacts=ArtifactCache(),
+        model_inference=InferencePool(),
         credential_cipher=CredentialCipher("c" * 32),
         dataset=dataset_parts(
             cast(Database, database),
@@ -188,6 +188,7 @@ def test_the_external_source_is_closed_before_the_connection_pool() -> None:
     assert closing == [
         "dataset_backfill",
         "dataset_recompute",
+        "model_inference",
         "stream",
         "cache",
         "command_bus",

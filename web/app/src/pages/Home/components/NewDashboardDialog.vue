@@ -23,6 +23,9 @@ import type {
 } from '@dt/contracts'
 
 import type { DashboardSummary, ProjectSummary } from '@/api/dashboardWire'
+import InteractionNodeMapping from './InteractionNodeMapping.vue'
+import { useInteractionMapping } from '../scripts/useInteractionMapping'
+import { useTemplatePackage } from '../scripts/useTemplatePackage'
 import TemplateGallery from './TemplateGallery.vue'
 import {
   CUSTOM_PRESET_ID,
@@ -74,6 +77,10 @@ const height = ref(DEFAULT_DESIGN_HEIGHT)
 const sourceDashboardId = ref('')
 const templateId = ref('')
 const includePointBindings = ref(true)
+const preview = useTemplatePackage(() =>
+  props.open && startMode.value === 'template' ? templateId.value : '',
+)
+const mapping = useInteractionMapping(() => preview.payload.value)
 
 // ⚠ 填了一半误点遮罩就全没了；脏着时由 DtModal 拦下误关
 const { isDirty } = useFormDirty(
@@ -85,6 +92,7 @@ const { isDirty } = useFormDirty(
     height,
     sourceDashboardId,
     templateId,
+    computed(() => Object.fromEntries(mapping.choices.value)),
     includePointBindings,
   ],
   () => props.open,
@@ -116,7 +124,7 @@ const presetId = computed(() => presetIdFor(width.value, height.value))
 
 const canSubmit = computed(() => {
   if (props.loading || projectId.value === '') return false
-  if (startMode.value === 'template') return templateId.value !== ''
+  if (startMode.value === 'template') return mapping.ready.value
   if (name.value.trim() === '') return false
   return startMode.value !== 'copy' || sourceDashboardId.value !== ''
 })
@@ -187,7 +195,11 @@ function submit(): void {
     payload.sourceDashboardId = sourceDashboardId.value
     payload.includePointBindings = includePointBindings.value
   }
-  if (startMode.value === 'template') payload.templateId = templateId.value
+  if (startMode.value === 'template') {
+    payload.templateId = templateId.value
+    if (mapping.map.value !== undefined)
+      payload.interactionNodeMap = mapping.map.value
+  }
   emit('submit', payload)
 }
 </script>
@@ -264,6 +276,29 @@ function submit(): void {
           :active="open"
           :selected-id="templateId"
           @select="onTemplateSelect"
+        />
+        <p
+          v-if="preview.loading.value"
+          class="text-xs text-text-secondary"
+          role="status"
+        >
+          正在读取模板联动…
+        </p>
+        <DtNotice
+          v-else-if="preview.error.value"
+          icon="alert-triangle"
+          intent="warning"
+        >
+          {{ preview.error.value }}
+          <DtButton size="sm" variant="ghost" @click="preview.load"
+            >重试</DtButton
+          >
+        </DtNotice>
+        <InteractionNodeMapping
+          :review="mapping.review.value"
+          :choices="mapping.choices.value"
+          :disabled="loading ?? false"
+          @choose="mapping.choose"
         />
       </div>
 

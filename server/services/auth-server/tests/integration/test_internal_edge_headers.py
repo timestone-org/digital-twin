@@ -12,7 +12,8 @@ import uuid
 import httpx
 import pytest
 
-from auth_server.settings import API_PREFIX, INTERNAL_PREFIX
+from auth_server.settings import API_PREFIX, INTERNAL_PREFIX, Settings
+from lib.auth import SignedContext, sign_context, sign_named_context
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -26,6 +27,7 @@ SIGNED = (
     "x-auth-permissions",
     "x-auth-exp",
     "x-auth-sig",
+    "x-auth-sig-v2",
 )
 
 
@@ -70,6 +72,27 @@ async def test_reissued_headers_carry_the_same_identity(
     # 换的是过期时刻与签名，人与权限一个字都不该变
     assert response.headers["x-auth-user-id"] == first["x-auth-user-id"]
     assert response.headers["x-auth-permissions"] == first["x-auth-permissions"]
+
+
+async def test_normal_verify_and_reissue_associate_the_registered_name(
+    app_client: httpx.AsyncClient, settings: Settings
+) -> None:
+    received = await admin_headers(app_client)
+    renewed = await app_client.get(reissue(received["x-auth-user-id"]))
+    assert renewed.status_code == 200
+    for issued in (received, renewed.headers):
+        context = SignedContext(
+            issued["x-auth-user-id"],
+            issued["x-auth-role"],
+            issued["x-auth-permissions"],
+            int(issued["x-auth-exp"]),
+        )
+        assert issued["x-auth-username"] == "admin"
+        key = settings.edge_signing_secret.get_secret_value()
+        assert issued["x-auth-sig"] == sign_context(key, context)
+        assert issued.get("x-auth-sig-v2") == sign_named_context(
+            key, context, issued["x-auth-username"]
+        )
 
 
 async def test_the_new_expiry_is_pushed_forward(

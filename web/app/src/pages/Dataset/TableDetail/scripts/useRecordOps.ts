@@ -14,7 +14,7 @@ import { useConfirm, useToast } from '@dt/ui'
 import * as dataset from '@/api/dataset'
 import { describeError } from '@/composables/useAsyncList'
 import type { RecordRow, RevokeTarget } from './recordView'
-import { revokeCellMessage } from './recordView'
+import { recordRowRef, revokeCellMessage } from './recordView'
 import type { RecordsView } from './useRecords'
 import { reportRecompute, useRecompute } from './useRecompute'
 
@@ -65,11 +65,9 @@ async function removeRecord(deps: OpsDeps, row: RecordRow): Promise<void> {
   if (!agreed) return
   deps.busy.value = true
   try {
-    const receipt = await dataset.deleteDatasetRecord({
-      tableId: deps.tableId(),
-      rowId: row.record.row_id,
-      ts: row.record.ts,
-    })
+    const receipt = await dataset.deleteDatasetRecord(
+      recordRowRef(deps.tableId(), row.record),
+    )
     deps.toast.success('数据行已删除')
     noteStale(deps, receipt.has_stale_downstream)
     await deps.records.refresh()
@@ -98,11 +96,7 @@ async function revokeCell(deps: OpsDeps, target: RevokeTarget): Promise<void> {
   deps.busy.value = true
   try {
     const receipt = await dataset.clearDatasetRecordOverrides(
-      {
-        tableId: deps.tableId(),
-        rowId: target.row.record.row_id,
-        ts: target.row.record.ts,
-      },
+      recordRowRef(deps.tableId(), target.row.record),
       [target.columnKey],
     )
     if (receipt.cleared.length > 0) {

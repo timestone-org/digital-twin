@@ -10,6 +10,7 @@ import pytest
 from platform_server.apps.collect.errors import (
     BrowseUnsupported,
     CollectorUnreachable,
+    CollectorWriteUnconfirmed,
     CommandFailed,
     SourceOffline,
     WriteUnsupported,
@@ -261,7 +262,9 @@ async def test_a_reply_without_a_status_is_not_treated_as_success() -> None:
 
 async def test_verifying_no_addresses_skips_the_round_trip() -> None:
     transport = FakeCommandTransport()
-    assert await build_bus(transport).verify_addresses(SOURCE_ID, []) == ()
+    result = await build_bus(transport).verify_addresses(SOURCE_ID, [])
+    assert result.verdicts == ()
+    assert result.reason is None
     assert transport.sent == []
 
 
@@ -271,10 +274,11 @@ async def test_an_unknown_action_yields_no_verdict_rather_than_a_pass() -> None:
             ACTION_VALIDATE: {"status": "error", "reason": "unknown_action"}
         }
     )
-    verdicts = await build_bus(transport).verify_addresses(
+    result = await build_bus(transport).verify_addresses(
         SOURCE_ID, ["ns=2;s=Temp1"]
     )
-    assert verdicts is None
+    assert result.verdicts == ()
+    assert result.reason == "unknown_action"
 
 
 async def test_verdicts_carry_the_validity_and_the_detail() -> None:
@@ -294,13 +298,13 @@ async def test_verdicts_carry_the_validity_and_the_detail() -> None:
             }
         }
     )
-    verdicts = await build_bus(transport).verify_addresses(
+    result = await build_bus(transport).verify_addresses(
         SOURCE_ID, ["ns=2;s=Temp1"]
     )
-    assert verdicts is not None
-    assert verdicts[0].address == "ns=2;s=Temp1"
-    assert verdicts[0].is_valid is False
-    assert verdicts[0].detail == "BadNodeIdUnknown"
+    assert result.reason is None
+    assert result.verdicts[0].address == "ns=2;s=Temp1"
+    assert result.verdicts[0].is_valid is False
+    assert result.verdicts[0].detail == "BadNodeIdUnknown"
 
 
 async def test_a_verdict_without_a_detail_keeps_it_null() -> None:
@@ -314,11 +318,11 @@ async def test_a_verdict_without_a_detail_keeps_it_null() -> None:
             }
         }
     )
-    verdicts = await build_bus(transport).verify_addresses(
+    result = await build_bus(transport).verify_addresses(
         SOURCE_ID, ["ns=2;s=A"]
     )
-    assert verdicts is not None
-    assert verdicts[0].detail is None
+    assert result.reason is None
+    assert result.verdicts[0].detail is None
 
 
 async def test_write_translates_offline_into_a_conflict() -> None:
@@ -330,12 +334,13 @@ async def test_write_translates_offline_into_a_conflict() -> None:
     assert raised.value.http_status == 409
 
 
-async def test_an_unknown_write_failure_falls_back_to_command_failed() -> None:
+async def test_a_legacy_write_failure_has_an_unconfirmed_outcome() -> None:
     transport = FakeCommandTransport(
         replies={ACTION_WRITE: {"status": "error", "reason": "driver_failed"}}
     )
-    with pytest.raises(CommandFailed):
+    with pytest.raises(CollectorWriteUnconfirmed) as raised:
         await build_bus(transport).write(SOURCE_ID, "setpoint", 1)
+    assert raised.value.http_status == 503
 
 
 async def test_browsing_gets_the_wider_budget() -> None:

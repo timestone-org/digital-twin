@@ -50,9 +50,11 @@ Authorization: Bearer <账号 APIKey>
 
 ## 3. 部署修订、换版与回滚
 
-部署输出增加整数 `revision`，存量部署有效初始值为 1。`PATCH /modeling-deployments/{deployment_id}` 新增可选 `expected_revision`；给出时在同一更新事务中检查，冲突返回 409。新客户端应提交修订号。未给修订号的旧 PATCH 保持兼容，但不能获得防覆盖保证。
+部署输出增加整数 `revision`，存量部署有效初始值为 1。`PATCH /modeling-deployments/{deployment_id}` 新增可选 `expected_revision`；给出时在同一更新事务中检查，冲突返回 409。新客户端应提交修订号。旧客户端仍可省略修订号修改名称、配额或启停，包括表单回传当前版本的请求。此类修改不检查覆盖冲突。
 
-受控版本切换使用以下新动作，避免把旧 PATCH 的兼容能力误当成完整换版保证：
+PATCH 选择不同版本时，必须提交当前修订号。签名变化需要显式确认。版本与同批元数据在同一事务生效，修订号只增加一次，切换历史可用于回滚。专用切换动作接受相同的换版条件。
+
+发布时按平台 ADR-0008 暂停建模写入，所有 API 和 worker 升级后再恢复。回滚窗口内，部署编辑和换版仍由能检查签名并记录历史的副本处理。
 
 ```http
 POST /api/v1/platform/modeling-deployments/019c0000-0000-7000-8000-000000000005:switch
@@ -96,6 +98,7 @@ Content-Type: application/json
 | create_instance | POST /modeling-instances | 不传 |
 | configure_instance | PUT /modeling-instances/{id}/configuration | 实例 UUID |
 | train_instance | POST /modeling-instances/{id}:train | 实例 UUID |
+| run_pipeline | POST /modeling-pipelines/{id}:run | 工作流 UUID |
 | cancel_run | POST /modeling-runs/{id}:cancel | 运行 UUID |
 | publish_version | POST /modeling-model-versions | 不传 |
 | update_version | PATCH /modeling-model-versions/{id} | 版本 UUID |
@@ -111,6 +114,8 @@ Content-Type: application/json
 带键提交后保存响应头 `Modeling-Command-Id`。未带键仍执行正常写入，但不提供跨请求命令恢复保证。删除命令保留小型 `{id}` 回执用于核查，HTTP 成功及同键重放仍为 204、无响应体。取消命令提交成功不表示运行已进入终态。模板设计、通用流水线创建和公式绑定维护保留原有机制，不在此持久操作清单内。
 
 按键找回：`GET /modeling-commands?operation=train_instance&resource_id={instance_id}`，并携带原 `Idempotency-Key`。按 ID 找回：`GET /modeling-commands/{command_id}`。两者需要 `modeling:view` 和该操作对应的 run/publish 权限，仅允许当前认证账号自己的记录；其他账号返回 404，模型资源共享不意味着命令结果共享。
+普通工作流用 `operation=run_pipeline` 找回运行命令。按 ID 查询新命令会显示实际入口；升级前的结果仍显示 `train_instance`。以旧操作名按键读取时保留旧标签。两个查询名指向同一笔训练预约；重试写请求应沿用原路径、请求体和键。未确认结果仍须查询核查。
+
 
 返回的 `data` 包括 `id/operation/resource_id/state/http_status/result/error/created_at/completed_at/trace_id/is_verification_required`。`result` 是原操作的 data，不含外层响应信封；`trace_id` 是原命令的排障标识，当前查询请求另有外层 trace。状态含义：
 

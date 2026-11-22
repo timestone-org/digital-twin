@@ -49,9 +49,7 @@ from platform_server.apps.llm_providers.services import (
     DeviceLogin,
     OAuthClient,
 )
-from platform_server.apps.modeling.services.artifact_io import (
-    ArtifactCache,
-)
+from platform_server.apps.modeling.services.inference_pool import InferencePool
 from platform_server.lease import Lease, RedisLease
 from platform_server.opcua import OpcuaClient
 from platform_server.realtime import RealtimeClient
@@ -164,10 +162,8 @@ class Container:
     ac_daily_lease: Lease
     nodes: OpcuaClient
     object_store: ObjectStore
-    # 建模二进制产物的进程内缓存。⚠ 挂在容器上而不是每次请求新造：
-    # 每次新造的表现是每一次对外调用都把模型重新反序列化一遍，
-    # 而那是那条路径上最贵的一步
-    modeling_artifacts: ArtifactCache
+    # 开放推理进程与已核验模型的工作进程缓存
+    model_inference: InferencePool
     # 数据源口令的加解密器。密钥派生只在装配时做一次
     credential_cipher: CredentialCipher
     dataset: DatasetParts
@@ -219,7 +215,7 @@ def build_container(settings: Settings) -> Container:
         nodes=_build_nodes(settings),
         # ⚠ 构造不连网：桶不存在要到第一次真正读写时才报，不在启动期误判
         object_store=create_object_store(settings),
-        modeling_artifacts=ArtifactCache(),
+        model_inference=InferencePool(),
         credential_cipher=_build_cipher(settings),
         dataset=_dataset(settings, database, history_database, cache),
         llm=_llm_parts(settings, database, cache),
@@ -476,7 +472,7 @@ def _build_ac_source(settings: Settings) -> ReadOnlySqlSource:
 
 
 def _build_stream(settings: Settings) -> RedisStream:
-    """抽取分片的队列。⚠ 构造不连网，API 角色不用它时也不会多一个连接。
+    """装配平台作业流。各流由独占消费组处理，结果另行持久化。
 
     ⚠ 套接字超时必须**大于**阻塞读的时长，否则队列一空就必然超时：服务端正
     按约定挂起 `block_ms`，客户端却在 `redis_timeout_s` 就先放弃，于是空队列
@@ -495,6 +491,7 @@ def _build_stream(settings: Settings) -> RedisStream:
     return RedisStream(
         url=settings.url(),
         timeout_s=max(settings.redis_timeout_s, block_s + STREAM_READ_MARGIN_S),
+        should_delete_on_ack=True,
     )
 
 

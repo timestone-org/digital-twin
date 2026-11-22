@@ -478,10 +478,11 @@ export async function recommendWithAcModel(
 /** 这个模型往哪台实例、哪些点位下发。⚠ 没配过是 404，不是一份空配置。 */
 export async function getModelPublication(
   modelId: string,
+  signal?: AbortSignal,
 ): Promise<AcModelPublication> {
   return await requestData<AcModelPublication>(
     `/ac-models/${modelId}/publication`,
-    onPlatform(),
+    onPlatform(signal === undefined ? {} : { signal }),
   )
 }
 

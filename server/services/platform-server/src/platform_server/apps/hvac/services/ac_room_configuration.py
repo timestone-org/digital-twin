@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from decimal import Decimal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import TypeAdapter
 from sqlalchemy import and_, select
@@ -16,6 +17,7 @@ from platform_server.apps.hvac.datasets import DATASET_RAW_MINUTE
 from platform_server.apps.hvac.models import (
     AcDataBinding,
     AcMetricLimit,
+    AcStartupBatch,
     AcUnit,
 )
 from platform_server.apps.hvac.rooms import MetricBand, RoomUnit
@@ -27,7 +29,15 @@ from platform_server.apps.hvac.schemas.ac_configuration import (
 )
 from platform_server.apps.hvac.schemas.ac_data import MetricLimitIn
 from platform_server.apps.hvac.seasons import WinterPeriod
-from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
+from platform_server.apps.hvac.services.ac_startup_rules import (
+    LOGIC_VERSION,
+    ExtractionRules,
+    fingerprint_logic_version,
+)
+from platform_server.apps.hvac.startup_assessment import (
+    ColdStartAssessment,
+    cold_start_assessment,
+)
 
 
 @dataclass(frozen=True)
@@ -146,6 +156,36 @@ def restore_configuration(raw: dict[str, object]) -> RoomConfiguration:
         timezone=stored.timezone,
         rules_fingerprint=stored.rules_fingerprint,
         rules=TypeAdapter(ExtractionRules).validate_python(stored.rules),
+    )
+
+
+def read_batch_configuration(batch: AcStartupBatch) -> RoomConfiguration | None:
+    """读取历史提示所用的快照。Args: batch。"""
+    if batch.configuration_snapshot is None:
+        return None
+    try:
+        restored = restore_configuration(batch.configuration_snapshot)
+        ZoneInfo(restored.timezone)
+    except (ValueError, ZoneInfoNotFoundError):
+        return None
+    return restored
+
+
+def legacy_startup_assessment(
+    batch: AcStartupBatch, configuration: RoomConfiguration | None
+) -> ColdStartAssessment | None:
+    """仅凭可核对的冷启动快照投影旧事件。Args: batch, configuration。"""
+    if (
+        configuration is None
+        or not configuration.rules.is_cold_start_required
+        or not configuration.units
+        or fingerprint_logic_version(batch.logic_version)
+        != fingerprint_logic_version(LOGIC_VERSION)
+        or configuration.fingerprint() != batch.params_fingerprint
+    ):
+        return None
+    return cold_start_assessment(
+        [bound.unit for bound in configuration.units], configuration.timezone
     )
 
 

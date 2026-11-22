@@ -336,7 +336,7 @@ POST   /api/v1/platform/collect-sources/{id}:test        连通性测试（走�
 POST   /api/v1/platform/collect-sources/{id}:browse      地址空间浏览一页（默认 200、最大 500 条，10s 超时）
 POST   /api/v1/platform/collect-sources/{id}:browse-subtree  有界遍历子树（最多 2000 节点，15s 超时）
 
-GET    /api/v1/platform/collect-points?source_id=&q=&status= 分页 + 搜索 + 全量状态筛选
+GET    /api/v1/platform/collect-points?source_id=&q=&code=&status= 分页 + 搜索 + 全量状态筛选
 POST   /api/v1/platform/collect-points                   支持批量
 POST   /api/v1/platform/collect-points:import             按源与编码新增或更新，空白保留
 PATCH  /api/v1/platform/collect-points/{id}
@@ -354,8 +354,9 @@ POST   /api/v1/platform/point-histories:aggregate         分桶聚合，回 is_
 GET    /internal/v1/platform/collect-plan                collector 拉计划，服务级密钥
 ```
 
-点位列表的 `status` 是可选白名单参数，默认 `all`。`source_id`、`q` 与状态条件
-共同限定结果；**先筛选全部候选点位，再分页**，`total` 是全部匹配数。
+点位列表的 `status` 是可选白名单参数，默认 `all`。`code` 按原编码区分大小写，和
+`source_id` 一起可定位一个点位。`q` 仍按名称和编码模糊匹配，所有已提供的条件共同
+限定结果。**先筛选全部候选点位，再分页**，`total` 是全部匹配数。
 
 | `status` | 查询口径 |
 |---|---|
@@ -413,11 +414,14 @@ collector 直接调用 OPC UA Browse/BrowseNext，每页只为本页变量读取
 三条口径：
 
 - **时序集合一律游标分页。** 页码分页在持续写入的表上会静默重复与漏行。
-- **删除点位前检查大屏绑定**，被绑着就 `409` 并列出绑定它的大屏——
-  这正是配置面必须留在 platform 的理由（ADR-0001）。`force=true` 是**显式**跳过
-  这道守卫（界面上是二级「强制删除」确认）：点位强删后仍绑着它的大屏槽失效；
-  数据源强删连点位一起（外键 CASCADE）。守卫是默认档，强删是给「确实要清场」
-  的人留的门，不是常规路径。
+- **删除点位前检查大屏绑定和台账点位汇总列**，有引用就 `409`，批量删除时整批保留。
+  单删提示列出大屏，并给出台账列数量；批删提示给出受阻的点位及每个点位的引用计数。
+  守卫与两类引用在同一服务、同一数据库（ADR-0001）。经界面二次确认可显式使用
+  `force=true`（批量接口为 `is_forced=true`）强删。强删保留引用配置与已存历史，
+  依赖该点位的读数会受影响。台账新建引用或换绑与非强制点位删除按点位身份共用事务锁。
+  先绑后删时删除返回冲突；先删后绑时仍可为尚未入库的点位身份配置台账。
+  点位身份解析统一处理 UUID 写法，保留点位编码的大小写和内部冒号。
+  数据源强删连点位一起（外键 CASCADE）。
 - **采集/归档运行参数**复用 `apps/runtime_params` 的目录与覆盖表，但挂在
   `collect-runtime-params` 前缀下：写码是 `collect:manage` 不是 `dashboard:edit`，
   而闸 2 的静态声明挂在路由上，一条路由声明不出两个码。覆盖值（稀疏）随采集
@@ -425,8 +429,13 @@ collector 直接调用 OPC UA Browse/BrowseNext，每页只为本页变量读取
   兜底（`tuning.py`）。生效档位：即时档在下一个计划刷新周期内生效（默认 30s），
   重连档等该数据源下次重连（界面上「断开→连接」即可立刻换新值），重启档等
   采集进程下次启动。
-- **`:write` 是写操作，超时按不可重试处理。** 写超时不代表没写成功，
-  盲目重试可能向 PLC 下发两次。幂等键是唯一的解。
+- **`:write` 的结果未知时应先核对现场值。** 设备写入超时、应答缺失或无法确认投递
+  状态时，首次回 503。平台在入队前已保留该幂等键 24 小时，期间同键重发回 409，
+  包括请求取消和无法保存成功回执。仅在确知未执行时释放。无在线会话、驱动未连接、
+  驱动尚未加载点位、不支持写入、缺点位编码、未知动作、设备明确拒绝值类型或点位写入
+  都属于这一类。只有明确的错误回执才能按
+  原因释放占位。老采集器的通用异常仍按结果未知处理。发布顺序为共享包、
+  平台和采集运行时。
 
 ### 5.3 命令总线
 

@@ -1,10 +1,10 @@
-"""登录限流计数：hit 与 reset 必须落在同一个键上。
-
-⚠ 登录入参可以是用户名也可以是邮箱，计数按入参走。清错键时用户每次都登录成功，
-也会在窗口内被当成撞库拒绝。
-"""
+"""登录标识和稳定账号的失败计数与成功清理契约。"""
 
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from dataclasses import replace
+from datetime import datetime
 from typing import cast
 
 import pytest
@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_server.apps.auth.crud import user_crud
+from auth_server.apps.auth.crud.user import LoginCredentials
 from auth_server.apps.auth.errors import (
     InvalidCredentials,
     TooManyLoginAttempts,
@@ -45,11 +46,9 @@ USER = User(
 )
 
 
-class FakeSession:
-    """登录路径只会 flush 一次，别的调用都该是缺陷。"""
-
-    async def flush(self) -> None:
-        return None
+@asynccontextmanager
+async def session_factory() -> AsyncIterator[AsyncSession]:
+    yield cast("AsyncSession", None)
 
 
 class RacingSession:
@@ -74,6 +73,7 @@ def build_service(limiter: FixedWindowLimiter) -> AuthService:
         api_keys=cast("ApiKeyService", None),
         hasher=BoundedHasher(HASHER, max_concurrency=2, name="test"),
         login_limiter=limiter,
+        account_login_limiter=replace(limiter, namespace="login-account"),
         signup_limiter=limiter,
         signup_enabled=False,
         signup_default_role="viewer",
@@ -92,14 +92,23 @@ def known_account(monkeypatch: pytest.MonkeyPatch) -> None:
     def session_out(_self: AuthService, _identity: Identity) -> SessionOut:
         return cast("SessionOut", None)
 
+    async def record_login(
+        _session: AsyncSession,
+        _credentials: LoginCredentials,
+        _at: datetime,
+        _upgraded_hash: str | None,
+    ) -> User:
+        return USER
+
     monkeypatch.setattr(user_crud, "get_by_login", find_user)
+    monkeypatch.setattr(user_crud, "record_verified_login", record_login)
     monkeypatch.setattr(auth_module, "load_identity", identity_of)
     monkeypatch.setattr(AuthService, "_session_out", session_out)
 
 
 async def login(service: AuthService, identifier: str) -> None:
     await service.login(
-        cast("AsyncSession", FakeSession()),
+        session_factory,
         login=identifier,
         password=PASSWORD,
     )
@@ -117,6 +126,58 @@ async def test_successful_logins_never_exhaust_the_limit(
     for _ in range(LIMIT + 1):
         await login(service, identifier)
     assert await limiter.hit(identifier.strip().lower()) == 1
+
+
+@pytest.mark.parametrize("identifier", [USER.username, USER.email])
+async def test_known_login_identifier_counts_against_the_account(
+    identifier: str,
+) -> None:
+    cache = InMemoryCache()
+    service = build_service(build_limiter(cache))
+
+    with pytest.raises(InvalidCredentials):
+        await service.login(session_factory, login=identifier, password="wrong")
+
+    assert await cache.get(f"ratelimit:login-account:{USER.id}") == "1"
+    assert await cache.get(f"ratelimit:login:{identifier.lower()}") == "1"
+
+
+async def test_success_clears_account_attempts() -> None:
+    cache = InMemoryCache()
+    key = f"ratelimit:login-account:{USER.id}"
+    await cache.incr_in_window(key, window_s=300)
+
+    await login(build_service(build_limiter(cache)), USER.email)
+
+    assert await cache.get(key) is None
+
+
+async def test_unknown_login_keeps_alias_guard_and_dummy_verification(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[bool] = []
+
+    async def find_nobody(_session: AsyncSession, _login: str) -> None:
+        return None
+
+    async def verify_dummy(
+        _hasher: BoundedHasher, _password: str, encoded: str
+    ) -> bool:
+        seen.append(encoded.startswith("$argon2id$"))
+        return False
+
+    monkeypatch.setattr(user_crud, "get_by_login", find_nobody)
+    monkeypatch.setattr(BoundedHasher, "verify", verify_dummy)
+    cache = InMemoryCache()
+    service = build_service(build_limiter(cache))
+
+    with pytest.raises(InvalidCredentials):
+        await service.login(
+            session_factory, login="absent-fixture", password="wrong"
+        )
+
+    assert seen == [True]
+    assert cache.store == {"ratelimit:login:absent-fixture": "1"}
 
 
 async def test_email_login_also_clears_the_username_count() -> None:
@@ -137,11 +198,10 @@ async def test_username_login_also_clears_the_email_count() -> None:
 
 async def test_failed_logins_still_hit_the_limit() -> None:
     service = build_service(build_limiter(InMemoryCache()))
-    session = cast("AsyncSession", FakeSession())
     for _ in range(LIMIT):
         with pytest.raises(InvalidCredentials):
             await service.login(
-                session, login="alice@example.com", password="wrong"
+                session_factory, login="alice@example.com", password="wrong"
             )
     with pytest.raises(TooManyLoginAttempts) as caught:
         await login(service, "alice@example.com")

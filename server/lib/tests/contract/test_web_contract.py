@@ -1,15 +1,23 @@
 """锁住对外口径：信封形状、HTTP 状态码必须真实、分页上限、时间序列化格式。"""
 
+import subprocess
+import sys
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
 
 import httpx
 import pytest
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, FastAPI
 
 from lib.errors import Conflict, NotFound, ValidationFailed
 from lib.errors.base import FieldError
+from lib.errors.handlers import register_exception_handlers
+from lib.logging.context import (
+    bind_log_context,
+    current_log_context,
+    reset_log_context,
+)
 from lib.utils.timeutils import format_rfc3339
 from lib.web import (
     ApiResponse,
@@ -122,6 +130,9 @@ async def test_trace_id_follows_incoming_traceparent(
         headers={"traceparent": f"00-{trace}-00f067aa0ba902b7-01"},
     )
     assert response.json()["trace_id"] == trace
+    returned = response.headers["traceparent"].split("-")
+    assert returned[1] == trace
+    assert returned[2] != "00f067aa0ba902b7"
 
 
 @pytest.mark.parametrize(
@@ -219,3 +230,71 @@ async def test_cursor_limit_over_hard_cap_is_rejected_not_truncated(
 def test_rfc3339_is_utc_with_millisecond_precision() -> None:
     moment = datetime(2026, 8, 10, 9, 30, 0, 123456, tzinfo=UTC)
     assert format_rfc3339(moment) == "2026-08-10T09:30:00.123Z"
+
+
+async def test_failed_request_restores_the_ambient_log_context(
+    client: httpx.AsyncClient,
+) -> None:
+    token = bind_log_context(trace_id="a" * 32, span_id="b" * 16)
+    try:
+        ambient = current_log_context()
+        returned = await client.get(
+            "/api/v1/probe/boom",
+            headers={
+                "traceparent": "00-" + ("c" * 32) + "-" + ("d" * 16) + "-01"
+            },
+        )
+        assert returned.json()["trace_id"] == "c" * 32
+        assert current_log_context() == ambient
+    finally:
+        reset_log_context(token)
+
+
+@pytest.mark.parametrize(
+    "upstream",
+    [
+        None,
+        "invalid",
+        "00-0123456789abcdef0123456789abcdef-1111111111111111-01",
+    ],
+)
+async def test_standalone_fallback_reports_a_consistent_trace(
+    upstream: str | None,
+) -> None:
+    app = FastAPI()
+    register_exception_handlers(app)
+
+    @app.get("/fail")
+    async def fail() -> None:
+        raise ValueError("fixture failure")
+
+    headers = {} if upstream is None else {"traceparent": upstream}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app, raise_app_exceptions=False),
+        base_url="http://test",
+        timeout=10,
+    ) as client:
+        response = await client.get("/fail", headers=headers)
+    assert response.status_code == 500
+    trace = response.json()["trace_id"]
+    emitted = response.headers["traceparent"].split("-")
+    assert len(trace) == 32
+    assert emitted[1] == trace
+    assert len(emitted[2]) == 16
+    if upstream is not None and upstream.startswith("00-"):
+        assert trace == upstream.split("-")[1]
+
+
+def test_public_error_handlers_can_be_imported_first() -> None:
+    loaded = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from lib.errors.handlers import register_exception_handlers",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert loaded.returncode == 0, loaded.stderr

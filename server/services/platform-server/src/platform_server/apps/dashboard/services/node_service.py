@@ -1,6 +1,7 @@
 """逐节点的写入面。与整树替换共用同一套校验与同一套 id 保持逻辑。"""
 
 import uuid
+from dataclasses import replace
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -140,8 +141,14 @@ async def update_node(
     """
     node, dashboard = await locked_node(session, node_id)
     state = await load_state(session, dashboard.id)
+    previous_module = node.module_type
     node_crud.apply_changes(node, given_changes(payload))
-    await _check(state=state, node=node, context=context)
+    await _check(
+        state=state,
+        node=node,
+        context=context,
+        has_module_changed=previous_module != node.module_type,
+    )
     bump_version(dashboard)
     await _flush(session)
     _logger.info("dashboard_node_updated", "节点已更新", node_id=str(node.id))
@@ -193,6 +200,7 @@ async def _check(
     state: DashboardState,
     node: DashboardNode,
     context: ValidationContext,
+    has_module_changed: bool = False,
 ) -> None:
     """把改动后的整棵树过一遍校验。
 
@@ -210,7 +218,12 @@ async def _check(
     raise_if_invalid(
         await collect_issues(
             nodes=node_drafts(state.nodes, replaced=draft),
-            bindings=binding_drafts(state.bindings_of(node.id)),
+            bindings=[
+                replace(
+                    binding, should_check_compute_details=has_module_changed
+                )
+                for binding in binding_drafts(state.bindings_of(node.id))
+            ],
             context=context,
         )
     )

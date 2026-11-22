@@ -2,19 +2,30 @@
 /**
  * @fileoverview 选中知识库的详情头：名 / 策略与嵌入档 / 描述 / 刷新与删除 / 元信息行。
  */
-import type { KnowledgeStrategy } from '@dt/contracts'
+import type {
+  KnowledgeBaseMetadataPatch,
+  KnowledgeStrategy,
+  KnowledgeVectorStatus,
+} from '@dt/contracts'
 import { PERMISSION_CODES } from '@dt/contracts'
 import { DtButton, DtCard, DtTag } from '@dt/ui'
 
 import PermGuard from '@/components/PermGuard.vue'
 import type { KnowledgeBase } from '@/api/knowledge'
 import { formatDateTime } from '@/utils/datetime'
+import KnowledgeReembedding from './KnowledgeReembedding.vue'
+import KnowledgeBaseMetadataEditor from './KnowledgeBaseMetadataEditor.vue'
 
 defineProps<{
   base: KnowledgeBase
   /** 表里此刻的文档数：库清单上那个数不随上传与删除动。 */
   documentCount: number
+  canEditMetadata: boolean
   refreshing: boolean
+  saveMetadata: (
+    baseId: string,
+    changes: KnowledgeBaseMetadataPatch,
+  ) => Promise<void>
 }>()
 
 defineEmits<{
@@ -26,6 +37,14 @@ const STRATEGY_LABELS: Record<KnowledgeStrategy, string> = {
   naive: '关键词',
   hybrid: '混合',
   agentic: '智能体',
+}
+const VECTOR_LABELS: Record<KnowledgeVectorStatus | 'unknown', string> = {
+  ready: '向量索引可用',
+  unindexed: '未建索引',
+  legacy_unverified: '旧向量索引待核验',
+  model_unavailable: '嵌入模型不可用',
+  space_mismatch: '向量空间已变更',
+  unknown: '向量状态未知',
 }
 </script>
 
@@ -43,8 +62,31 @@ const STRATEGY_LABELS: Record<KnowledgeStrategy, string> = {
           <DtTag v-if="base.embeddingModel !== null" mono size="sm">
             {{ base.embeddingModel }}
           </DtTag>
-          <DtTag v-else intent="warning" size="sm">未建索引</DtTag>
+          <DtTag
+            v-if="base.vectorStatus"
+            :intent="base.vectorStatus === 'ready' ? 'success' : 'warning'"
+            size="sm"
+          >
+            {{ VECTOR_LABELS[base.vectorStatus] }}
+          </DtTag>
+          <DtTag
+            v-else-if="base.embeddingModel === null"
+            intent="warning"
+            size="sm"
+            >未建索引</DtTag
+          >
         </div>
+        <p
+          v-if="
+            base.strategy === 'hybrid' &&
+            base.vectorStatus &&
+            base.vectorStatus !== 'ready' &&
+            base.vectorStatus !== 'unknown'
+          "
+          class="mt-1 text-xs text-text-secondary"
+        >
+          当前使用关键词检索，文档可继续阅读。
+        </p>
         <p
           v-if="base.description !== ''"
           class="mt-1 truncate text-xs text-text-secondary"
@@ -65,6 +107,12 @@ const STRATEGY_LABELS: Record<KnowledgeStrategy, string> = {
           @click="$emit('refresh')"
         />
         <PermGuard :codes="[PERMISSION_CODES.knowledgeManage]">
+          <KnowledgeBaseMetadataEditor
+            v-if="canEditMetadata"
+            :key="base.id"
+            :base="base"
+            :save="saveMetadata"
+          />
           <DtButton
             variant="ghost"
             intent="danger"
@@ -94,5 +142,15 @@ const STRATEGY_LABELS: Record<KnowledgeStrategy, string> = {
         }}</span>
       </span>
     </div>
+    <PermGuard
+      v-if="base.vectorStatus && base.vectorStatus !== 'unknown'"
+      :codes="[PERMISSION_CODES.knowledgeManage]"
+    >
+      <KnowledgeReembedding
+        :key="base.id"
+        :base="base"
+        @published="$emit('refresh')"
+      />
+    </PermGuard>
   </DtCard>
 </template>

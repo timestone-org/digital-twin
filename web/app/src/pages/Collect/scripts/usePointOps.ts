@@ -11,6 +11,7 @@
  * confirm 取出来接上，这样动作本身在测试里不需要挂组件实例。
  */
 import type {
+  CollectAddressCheck,
   CollectPoint,
   CollectPointItemInput,
   CollectPointUpdateInput,
@@ -49,11 +50,14 @@ export interface PointOps {
  */
 function warnUnverified(
   deps: Deps,
-  checks: readonly { status: string }[],
+  checks: readonly CollectAddressCheck[],
 ): void {
-  if (checks.some((check) => check.status === 'unverified')) {
-    deps.toast.warning('寻址串这次没能到现场确认，采集起来之后请核对是否有值')
-  }
+  const unverified = checks.find((check) => check.status === 'unverified')
+  if (unverified === undefined) return
+  deps.toast.warning(
+    unverified.detail?.trim() ||
+      '寻址串这次没能到现场确认，采集起来之后请核对是否有值',
+  )
 }
 
 async function createPoint(

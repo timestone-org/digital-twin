@@ -9,7 +9,13 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from collector_server.apps.collect.errors import CollectError
-from collectwire import DEFAULT_BROWSE_LIMIT, DataType
+from collectwire import (
+    DEFAULT_BROWSE_LIMIT,
+    REASON_DRIVER_NOT_CONNECTED,
+    REASON_POINT_NOT_LOADED,
+    REASON_WRITE_REJECTED,
+    DataType,
+)
 from timeseries import Quality
 
 # 回调签名：point_code、value、ts_ms、quality。
@@ -59,16 +65,22 @@ class WriteNotSupported(DriverError):
     reason: str = "write_unsupported"
 
 
+class WriteRejected(DriverError):
+    """设备已明确拒绝这次写入。"""
+
+    reason: str = REASON_WRITE_REJECTED
+
+
 class PointNotLoaded(DriverError):
     """point_code 没有登记过，驱动不知道它的协议寻址串。"""
 
-    reason: str = "point_not_loaded"
+    reason: str = REASON_POINT_NOT_LOADED
 
 
 class DriverNotConnected(DriverError):
     """会话还没建立或已经断开。"""
 
-    reason: str = "driver_not_connected"
+    reason: str = REASON_DRIVER_NOT_CONNECTED
 
 
 @dataclass(frozen=True)

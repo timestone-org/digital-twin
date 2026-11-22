@@ -191,27 +191,47 @@ async def test_worker_recovers_when_group_creation_initially_fails(monkeypatch):
     assert attempts == 2
 
 
-async def test_tick_budget_cancels_a_slow_claim(monkeypatch):
-    consumer, _row, stream, _pending, _saved = dispatcher_fakes(monkeypatch)
-    monkeypatch.setattr(dispatch, "MAX_TICK_S", 0.01)
+@pytest.fixture
+def expire_tick_budget(monkeypatch):
+    create_timeout = asyncio.timeout_at
+    tick_budget: asyncio.Timeout | None = None
 
-    async def blocked():
+    def capture(deadline_s: float | None) -> asyncio.Timeout:
+        nonlocal tick_budget
+        assert deadline_s is not None
+        tick_budget = create_timeout(deadline_s)
+        return tick_budget
+
+    async def expire(*_arguments: object) -> None:
+        assert tick_budget is not None
+        tick_budget.reschedule(asyncio.get_running_loop().time())
         await asyncio.Event().wait()
 
+    monkeypatch.setattr(dispatch.asyncio, "timeout_at", capture)
+    return expire
+
+
+async def test_tick_budget_cancels_a_slow_claim(
+    monkeypatch, expire_tick_budget
+):
+    consumer, _row, stream, _pending, _saved = dispatcher_fakes(monkeypatch)
+    blocked = AsyncMock(side_effect=expire_tick_budget)
     monkeypatch.setattr(consumer, "_take", blocked)
-    assert await asyncio.wait_for(consumer.tick(), timeout=0.1) == 0
+
+    assert await asyncio.wait_for(consumer.tick(), timeout=5) == 0
+    blocked.assert_awaited_once()
     stream.publish.assert_not_awaited()
 
 
-async def test_tick_budget_cancels_slow_delivery_and_keeps_lease(monkeypatch):
+async def test_tick_budget_cancels_slow_delivery_and_keeps_lease(
+    monkeypatch, expire_tick_budget
+):
     consumer, row, _stream, _pending, saved = dispatcher_fakes(monkeypatch)
-    monkeypatch.setattr(dispatch, "MAX_TICK_S", 0.01)
-
-    async def blocked(_attempt):
-        await asyncio.Event().wait()
-
+    blocked = AsyncMock(side_effect=expire_tick_budget)
     monkeypatch.setattr(consumer, "_deliver", blocked)
-    assert await asyncio.wait_for(consumer.tick(), timeout=0.1) == 0
+
+    assert await asyncio.wait_for(consumer.tick(), timeout=5) == 0
+    blocked.assert_awaited_once()
     assert row.result_json["_dispatch"]["token"]
     saved.assert_not_awaited()
 

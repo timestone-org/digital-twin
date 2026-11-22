@@ -519,6 +519,26 @@ describe('公开链接', () => {
     expect(FakeSocket.instances).toHaveLength(2)
   })
 
+  it('异常关闭计数只归当前公开连接，成功接续和换票都清零', () => {
+    const channel = usePublicRealtimeChannel('tok-a')
+    latest().emit('close', { code: 1006 })
+    vi.advanceTimersByTime(1000)
+    latest().emit('close', { code: 1006 })
+    expect(channel.publicAbnormalCloses.value).toBe(2)
+
+    vi.advanceTimersByTime(2000)
+    latest().emit('open')
+    expect(channel.publicAbnormalCloses.value).toBe(0)
+    latest().emit('close', { code: 1006 })
+    expect(channel.publicAbnormalCloses.value).toBe(1)
+
+    const second = usePublicRealtimeChannel('tok-b')
+    expect(second.publicAbnormalCloses.value).toBe(0)
+    vi.advanceTimersByTime(1000)
+    expect(latest().protocols).toEqual([PUBLIC_SUBPROTOCOL, 'tok-b'])
+    expect(FakeSocket.instances).toHaveLength(4)
+  })
+
   it('⚠ 1008 才是「别再连了」', () => {
     const channel = usePublicRealtimeChannel('tok-public')
     latest().emit('close', { code: 1008 })

@@ -156,25 +156,34 @@ export function divergingStops(theme: ChartTheme): string[] {
 }
 
 /**
- * 换肤时重绘：挂载后侦测主题变化，按帧去抖后回调；卸载时停止观察。
+ * 逐帧处理换肤和布局变化，卸载时停止观察。
  * @param elRef 读主题的级联根
  * @param redraw 重绘回调，一帧内多次变更只调一次
+ * @param remeasure 布局变化时复查位图分辨率
  */
 export function useThemeRedraw(
   elRef: Ref<HTMLElement | null>,
   redraw: () => void,
+  remeasure: () => void,
 ): void {
   let stop: (() => void) | null = null
   let frame = 0
-  const schedule = (): void => {
+  let shouldRedraw = false
+  const schedule = (themeChanged: boolean): void => {
+    shouldRedraw ||= themeChanged
     if (frame) return
     frame = requestAnimationFrame(() => {
       frame = 0
-      redraw()
+      const action = shouldRedraw ? redraw : remeasure
+      shouldRedraw = false
+      action()
     })
   }
   onMounted(() => {
-    if (elRef.value) stop = observeThemeChange(elRef.value, schedule)
+    if (!elRef.value) return
+    stop = observeThemeChange(elRef.value, () => schedule(true), {
+      onLayoutChange: () => schedule(false),
+    })
   })
   onBeforeUnmount(() => {
     if (frame) cancelAnimationFrame(frame)

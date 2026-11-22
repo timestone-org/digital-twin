@@ -12,8 +12,10 @@
   的缺口自己发现。这里重推会与下一拍抢顺序。
 """
 
+import asyncio
 import uuid
-from collections.abc import Mapping
+from bisect import bisect_right
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 
 from lib.errors import DependencyUnavailable
@@ -40,6 +42,7 @@ from platform_server.apps.dashboard.services.viewers import SubscriptionViewers
 from platform_server.realtime import FramePublisher
 
 _logger = get_logger("platform.dashboard.publish")
+_CONCURRENT_DASHBOARDS = 3
 
 
 @dataclass(frozen=True)
@@ -67,6 +70,8 @@ class DashboardPublisher:
     realtime: FramePublisher
     options: PublishOptions
     states: SourceStateSource
+    # 截断时也保留轮询位置，下次从还没轮到的屏开始。
+    _last_started: uuid.UUID | None = field(default=None, init=False)
     _watchers: dict[uuid.UUID, frozenset[uuid.UUID]] = field(
         default_factory=dict[uuid.UUID, frozenset[uuid.UUID]], init=False
     )
@@ -96,8 +101,39 @@ class DashboardPublisher:
             for source_id in lookup.plan.source_ids
         }
         online_sources = await self.states.online_ids(sorted(source_ids))
+        ordered = sorted(watchers)
+        cursor = (
+            bisect_right(ordered, self._last_started)
+            if self._last_started is not None
+            else 0
+        )
+        pending = iter(ordered[cursor:] + ordered[:cursor])
+        async with asyncio.TaskGroup() as group:
+            workers = [
+                group.create_task(
+                    self._publish_worker(
+                        pending, watchers, lookups, online_sources
+                    )
+                )
+                for _ in range(min(len(ordered), _CONCURRENT_DASHBOARDS))
+            ]
+        return PublishReport(
+            dashboards=len(watchers),
+            items=sum(worker.result() for worker in workers),
+        )
+
+    async def _publish_worker(
+        self,
+        pending: Iterator[uuid.UUID],
+        watchers: Mapping[uuid.UUID, frozenset[uuid.UUID]],
+        lookups: Mapping[uuid.UUID, PlanLookup],
+        online_sources: frozenset[uuid.UUID],
+    ) -> int:
+        """逐个取屏并发送。Args: pending, watchers, lookups, online_sources。"""
         total = 0
-        for dashboard_id, subscriptions in watchers.items():
+        for dashboard_id in pending:
+            self._last_started = dashboard_id
+            subscriptions = watchers[dashboard_id]
             is_full = self._is_new_audience(dashboard_id, subscriptions)
             total += await self._publish_one(
                 dashboard_id,
@@ -106,10 +142,10 @@ class DashboardPublisher:
                 is_full=is_full,
             )
             self._watchers[dashboard_id] = subscriptions
-        return PublishReport(dashboards=len(watchers), items=total)
+        return total
 
     def forget_all(self) -> None:
-        """丢掉全部进程内缓存。丢主时用：接任者会从全量帧重新开始。"""
+        """丢掉发布缓存，下次重新推全量帧。"""
         self._watchers.clear()
         self._plans.clear()
         self._sent.clear()

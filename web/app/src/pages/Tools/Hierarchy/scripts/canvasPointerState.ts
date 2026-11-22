@@ -1,7 +1,8 @@
 /** @fileoverview 层级图的拖动、多选、平移、端口连接与对齐辅助线。 */
 import { computed, ref, shallowRef, type Ref } from 'vue'
 import { canvasPoint, type Pointer } from './canvasGeometry'
-import { editorSize, snapGuides, type Guide } from './geometry'
+import { dragNodes, nodesInBox, selectionBounds } from './canvasSelection'
+import type { Guide } from './geometry'
 import type { GraphNode } from './types'
 import type { HierarchyEditor } from './useHierarchyDocument'
 interface Gesture {
@@ -34,15 +35,9 @@ export function createState(
     () => temporary.value ?? editor.value.document.value?.nodes ?? [],
   )
   const selectionBox = computed(() => {
-    const value = gesture.value,
-      end = boxEnd.value
-    return value?.kind === 'select' && end
-      ? {
-          x: Math.min(value.start.x, end.x),
-          y: Math.min(value.start.y, end.y),
-          width: Math.abs(value.start.x - end.x),
-          height: Math.abs(value.start.y - end.y),
-        }
+    const value = gesture.value
+    return value?.kind === 'select'
+      ? selectionBounds(value.start, boxEnd.value)
       : null
   })
   return {
@@ -157,45 +152,17 @@ export class Controller {
     else this.moveSelection(value, current)
   }
   moveSelection = (value: Gesture, current: Pointer) => {
-    const selected = new Set(this.state.editor.value.selectedIds.value)
-    let moving = value.original
-      .filter((node) => selected.has(node.id))
-      .map((node) => ({
-        ...node,
-        position: {
-          x: node.position.x + current.x - value.start.x,
-          y: node.position.y + current.y - value.start.y,
-        },
-      }))
-    if (this.state.snap.value)
-      moving = moving.map((node) => ({
-        ...node,
-        position: {
-          x: Math.round(node.position.x / 10) * 10,
-          y: Math.round(node.position.y / 10) * 10,
-        },
-      }))
-    const adjustment = this.state.showGuides.value
-      ? snapGuides(
-          moving,
-          value.original.filter((node) => !selected.has(node.id)),
-          6 / value.viewport.zoom,
-        )
-      : { dx: 0, dy: 0, guides: [] }
-    this.state.guides.value = adjustment.guides
-    const positions = new Map(
-      moving.map((node) => [
-        node.id,
-        {
-          x: node.position.x + adjustment.dx,
-          y: node.position.y + adjustment.dy,
-        },
-      ]),
-    )
-    this.state.temporary.value = value.original.map((node) => ({
-      ...node,
-      position: positions.get(node.id) ?? node.position,
-    }))
+    const next = dragNodes({
+      original: value.original,
+      selectedIds: this.state.editor.value.selectedIds.value,
+      start: value.start,
+      current,
+      zoom: value.viewport.zoom,
+      snap: this.state.snap.value,
+      showGuides: this.state.showGuides.value,
+    })
+    this.state.guides.value = next.guides
+    this.state.temporary.value = next.nodes
   }
   finish = (event: PointerEvent) => {
     if (this.state.connection.value) {
@@ -212,17 +179,7 @@ export class Controller {
       this.state.editor.value.move(this.state.temporary.value)
     const box = this.state.selectionBox.value
     if (box)
-      this.state.editor.value.select(
-        this.state.nodes.value
-          .filter(
-            (node) =>
-              node.position.x >= box.x &&
-              node.position.x + editorSize(node).width <= box.x + box.width &&
-              node.position.y >= box.y &&
-              node.position.y + editorSize(node).height <= box.y + box.height,
-          )
-          .map((node) => node.id),
-      )
+      this.state.editor.value.select(nodesInBox(this.state.nodes.value, box))
     this.cancelGesture()
     this.state.frame.value?.releasePointerCapture(event.pointerId)
   }

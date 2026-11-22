@@ -23,7 +23,10 @@ from platform_server.apps.dashboard.services.dashboard_service import (
     bump_version,
     locked_dashboard,
 )
-from platform_server.apps.dashboard.services.drafts import binding_draft_of
+from platform_server.apps.dashboard.services.drafts import (
+    binding_draft_of,
+    same_compute_payload,
+)
 from platform_server.apps.dashboard.services.node_service import (
     locked_node,
     require_node,
@@ -80,7 +83,9 @@ async def create_binding(
         detail_json=payload.detail_json,
         transform_json=payload.transform_json,
     )
-    await _check(state=state, binding=binding, context=context)
+    await _check(
+        state=state, binding=binding, context=context, should_check_compute=True
+    )
     binding_crud.add(session, binding)
     bump_version(dashboard)
     await _flush(session)
@@ -103,8 +108,19 @@ async def update_binding(
     """
     binding, dashboard = await locked_binding(session, binding_id)
     state = await load_state(session, dashboard.id)
+    previous = binding_draft_of(binding, field_path="")
     binding_crud.apply_changes(binding, given_changes(payload))
-    await _check(state=state, binding=binding, context=context)
+    await _check(
+        state=state,
+        binding=binding,
+        context=context,
+        should_check_compute=(
+            previous.source_kind != binding.source_kind
+            or not same_compute_payload(
+                previous.compute_json, binding.compute_json
+            )
+        ),
+    )
     bump_version(dashboard)
     await _flush(session)
     _logger.info(
@@ -161,12 +177,17 @@ async def _check(
     state: DashboardState,
     binding: DashboardBinding,
     context: ValidationContext,
+    should_check_compute: bool,
 ) -> None:
     """把改动后的这个节点的绑定过一遍校验。
 
     Args: state, binding, context。
     """
-    draft = binding_draft_of(binding, field_path="")
+    draft = binding_draft_of(
+        binding,
+        field_path="",
+        should_check_compute_details=should_check_compute,
+    )
     siblings = [
         item
         for item in state.bindings_of(binding.node_id)

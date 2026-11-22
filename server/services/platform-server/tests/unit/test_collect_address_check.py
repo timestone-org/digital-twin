@@ -16,12 +16,15 @@ from platform_server.apps.collect.schemas import (
     AddressCheckOut,
 )
 from platform_server.apps.collect.services.address_check import (
-    UNVERIFIED_DETAIL,
     check_addresses,
     raise_if_rejected,
 )
 from platform_server.apps.collect.services.command_bus import CommandBus
-from unit.collect_fakes import ACTION_VALIDATE, FakeCommandTransport
+from unit.collect_fakes import (
+    ACTION_VALIDATE,
+    FakeCommandTransport,
+    unreachable_transport,
+)
 
 SOURCE_ID = uuid.UUID("0192f0c0-0000-7000-8000-0000000000b1")
 
@@ -49,7 +52,41 @@ async def test_no_reply_marks_every_address_unverified() -> None:
         CHECK_UNVERIFIED,
         CHECK_UNVERIFIED,
     ]
-    assert checks[0].detail == UNVERIFIED_DETAIL
+    assert checks[0].detail is not None
+    assert "未答复" in checks[0].detail
+
+
+@pytest.mark.parametrize(
+    ("reason", "message"),
+    [
+        ("unknown_action", "采集侧暂不支持寻址串校验"),
+        ("source_offline", "数据源当前没有活会话"),
+        ("driver_failed", "采集侧未返回有效的校验结论"),
+    ],
+)
+async def test_an_error_reply_reports_the_reason_without_passing(
+    reason: str, message: str
+) -> None:
+    transport = FakeCommandTransport(
+        replies={ACTION_VALIDATE: {"status": "error", "reason": reason}}
+    )
+    [check] = await check_addresses(
+        build_bus(transport), source_id=SOURCE_ID, addresses=["ns=2;s=A"]
+    )
+    assert check.status == CHECK_UNVERIFIED
+    assert check.detail is not None
+    assert message in check.detail
+
+
+async def test_transport_failure_reports_an_unavailable_bus() -> None:
+    [check] = await check_addresses(
+        build_bus(unreachable_transport()),
+        source_id=SOURCE_ID,
+        addresses=["ns=2;s=A"],
+    )
+    assert check.status == CHECK_UNVERIFIED
+    assert check.detail is not None
+    assert "暂时联系不上" in check.detail
 
 
 async def test_a_valid_verdict_becomes_passed() -> None:

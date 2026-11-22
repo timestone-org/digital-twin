@@ -160,3 +160,31 @@ async def test_refresh_fails_closed_when_cache_is_unreachable() -> None:
 )
 def test_bearer_parsing(header: str | None, expected: str | None) -> None:
     assert parse_bearer(header) == expected
+
+
+async def test_revocation_generation_is_only_in_the_refresh_credential() -> (
+    None
+):
+    service = make_service(InMemoryCache())
+    current = uuid.uuid4()
+    pair = service.issue_pair(USER, generation=current)
+    assert (
+        "refresh_generation"
+        not in service.decode_access(pair.access_token).extra
+    )
+    grant = await service.consume_refresh_grant(pair.refresh_token)
+    grant.require_generation(current)
+    with pytest.raises(TokenInvalid, match="密码已变更"):
+        grant.require_generation(uuid.uuid4())
+
+
+async def test_invalid_refresh_generation_shape_cannot_renew() -> None:
+    service = make_service(InMemoryCache())
+    token, _ = CODEC.issue(
+        subject=str(USER),
+        token_type="refresh",
+        ttl_s=900,
+        extra={"refresh_generation": 7},
+    )
+    with pytest.raises(TokenInvalid, match="账号代次无效"):
+        await service.consume_refresh_grant(token)

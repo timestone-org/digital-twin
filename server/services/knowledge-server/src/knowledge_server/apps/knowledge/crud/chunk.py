@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import Integer, String, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.crud import content_lock
 from knowledge_server.apps.knowledge.models import (
     KnowledgeChunk,
     KnowledgeDocument,
@@ -31,6 +32,7 @@ async def replace_chunks(
 
     Args: session, base_id, document_id, chunks。
     """
+    await content_lock.base(session, base_id)
     await session.execute(
         delete(KnowledgeChunk).where(KnowledgeChunk.document_id == document_id)
     )

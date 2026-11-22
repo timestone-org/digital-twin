@@ -5,7 +5,6 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.modeling.errors import (
     DeploymentUnservable,
@@ -50,7 +49,6 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> list[int]:
 async def _detect(resolved: ResolvedCall, value: object) -> None:
     """Args: resolved, value。"""
     await detection.detect(
-        cast("AsyncSession", object()),
         deps=cast("OpenModelDeps", object()),
         resolved=resolved,
         payload=OpenModelDetectIn.model_validate({"rows": [{"温度": value}]}),

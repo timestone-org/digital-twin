@@ -377,9 +377,12 @@ describe('取字节', () => {
   })
 
   it('读字节时超时报超时', async () => {
-    const response = new Response('bytes')
-    vi.spyOn(response, 'blob').mockRejectedValue(
-      new DOMException('timed out', 'TimeoutError'),
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(new DOMException('timed out', 'TimeoutError'))
+        },
+      }),
     )
     fetchMock.mockResolvedValue(response)
 
@@ -392,8 +395,13 @@ describe('取字节', () => {
 
   it('读字节时被调用方中止，原样抛出', async () => {
     const aborted = new DOMException('aborted', 'AbortError')
-    const response = new Response('bytes')
-    vi.spyOn(response, 'blob').mockRejectedValue(aborted)
+    const response = new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.error(aborted)
+        },
+      }),
+    )
     fetchMock.mockResolvedValue(response)
 
     await expect(requestBytes('/x')).rejects.toBe(aborted)

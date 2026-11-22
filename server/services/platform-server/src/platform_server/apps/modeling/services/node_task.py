@@ -20,6 +20,11 @@ from platform_server.apps.modeling.services.artifact_store import (
     load,
     seal,
 )
+from platform_server.apps.modeling.services.preview import (
+    PreparedPreview,
+    prepare_preview,
+    summarize,
+)
 
 
 @dataclass(frozen=True)
@@ -32,6 +37,9 @@ class NodePayload:
     tz_offset_minutes: int
     split_plan: dict[str, Any] | None
     model_artifact: SealedArtifact | None = None
+    #: 测试分支由训练节点回灌的参数。空字典仍代表已拟合。
+    fitted: dict[str, Any] | None = None
+    business_timezone: str | None = None
 
 
 @dataclass(frozen=True)
@@ -53,6 +61,10 @@ class NodeResult:
     #: 结果面上要讲的块。⚠ 与拟合参数同理：算子实例用完即弃，讲解不跟着输出走，
     #: 留在子进程里就再也拿不回来了（docs/MODELING_RESULT_VIEW_DESIGN.md §4.4）
     report: tuple[ReportBlock, ...] = ()
+    #: 按端口建键、已压进单份字节上限的结果摘要。
+    previews: dict[str, PreparedPreview] = field(
+        default_factory=dict[str, PreparedPreview]
+    )
 
 
 def run_node_payload(payload: NodePayload) -> NodeResult:
@@ -66,6 +78,7 @@ def run_node_payload(payload: NodePayload) -> NodeResult:
     operator.bind_runtime(
         tz_offset_minutes=payload.tz_offset_minutes,
         split_plan=payload.split_plan,
+        business_timezone=payload.business_timezone,
     )
     if payload.model_artifact is not None:
         sealed = payload.model_artifact
@@ -77,6 +90,8 @@ def run_node_payload(payload: NodePayload) -> NodeResult:
                 runtime=sealed.runtime,
             )
         )
+    if payload.fitted is not None:
+        operator.load_fitted(payload.fitted)
     outputs = operator.run(payload.inputs)
     estimator = operator.trained_estimator()
     return NodeResult(
@@ -88,6 +103,10 @@ def run_node_payload(payload: NodePayload) -> NodeResult:
             "outputs": _keys_by_port(outputs),
         },
         report=operator.report(),
+        previews={
+            port: prepare_preview(summarize(value))
+            for port, value in outputs.items()
+        },
     )
 
 

@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from lib.errors import DependencyUnavailable
 from lib.web import Page, PageParams
 from platform_server.apps.collect.crud import point_crud
-from platform_server.apps.collect.crud.point import PointCandidate, PointCursor
+from platform_server.apps.collect.crud.point import (
+    PointCandidate,
+    PointCursor,
+    PointLookup,
+)
 from platform_server.apps.collect.schemas import PointOut
 from platform_server.apps.collect.schemas.point_query import PointStatus
 from platform_server.apps.collect.services import point_service
@@ -34,12 +38,10 @@ STATUS_QUERY_TIMEOUT_S = 10.0
 
 
 @dataclass(frozen=True)
-class PointFilters:
+class PointFilters(PointLookup):
     """点位配置与状态的组合条件。"""
 
-    source_id: uuid.UUID | None
-    keyword: str | None
-    status: PointStatus
+    status: PointStatus = "all"
 
 
 @dataclass(frozen=True)
@@ -77,8 +79,7 @@ async def list_points(
     if filters.status == "all":
         return await point_service.list_points(
             session,
-            source_id=filters.source_id,
-            keyword=filters.keyword,
+            lookup=filters,
             page=page,
             sort=None,
         )
@@ -103,7 +104,7 @@ async def _filtered_page(
     while True:
         candidates = await point_crud.list_candidates(
             session,
-            filters=(filters.source_id, filters.keyword),
+            lookup=filters,
             after=after,
             limit=STATUS_QUERY_BATCH_SIZE,
         )

@@ -10,7 +10,8 @@ from pathlib import Path
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
-from lib.config import AppSettings, PostgresSettings, RedisSettings
+from lib.config import HttpAppSettings, PostgresSettings, RedisSettings
+from opcua_server.apps.instance.endpoint import advertised_hostname
 
 SERVICE_NAME = "opcua-server"
 API_PREFIX = "/api/v1/opcua"
@@ -46,7 +47,7 @@ class MigrationSettings(PostgresSettings):
     postgres_schema: str = DB_SCHEMA
 
 
-class Settings(AppSettings, PostgresSettings, RedisSettings):
+class Settings(HttpAppSettings, PostgresSettings, RedisSettings):
     """进程启动时构造一次并冻结。"""
 
     model_config = SettingsConfigDict(
@@ -71,6 +72,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # opc.tcp 端口池。⚠ 必须与容器端口段映射一致：池外端口没有映射出去，
     # 实例会「显示运行中但连不上」。池满一律拒绝创建，不静默降级。
     port_pool: str = "4840-4859"
+    advertised_host: str | None = None
     # 单进程内同时运行的实例数上限。asyncio 单线程，实例过多会互相拖慢。
     max_instances: int = Field(default=16, ge=1, le=64)
 
@@ -89,6 +91,11 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     publish_window_ms: int = Field(default=1000, ge=PUBLISH_WINDOW_FLOOR_MS)
     # 单条推送消息里最多带几个节点，超出分片并标注
     publish_max_nodes: int = Field(default=500, ge=1)
+
+    @field_validator("advertised_host")
+    @classmethod
+    def _advertised_hostname(cls, value: str | None) -> str | None:
+        return advertised_hostname(value)
 
     @field_validator("port_pool")
     @classmethod

@@ -11,10 +11,16 @@ MB，而绝大多数运行只是在调参数。
 CSV 与二进制产物都在那个前缀底下。
 """
 
+import asyncio
 import csv
 import io
 import uuid
-from dataclasses import dataclass
+from concurrent.futures.process import BrokenProcessPool
+from dataclasses import dataclass, replace
+from functools import partial
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from typing import TYPE_CHECKING, TextIO
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,14 +37,17 @@ from platform_server.apps.modeling.services.jsonshape import (
     as_text,
 )
 
+if TYPE_CHECKING:
+    from platform_server.apps.modeling.services.run_pool import NodePool
+
 _logger = get_logger("platform.modeling.export")
 
 # CSV 的内容类型
 CONTENT_TYPE = "text/csv; charset=utf-8"
 
-# 一份 CSV 最多写多少行。⚠ 必须封顶：一次取数可以是几十万行，而这一步跑在
-# 节点边界上、写进对象存储之前整个在内存里
+# 单端口的导出行数与编码时间预算
 MAX_EXPORT_ROWS = 200_000
+ENCODE_TIMEOUT_S = 30.0
 
 # 时刻那一列在 CSV 里的表头。⚠ 与任何一个真实列 key 都不会撞：帧的列 key 来自
 # 台账列名，而这个名字里有下划线包起来的保留形状
@@ -72,7 +81,17 @@ def to_csv(frame: Frame) -> tuple[bytes, int, bool]:
     Args: frame。
     """
     buffer = io.StringIO(newline="")
-    writer = csv.writer(buffer)
+    kept = _write_csv(buffer, frame)
+    return (
+        buffer.getvalue().encode("utf-8"),
+        kept,
+        frame.row_count > kept,
+    )
+
+
+def _write_csv(stream: TextIO, frame: Frame) -> int:
+    """将保留的行写进文本流并返回行数。Args: stream, frame。"""
+    writer = csv.writer(stream)
     has_index = frame.index is not None
     head = [INDEX_HEADER] if has_index else []
     writer.writerow(head + [item.key for item in frame.columns])
@@ -82,27 +101,55 @@ def to_csv(frame: Frame) -> tuple[bytes, int, bool]:
         writer.writerow(
             ([stamp] if has_index else []) + list(frame.rows[position])
         )
-    return (
-        buffer.getvalue().encode("utf-8"),
-        kept,
-        frame.row_count > MAX_EXPORT_ROWS,
+    return kept
+
+
+def _encode_file(path: Path, frame: Frame) -> tuple[int, int]:
+    """子进程逐行写入 CSV，只回行数与大小。Args: path, frame。"""
+    with path.open("w", encoding="utf-8", newline="") as stream:
+        kept = _write_csv(stream, frame)
+    return kept, path.stat().st_size
+
+
+def _bounded_frame(frame: Frame) -> Frame:
+    """只把能导出的行送进进程池。Args: frame。"""
+    if frame.row_count <= MAX_EXPORT_ROWS:
+        return frame
+    return replace(
+        frame,
+        rows=frame.rows[:MAX_EXPORT_ROWS],
+        index=None if frame.index is None else frame.index[:MAX_EXPORT_ROWS],
     )
 
 
 async def write_frame(
-    store: ObjectStore, key: str, frame: Frame
+    store: ObjectStore, key: str, frame: Frame, *, pool: "NodePool"
 ) -> ExportedFrame:
-    """把一张帧写进对象存储。
-
-    Args: store, key, frame。
-    """
-    payload, kept, is_truncated = to_csv(frame)
-    await store.put_bytes(key, payload, content_type=CONTENT_TYPE)
+    """编码并上传一个端口的临时文件。Args: store, key, frame, pool。"""
+    directory = await asyncio.to_thread(
+        TemporaryDirectory, prefix="modeling-frame-"
+    )
+    path = Path(directory.name) / "frame.csv"
+    try:
+        kept, size = await pool.run(
+            partial(_encode_file, path, _bounded_frame(frame)),
+            timeout_s=ENCODE_TIMEOUT_S,
+        )
+        await store.upload_from(key, path, content_type=CONTENT_TYPE)
+    finally:
+        try:
+            await asyncio.to_thread(directory.cleanup)
+        except OSError as error:
+            _logger.warning(
+                "modeling_frame_temp_cleanup_failed",
+                "端口全量结果临时文件清理失败",
+                error=error,
+            )
     return ExportedFrame(
         object_key=key,
         row_count=kept,
-        size_bytes=len(payload),
-        is_truncated=is_truncated,
+        size_bytes=size,
+        is_truncated=frame.row_count > kept,
     )
 
 
@@ -111,27 +158,36 @@ async def write_all(
     run_id: str,
     node_id: str,
     frames: dict[str, Frame],
+    *,
+    pool: "NodePool | None",
 ) -> dict[str, dict[str, object]]:
     """把一个节点每个输出端口的帧都写出去，回按端口建键的元信息。
 
     ⚠ 写不进去只记一条日志、**不让这个节点失败**：全量产物是附加品，
     为它把一次跑通的训练判成失败是本末倒置。
-    Args: store, run_id, node_id, frames。
+    Args: store, run_id, node_id, frames, pool。
     """
-    if store is None or not frames:
+    if store is None or pool is None or not frames:
         return {}
     written: dict[str, dict[str, object]] = {}
     for port, frame in sorted(frames.items()):
         try:
             done = await write_frame(
-                store, frame_key(run_id, node_id, port), frame
+                store, frame_key(run_id, node_id, port), frame, pool=pool
             )
-        except ObjectStoreError as error:
+        except (
+            BrokenProcessPool,
+            ObjectStoreError,
+            OSError,
+            UnicodeError,
+            csv.Error,
+        ) as error:
             _logger.warning(
                 "modeling_frame_export_failed",
-                "全量结果没写进对象存储",
+                "端口全量结果导出失败",
                 run_id=run_id,
                 node_id=node_id,
+                port=port,
                 error=error,
             )
             continue

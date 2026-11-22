@@ -6,6 +6,7 @@ export const MODELING_COMMAND_OPERATIONS = [
   'create_instance',
   'configure_instance',
   'train_instance',
+  'run_pipeline',
   'publish_version',
   'deploy_instance',
   'create_deployment',
@@ -66,6 +67,7 @@ export type ModelingCommand = {
     | 'create_instance'
     | 'configure_instance'
     | 'train_instance'
+    | 'run_pipeline'
     | 'publish_version'
     | 'deploy_instance'
     | 'create_deployment'

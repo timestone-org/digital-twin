@@ -13,6 +13,7 @@
  * 字面量」的两道闸按已注册的 type 逐个 grep 源码，而 `tabs` 是 DtSegmented
  * 的一个 variant 取值，叫它会红在一堆与模块毫不相干的地方。
  */
+import { initialTabSelection } from './look'
 import { defineModule } from '../../registry'
 import {
   TABS_ALIGNS,
@@ -54,6 +55,7 @@ export default defineModule({
   // ⚠ 不开 hostClickable：每一格自己就是那个可点的东西，整块再兜底一次的话，
   // 格子之外的空白也能点，且那一次点击不带值，会命中「值留空」那条路径
   emitsInteractions: true,
+  initialSelection: initialTabSelection,
   // 只发「选项点击」：它是带值的那一档，也是进场重放互斥组认的那一档
   interactionEvents: ['select'],
   bindings: [],

@@ -40,7 +40,10 @@ from platform_server.apps.modeling.services.entry_contract import (
     smoke_moment,
     without_target,
 )
-from platform_server.apps.modeling.services.graph_walk import topological_order
+from platform_server.apps.modeling.services.graph_walk import (
+    prediction_path,
+    topological_order,
+)
 from platform_server.apps.modeling.services.jsonshape import (
     as_dict,
     as_text,
@@ -49,8 +52,8 @@ from platform_server.apps.modeling.services.jsonshape import (
 from platform_server.apps.modeling.services.model_schema import build_schema
 from platform_server.apps.modeling.services.serving import (
     PREDICTION_KEY,
-    SERVING_FORMAT_VERSION,
     compile_model,
+    serving_format_for_steps,
 )
 
 
@@ -108,12 +111,11 @@ def inspect_run(
     payload = as_dict(record_of(records, model_id).preview.get("model"))
     if not payload:
         return _unservable("这次运行没有产出模型")
-    windowed = [
-        node_id
-        for node_id in nodes
-        if registry.get(nodes[node_id].operator).SERVING_NEEDS_WINDOW
-    ]
-    if windowed:
+    path = prediction_path(graph, model_id)
+    if any(
+        registry.get(nodes[node_id].operator).SERVING_NEEDS_WINDOW
+        for node_id in path
+    ):
         return _unservable(
             "滞后 / 滚动特征在单行预测时拿不到历史窗口，本流水线暂不可上线",
             payload,
@@ -121,7 +123,7 @@ def inspect_run(
     publishing = _Publishing(
         graph=graph,
         records=records,
-        served=_served_nodes(graph),
+        served=_served_nodes(graph, path),
         model_id=model_id,
         payload=payload,
         estimator=estimator,
@@ -277,7 +279,7 @@ def _serving_of(
     Args: publishing, steps, entry。
     """
     return {
-        "format_version": SERVING_FORMAT_VERSION,
+        "format_version": serving_format_for_steps(steps),
         "task": as_text(publishing.payload.get("task")),
         "entry_columns": [
             {"key": item.key, "dtype": item.dtype} for item in entry
@@ -324,16 +326,17 @@ def _published(
     )
 
 
-def _served_nodes(graph: PipelineGraph) -> list[str]:
+def _served_nodes(graph: PipelineGraph, path: set[str]) -> list[str]:
     """推理时还要跑的那些节点，按训练时的拓扑序。
 
-    Args: graph。
+    Args: graph, path。
     """
     nodes = graph.node_by_id()
     return [
         node_id
         for node_id in topological_order(graph)
-        if registry.get(nodes[node_id].operator).ENABLED_IN_SERVING
+        if node_id in path
+        and registry.get(nodes[node_id].operator).ENABLED_IN_SERVING
     ]
 
 

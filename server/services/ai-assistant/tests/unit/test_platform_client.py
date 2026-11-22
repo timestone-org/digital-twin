@@ -78,7 +78,7 @@ async def test_every_call_carries_a_traceparent() -> None:
     assert seen.get("traceparent")
 
 
-async def test_the_keyword_and_source_reach_the_query() -> None:
+async def test_exact_point_lookup_also_keeps_the_legacy_keyword() -> None:
     seen: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -86,6 +86,7 @@ async def test_the_keyword_and_source_reach_the_query() -> None:
         return _page([])
 
     await _client(handler).find_point(HEADERS, source_id="s1", code="温度")
+    assert seen["code"] == "温度"
     assert seen["q"] == "温度"
     assert seen["source_id"] == "s1"
 

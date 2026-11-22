@@ -6,7 +6,7 @@
 from pydantic import Field, SecretStr
 from pydantic_settings import SettingsConfigDict
 
-from lib.config import AppSettings, PostgresSettings, RedisSettings
+from lib.config import HttpAppSettings, PostgresSettings, RedisSettings
 
 SERVICE_NAME = "auth-server"
 API_PREFIX = "/api/v1/auth"
@@ -14,7 +14,7 @@ INTERNAL_PREFIX = "/internal/v1"
 DB_SCHEMA = "auth"
 
 
-class Settings(AppSettings, PostgresSettings, RedisSettings):
+class Settings(HttpAppSettings, PostgresSettings, RedisSettings):
     """进程启动时构造一次并冻结。"""
 
     model_config = SettingsConfigDict(

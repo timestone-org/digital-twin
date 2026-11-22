@@ -1,12 +1,15 @@
 """会话与个人资料自服务：登录、刷新、登出、注册、改自己的资料与密码。"""
 
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_server.apps.auth.crud import role_crud, user_crud
+from auth_server.apps.auth.crud.user import LoginCredentials
 from auth_server.apps.auth.errors import (
     AccountDisabled,
     CurrentPasswordIncorrect,
@@ -45,11 +48,23 @@ from lib.utils.timeutils import Clock
 
 _logger = get_logger("auth.session")
 
+SessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
 # 用户不存在时也走一次散列校验，让「账号存在与否」不能由响应耗时推断
 _TIMING_DECOY = (
     "$argon2id$v=19$m=65536,t=3,p=4$"
     "AAAAAAAAAAAAAAAAAAAAAA$0000000000000000000000000000000"
 )
+
+
+async def _take_login_attempt(limiter: FixedWindowLimiter, key: str) -> None:
+    """记一次登录尝试，保持登录面专属错误码。Args: limiter, key。"""
+    try:
+        await limiter.hit(key)
+    except RateLimited as error:
+        raise TooManyLoginAttempts(
+            error.message, context=error.context
+        ) from error
 
 
 @dataclass(frozen=True)
@@ -60,37 +75,45 @@ class AuthService:
     api_keys: ApiKeyService
     hasher: BoundedHasher
     login_limiter: FixedWindowLimiter
+    account_login_limiter: FixedWindowLimiter
     signup_limiter: FixedWindowLimiter
     signup_enabled: bool
     signup_default_role: str
     clock: Clock
 
     async def login(
-        self, session: AsyncSession, *, login: str, password: str
+        self, sessions: SessionFactory, *, login: str, password: str
     ) -> SessionOut:
-        """账号口令登录。失败次数按账号限流。
+        """账号口令登录，按登录标识及稳定账号分别计数。
 
-        Args: session, login（用户名或邮箱）, password。
+        Args: sessions, login（用户名或邮箱）, password。
         """
         login_key = login.strip().lower()
-        try:
-            await self.login_limiter.hit(login_key)
-        except RateLimited as error:
-            # 登录场景有自己的错误码，前端按它给文案；通用限流码对不上
-            raise TooManyLoginAttempts(
-                error.message, context=error.context
-            ) from error
-        user = await user_crud.get_by_login(session, login)
-        if user is None:
+        await _take_login_attempt(self.login_limiter, login_key)
+        async with sessions() as session:
+            user = await user_crud.get_by_login(session, login)
+            credentials = LoginCredentials.from_user(user) if user else None
+        if credentials is None:
             await self.hasher.verify(password, _TIMING_DECOY)
             raise InvalidCredentials("用户名或密码错误")
-        if not await self.hasher.verify(password, user.hashed_password):
-            _logger.info("login_failed", "口令不符", user_id=str(user.id))
-            raise InvalidCredentials("用户名或密码错误")
-        if not user.is_active:
-            raise AccountDisabled("账号已停用，请联系管理员")
-        await self._on_login_success(session, user, password, login_key)
-        identity = await load_identity(session, user)
+        await self._verify_login_password(
+            credentials, password, attempt_limiter=self.account_login_limiter
+        )
+        upgraded = (
+            await self.hasher.hash(password)
+            if self.hasher.needs_rehash(credentials.hashed_password)
+            else None
+        )
+        identity = await self._confirm_login(sessions, credentials, upgraded)
+        if identity is None:
+            identity = await self._confirm_concurrent_rehash(
+                sessions, credentials, password
+            )
+        user = identity.user
+        await self.account_login_limiter.reset(str(user.id))
+        for key in {login_key, user.username.lower(), user.email.lower()}:
+            await self.login_limiter.reset(key)
+        _logger.info("login_succeeded", "", user_id=str(user.id))
         return self._session_out(identity)
 
     async def refresh(
@@ -100,12 +123,13 @@ class AuthService:
 
         Args: session, refresh_token。
         """
-        user_id = await self.tokens.consume_refresh(
+        grant = await self.tokens.consume_refresh_grant(
             refresh_token, now=self.clock()
         )
-        identity = await load_identity_by_id(session, user_id)
+        identity = await load_identity_by_id(session, grant.user_id)
         if identity is None:
             raise TokenInvalid("令牌对应的账号不存在")
+        grant.require_generation(identity.user.refresh_generation)
         if not identity.user.is_active:
             raise AccountDisabled("账号已停用，请联系管理员")
         return self._session_out(identity)
@@ -210,29 +234,80 @@ class AuthService:
             payload.current_password, user.hashed_password
         ):
             raise CurrentPasswordIncorrect("当前密码不正确")
-        user.hashed_password = await self.hasher.hash(payload.new_password)
-        await session.flush()
+        changed = await user_crud.rotate_password(
+            session,
+            user,
+            await self.hasher.hash(payload.new_password),
+        )
+        if not changed:
+            raise CurrentPasswordIncorrect("当前密码已变更，请重新登录")
         _logger.info("password_changed", "", user_id=str(user.id))
 
-    async def _on_login_success(
+    async def _verify_login_password(
         self,
-        session: AsyncSession,
-        user: User,
+        credentials: LoginCredentials,
         password: str,
-        login_key: str,
+        *,
+        attempt_limiter: FixedWindowLimiter | None = None,
     ) -> None:
-        # 计数按登录入参走，同一账号的用户名键和邮箱键都可能积着失败次数
-        for key in {login_key, user.username.lower(), user.email.lower()}:
-            await self.login_limiter.reset(key)
-        user.last_login_at = self.clock()
-        # 升过散列参数的旧口令在这一刻顺带重算，用户无感
-        if self.hasher.needs_rehash(user.hashed_password):
-            user.hashed_password = await self.hasher.hash(password)
-        await session.flush()
-        _logger.info("login_succeeded", "", user_id=str(user.id))
+        verified = await self.hasher.verify(
+            password, credentials.hashed_password
+        )
+        # 同一次登录的并发重散列校验沿用首次计数。
+        if attempt_limiter is not None:
+            await _take_login_attempt(attempt_limiter, str(credentials.user_id))
+        if not verified:
+            _logger.info(
+                "login_failed", "口令不符", user_id=str(credentials.user_id)
+            )
+            raise InvalidCredentials("用户名或密码错误")
+        if not credentials.is_active:
+            raise AccountDisabled("账号已停用，请联系管理员")
+
+    async def _confirm_login(
+        self,
+        sessions: SessionFactory,
+        credentials: LoginCredentials,
+        upgraded_hash: str | None,
+    ) -> Identity | None:
+        async with sessions() as session:
+            user = await user_crud.record_verified_login(
+                session, credentials, self.clock(), upgraded_hash
+            )
+            if user is None:
+                return None
+            return await load_identity(session, user)
+
+    async def _confirm_concurrent_rehash(
+        self,
+        sessions: SessionFactory,
+        credentials: LoginCredentials,
+        password: str,
+    ) -> Identity:
+        async with sessions() as session:
+            user = await user_crud.get(session, credentials.user_id)
+            current = LoginCredentials.from_user(user) if user else None
+        if (
+            current is None
+            or current.refresh_generation != credentials.refresh_generation
+        ):
+            raise InvalidCredentials("用户名或密码错误")
+        # 同一口令的并发重散列不改变刷新代次，须重新验证散列再确认。
+        if not current.is_active:
+            raise AccountDisabled("账号已停用，请联系管理员")
+        if not await self.hasher.verify(password, current.hashed_password):
+            raise InvalidCredentials("用户名或密码错误")
+        identity = await self._confirm_login(sessions, current, None)
+        if identity is None:
+            raise InvalidCredentials("登录期间凭据已更新，请重新登录")
+        return identity
 
     def _session_out(self, identity: Identity) -> SessionOut:
-        pair = self.tokens.issue_pair(identity.user.id, now=self.clock())
+        pair = self.tokens.issue_pair(
+            identity.user.id,
+            generation=identity.user.refresh_generation,
+            now=self.clock(),
+        )
         return SessionOut(
             token=_to_token_out(pair), user=to_user_detail(identity)
         )

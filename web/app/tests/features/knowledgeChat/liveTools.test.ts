@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { emptyLog } from '@/features/ai/conversationLog'
+import { emptyLog, type ChatEntry } from '@/features/ai/conversationLog'
 import type { RunState } from '@/features/ai/conversationSender'
 import { createKnowledgeSender } from '@/features/knowledgeChat/sender'
 /** @fileoverview 工具校验、元数据最小化和卡片回执恢复。 */
@@ -369,6 +369,7 @@ it('clearing a session discards late tool receipts from the cancelled turn', asy
   const send = createKnowledgeSender({
     sessionId: () => 'session',
     state,
+    failedQuestion: ref<ChatEntry | null>(null),
     isRunning: ref(false),
     abort,
     edit: (next) => {

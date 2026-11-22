@@ -338,3 +338,6 @@ export const COLLECT_POINT_BATCH_MAX = 200
 export const COLLECT_POINT_DELETE_BATCH_MAX = 200
 /** 采样与轮询周期的下限，与后端 `MIN_INTERVAL_MS` 同值。 */
 export const COLLECT_MIN_INTERVAL_MS = 50
+
+/** 归档心跳的下限。后端只接受正整数毫秒。 */
+export const COLLECT_MIN_ARCHIVE_HEARTBEAT_MS = 1

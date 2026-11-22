@@ -1,41 +1,19 @@
 /** @fileoverview 来源列表与人工同步；关闭、切库、卸载作废列表请求。 */
-import { onScopeDispose, ref, shallowRef } from 'vue'
-import { useConfirm } from '@dt/ui'
-import { createSource, listSources, syncSource } from '@/api/knowledge'
+import { onScopeDispose } from 'vue'
+import type { KnowledgeSourceMetadataPatch } from '@dt/contracts'
+import {
+  createSource,
+  listSources,
+  syncSource,
+  updateSourceMetadata,
+  detachSource,
+} from '@/api/knowledge'
 import type { KnowledgeSource, PlatformSourceConfig } from '@/api/knowledge'
-import { useRacedFetch } from '@/composables/useRacedFetch'
 import { messageOf } from './knowledgeState'
 import { isCursorPlatformPath } from './sourcePath'
-
-function createState(baseId: () => string, isOpen: () => boolean) {
-  return {
-    baseId,
-    isOpen,
-    confirm: useConfirm(),
-    race: useRacedFetch(),
-    sources: shallowRef<KnowledgeSource[]>([]),
-    error: ref(''),
-    result: ref(''),
-    isLoading: ref(false),
-    isBusy: ref(false),
-    isDisposed: false,
-  }
-}
-type SourceState = ReturnType<typeof createState>
-
-function isCurrent(state: SourceState, wanted: string): boolean {
-  return !state.isDisposed && state.baseId() === wanted && state.isOpen()
-}
-
-function canWrite(state: SourceState): boolean {
-  return (
-    state.baseId() !== '' &&
-    !state.isDisposed &&
-    state.isOpen() &&
-    !state.isBusy.value &&
-    !state.isLoading.value
-  )
-}
+import { supportsSourceManagement } from './sourceMetadata'
+import { canWrite, createSourceState, isCurrent } from './knowledgeSourceState'
+import type { SourceState } from './knowledgeSourceState'
 
 function cancel(state: SourceState): void {
   state.race.cancel()
@@ -134,11 +112,53 @@ async function sync(
   }
 }
 
+async function manageSource(
+  state: SourceState,
+  source: KnowledgeSource,
+  changes?: KnowledgeSourceMetadataPatch,
+): Promise<boolean> {
+  if (!canWrite(state) || !supportsSourceManagement(source)) return false
+  const wanted = state.baseId()
+  state.isBusy.value = true
+  state.error.value = ''
+  state.result.value = ''
+  try {
+    if (changes) {
+      const updated = await updateSourceMetadata(source.id, changes)
+      if (!isCurrent(state, wanted)) return false
+      state.sources.value = state.sources.value.map((row) =>
+        row.id === source.id ? updated : row,
+      )
+      state.result.value = '已保存来源配置'
+    } else {
+      const accepted = await state.confirm.ask({
+        title: '解绑来源',
+        message: `停止「${source.name}」的后续同步。已导入的原文、检索结果与引用会保留。`,
+        confirmText: '解绑',
+        danger: true,
+      })
+      if (!accepted || !isCurrent(state, wanted)) return false
+      await detachSource(source.id)
+      if (!isCurrent(state, wanted)) return false
+      state.sources.value = state.sources.value.filter(
+        (row) => row.id !== source.id,
+      )
+      state.result.value = '来源已解绑，已导入的资料仍可阅读'
+    }
+    return true
+  } catch (cause) {
+    if (isCurrent(state, wanted)) state.error.value = messageOf(cause)
+    return false
+  } finally {
+    state.isBusy.value = false
+  }
+}
+
 export function useKnowledgeSources(
   baseId: () => string,
   isOpen: () => boolean,
 ) {
-  const state = createState(baseId, isOpen)
+  const state = createSourceState(baseId, isOpen)
   onScopeDispose(() => {
     state.isDisposed = true
     state.race.cancel()
@@ -150,5 +170,8 @@ export function useKnowledgeSources(
     add: (name: string, config: PlatformSourceConfig) =>
       add(state, name, config),
     sync: (source: KnowledgeSource) => sync(state, source),
+    edit: (source: KnowledgeSource, changes: KnowledgeSourceMetadataPatch) =>
+      manageSource(state, source, changes),
+    detach: (source: KnowledgeSource) => manageSource(state, source),
   }
 }

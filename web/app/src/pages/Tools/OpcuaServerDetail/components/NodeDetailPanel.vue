@@ -236,6 +236,9 @@ async function write(): Promise<void> {
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <span class="text-xs text-text-disabled">当前值</span>
+          <DtTag v-if="live.isStale.value" size="sm" intent="warning">
+            陈旧
+          </DtTag>
           <DtTag
             v-if="runningType && runningType !== node.data_type"
             mono

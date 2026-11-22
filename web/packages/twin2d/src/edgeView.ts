@@ -12,6 +12,7 @@ import {
 import { resolveAccent, sanitizeCssValue } from './cssValue'
 import { edgePath } from './edgePath'
 import type { EdgePathResult } from './edgePath'
+import type { OrthogonalEnd } from './orthogonalObstacles'
 import {
   perimTToSide,
   perimeterPoint,
@@ -274,15 +275,15 @@ function endsOf(
   edge: Twin2dEdge,
   nodes: ReadonlyMap<string, Twin2dNode>,
   styles: ReadonlyMap<string, Twin2dNodeStyle>,
-): readonly [EndView, EndView] | null {
+): readonly [OrthogonalEnd, OrthogonalEnd] | null {
   const from = pairOf(edge.from.nodeId, nodes, styles)
   const to = pairOf(edge.to.nodeId, nodes, styles)
   if (from === null || to === null) return null
   const fromBox = worldBoxOf(from)
   const toBox = worldBoxOf(to)
   return [
-    endOf(edge.from, from, { x: toBox.x, y: toBox.y }),
-    endOf(edge.to, to, { x: fromBox.x, y: fromBox.y }),
+    { ...endOf(edge.from, from, toBox), box: fromBox },
+    { ...endOf(edge.to, to, fromBox), box: toBox },
   ]
 }
 
@@ -550,7 +551,7 @@ function labelViewOf(
 function edgeViewOf(
   edge: Twin2dEdge,
   style: Twin2dEdgeStyle,
-  ends: readonly [EndView, EndView],
+  ends: readonly [OrthogonalEnd, OrthogonalEnd],
   state: Twin2dEdgeState,
   flow: Twin2dFlowInput,
 ): Twin2dEdgeView {
@@ -559,6 +560,7 @@ function edgeViewOf(
     end: ends[1].point,
     startSide: ends[0].side,
     endSide: ends[1].side,
+    endpointBoxes: [ends[0].box, ends[1].box],
     waypoints: edge.waypoints,
     route: routeOf(edge, style),
     radius: style.cornerRadius,

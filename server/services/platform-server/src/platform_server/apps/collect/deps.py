@@ -4,19 +4,22 @@
 本模块只补数据源出参要的旁路信息与三档写上下文。
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.logging import bind_log_context
+from lib.logging.context import current_log_context
 from platform_server.apps.collect.catalog import (
     COLLECT_MANAGE,
     COLLECT_OPERATE,
 )
 from platform_server.apps.collect.errors import IdempotencyKeyRequired
 from platform_server.apps.collect.services import CommandBus, PlanNotifier
+from platform_server.apps.collect.services.audit import AuditActor
 from platform_server.apps.collect.services.point_query import PointQueryContext
 from platform_server.apps.collect.services.source_service import SourceContext
 from platform_server.apps.collect.services.state_source import (
@@ -94,12 +97,14 @@ class WriteContext(WriteGate):
 
     bus: CommandBus
     plans: PlanNotifier
+    audit_actor: AuditActor
 
 
 def _write_context(
     container: Container,
     caller: CallerContext,
     idempotency_key: str | None,
+    request: Request,
 ) -> WriteContext:
     # ⚠ 把调用者绑进日志上下文：写值与配置变更的每条日志都要认得出是谁干的
     # （observability §7）。只在 async 依赖里调才生效——同步依赖跑在线程池，
@@ -111,40 +116,58 @@ def _write_context(
         caller=caller,
         bus=container.command_bus,
         plans=container.plan_notifier,
+        audit_actor=AuditActor(
+            id=caller.user_id,
+            source_ip=request.client.host if request.client else None,
+            trace_id=current_log_context().trace_id or "",
+        ),
     )
 
 
 async def get_manage_context(
+    request: Request,
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(COLLECT_MANAGE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> WriteContext:
     """增删改数据源与点位用的写上下文。
 
-    Args: container, caller, idempotency_key。
+    Args: request, container, caller, idempotency_key, session。
     """
-    return _write_context(container, caller, idempotency_key)
+    return replace(
+        _write_context(container, caller, idempotency_key, request),
+        receipt_session=session,
+    )
 
 
 async def get_operate_context(
+    request: Request,
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(COLLECT_OPERATE))],
     idempotency_key: Annotated[str | None, Depends(get_idempotency_key)],
 ) -> WriteContext:
     """触碰现场设备的动作用的写上下文。
 
-    Args: container, caller, idempotency_key。
+    Args: request, container, caller, idempotency_key。
     """
-    return _write_context(container, caller, idempotency_key)
+    return _write_context(container, caller, idempotency_key, request)
 
 
 async def get_write_value_context(
+    request: Request,
     container: Annotated[Container, Depends(get_container)],
     caller: Annotated[CallerContext, Depends(require(COLLECT_OPERATE))],
     idempotency_key: Annotated[str, Depends(require_idempotency_key)],
 ) -> WriteContext:
     """下发写值专用：幂等键**必填**。
 
-    Args: container, caller, idempotency_key。
+    Args: request, container, caller, idempotency_key。
     """
-    return _write_context(container, caller, idempotency_key)
+    context = _write_context(container, caller, idempotency_key, request)
+    return replace(
+        context,
+        idempotency=replace(
+            context.idempotency, should_reserve_full_window=True
+        ),
+    )

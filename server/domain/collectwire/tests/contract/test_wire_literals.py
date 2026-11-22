@@ -18,6 +18,8 @@ from collectwire import (
     COLLECT_LEASE_KEY,
     DATA_TYPES,
     ERROR_CATEGORIES,
+    REASON_WRITE_OUTCOME_UNKNOWN,
+    REASON_WRITE_REJECTED,
     REPLY_PREFIX,
     REQUEST_KEY,
     SNAPSHOT_FIELDS,
@@ -160,3 +162,11 @@ def test_snapshot_owner_stamp_binds_the_exact_payload_bytes() -> None:
     )
     assert snapshot_owner_stamp("epoch", "abc") == f"epoch:{expected}"
     assert snapshot_owner_stamp("epoch", "abc ") != f"epoch:{expected}"
+
+
+def test_unconfirmed_write_has_a_stable_wire_reason() -> None:
+    assert REASON_WRITE_OUTCOME_UNKNOWN == "write_outcome_unknown"
+
+
+def test_confirmed_write_refusal_has_a_stable_wire_reason() -> None:
+    assert REASON_WRITE_REJECTED == "write_rejected"

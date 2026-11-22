@@ -19,6 +19,7 @@ from platform_server.apps.hvac.services.ac_startup_rules import (
     Frame,
     Readings,
 )
+from platform_server.apps.hvac.startup_assessment import has_limits
 
 # ⚠ 存量工件的 pickle 里写死了这两个类在**本模块**下的路径：定义可以搬家，
 # 旧名必须留在这里，解析不到就是所有已训模型一起拒载（AC_MODEL_DESIGN §4）
@@ -167,13 +168,14 @@ def compliant_at(
     *,
     units: Sequence[RoomUnit],
     timezone: str,
-) -> bool:
+) -> bool | None:
     """用开机时刻固定的目标判断后续帧。
 
     Args: frame, started_at, units, timezone。"""
+    effective = [unit.at(started_at, timezone) for unit in units]
+    if not any(has_limits(unit.bands) for unit in effective):
+        return None
     return frame.is_valid and all(
-        unit.at(started_at, timezone).is_in_band(
-            frame.readings.get(unit.serial, {})
-        )
-        for unit in units
+        unit.is_in_band(frame.readings.get(unit.serial, {}))
+        for unit in effective
     )

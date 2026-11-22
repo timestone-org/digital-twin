@@ -25,6 +25,7 @@ class ModelingCommand(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
     account_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
     scope: Mapped[str] = mapped_column(Text)
+    requested_operation: Mapped[str | None] = mapped_column(Text, nullable=True)
     key_hash: Mapped[str] = mapped_column(Text)
     request_hash: Mapped[str] = mapped_column(Text)
     state: Mapped[str] = mapped_column(Text)

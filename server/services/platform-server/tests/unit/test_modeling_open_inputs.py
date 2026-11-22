@@ -7,7 +7,6 @@ from typing import cast
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from platform_server.apps.modeling.errors import PredictRequestInvalid
 from platform_server.apps.modeling.models import (
@@ -98,8 +97,8 @@ class OverflowingModel:
     def __init__(self, answers: list[float | None]) -> None:
         self._answers = answers
 
-    def predict_many(self, _rows: object) -> list[float | None]:
-        """回预设的结果。Args: _rows。"""
+    async def predict(self, *_: object) -> list[float | None]:
+        """回预设的结果。Args: _。"""
         return self._answers
 
 
@@ -107,6 +106,8 @@ def resolved_call() -> ResolvedCall:
     version = SimpleNamespace(
         task="regression",
         version=1,
+        serving_channel="json",
+        serving_json={},
         signature_json={"inputs": [{"key": "x", "is_required": True}]},
     )
     deployment = SimpleNamespace(
@@ -126,8 +127,9 @@ async def test_a_result_that_is_not_finite_is_a_recorded_failure(
     """有限输入溢出成 inf：拒绝并记 400，不能记成一次成功。"""
     recorded: list[int] = []
 
-    async def compiled(*_args: object) -> OverflowingModel:
-        return OverflowingModel([1.0, answer])
+    deps = SimpleNamespace(
+        inference=OverflowingModel([1.0, answer]), store=None
+    )
 
     async def record(
         _deps: object,
@@ -138,12 +140,10 @@ async def test_a_result_that_is_not_finite_is_a_recorded_failure(
     ) -> None:
         recorded.append(status)
 
-    monkeypatch.setattr(open_model_service, "_compiled", compiled)
     monkeypatch.setattr(open_model_service, "record_call", record)
     with pytest.raises(PredictRequestInvalid, match="第 2 行"):
         await predict_and_record(
-            cast("AsyncSession", object()),
-            deps=cast("OpenModelDeps", object()),
+            deps=cast("OpenModelDeps", deps),
             resolved=resolved_call(),
             payload=OpenModelPredictIn.model_validate(
                 {"rows": [{"x": 1.0}, {"x": 1e308}]}
@@ -157,14 +157,11 @@ async def test_a_blank_result_is_still_an_answer(
 ) -> None:
     """算不出的行回 null 是约定，不是溢出。"""
 
-    async def compiled(*_args: object) -> OverflowingModel:
-        return OverflowingModel([None, 2.5])
+    deps = SimpleNamespace(inference=OverflowingModel([None, 2.5]), store=None)
 
-    monkeypatch.setattr(open_model_service, "_compiled", compiled)
     monkeypatch.setattr(open_model_service, "_warnings_of", lambda *_: [])
     answer = await open_model_service.predict(
-        cast("AsyncSession", object()),
-        deps=cast("OpenModelDeps", object()),
+        deps=cast("OpenModelDeps", deps),
         resolved=resolved_call(),
         payload=OpenModelPredictIn.model_validate(
             {"rows": [{"x": 1.0}, {"x": 2.0}]}

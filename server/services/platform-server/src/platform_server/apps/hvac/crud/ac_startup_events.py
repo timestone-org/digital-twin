@@ -5,9 +5,10 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, false, func, not_, or_, select, true
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from lib.db import CrudBase
 from lib.utils.ids import uuid7
@@ -16,7 +17,12 @@ from platform_server.apps.hvac.models import (
     AcStartupExclusion,
 )
 from platform_server.apps.hvac.schemas import TimeWindow
-from platform_server.apps.hvac.startups import OUTCOME_USABLE
+from platform_server.apps.hvac.seasons import WinterPeriod
+from platform_server.apps.hvac.startup_assessment import ColdStartAssessment
+from platform_server.apps.hvac.startups import (
+    OUTCOME_UNASSESSED,
+    OUTCOME_USABLE,
+)
 
 
 @dataclass(frozen=True)
@@ -135,18 +141,19 @@ class AcStartupEpisodeCrud(CrudBase[AcStartupEpisode]):
         batch_id: uuid.UUID,
         *,
         window: EpisodePage,
+        assessment: ColdStartAssessment | None = None,
     ) -> list[AcStartupEpisode]:
         """一个批次里按过滤条件取一页事件，最新的在前。
 
         ⚠ 多取一行用来判断还有没有下一页，省掉一次会全表扫的计数。
-        Args: session, batch_id, window。
+        Args: session, batch_id, window, assessment。
         """
         statement = select(AcStartupEpisode).where(
             AcStartupEpisode.batch_id == batch_id
         )
         if window.outcome is not None:
             statement = statement.where(
-                AcStartupEpisode.outcome == window.outcome
+                _matches_outcome(window.outcome, assessment)
             )
         if window.running_set is not None:
             # 组合按 serial 升序存，等值比较才稳定
@@ -165,17 +172,21 @@ class AcStartupEpisodeCrud(CrudBase[AcStartupEpisode]):
         return list(result.scalars().all())
 
     async def coverage(
-        self, session: AsyncSession, batch_id: uuid.UUID
+        self,
+        session: AsyncSession,
+        batch_id: uuid.UUID,
+        *,
+        assessment: ColdStartAssessment | None = None,
     ) -> list[tuple[list[str], int]]:
         """一个批次里各运行组合各攒了多少条可用样本，多的在前。
 
-        Args: session, batch_id。
+        Args: session, batch_id, assessment。
         """
         rows = await session.execute(
             select(AcStartupEpisode.running_set, func.count())
             .where(
                 AcStartupEpisode.batch_id == batch_id,
-                AcStartupEpisode.outcome == OUTCOME_USABLE,
+                _matches_outcome(OUTCOME_USABLE, assessment),
             )
             .group_by(AcStartupEpisode.running_set)
             .order_by(func.count().desc(), AcStartupEpisode.running_set.asc())
@@ -195,6 +206,48 @@ class AcStartupEpisodeCrud(CrudBase[AcStartupEpisode]):
             .group_by(AcStartupEpisode.outcome)
         )
         return {outcome: int(total) for outcome, total in rows.all()}
+
+
+def _matches_outcome(
+    outcome: str, assessment: ColdStartAssessment | None
+) -> ColumnElement[bool]:
+    """按旧事件投影后的结果过滤。Args: outcome, assessment。"""
+    raw = AcStartupEpisode.outcome
+    was_usable = raw == OUTCOME_USABLE
+    if outcome == OUTCOME_USABLE:
+        return and_(was_usable, _assessable(assessment))
+    if outcome == OUTCOME_UNASSESSED:
+        return or_(
+            raw == outcome, and_(was_usable, not_(_assessable(assessment)))
+        )
+    return raw == outcome
+
+
+def _assessable(assessment: ColdStartAssessment | None) -> ColumnElement[bool]:
+    """把冻结季节范围应用到每一条开机时刻。Args: assessment。"""
+    if assessment is None or assessment.is_always_assessable:
+        return true()
+    day = func.to_char(
+        func.timezone(assessment.timezone, AcStartupEpisode.started_at), "MM-DD"
+    )
+    # 月日的补零格式与 WinterPeriod 的含首尾比较一致。
+    return or_(
+        false(),
+        *(_is_winter(day, period) for period in assessment.winter_only),
+        *(
+            not_(_is_winter(day, period))
+            for period in assessment.non_winter_only
+        ),
+    )
+
+
+def _is_winter(
+    day: ColumnElement[str], period: WinterPeriod
+) -> ColumnElement[bool]:
+    """SQL 上的闭区间冬季条件。Args: day, period。"""
+    if period.start <= period.end:
+        return day.between(period.start, period.end)
+    return or_(day >= period.start, day <= period.end)
 
 
 class AcStartupExclusionCrud(CrudBase[AcStartupExclusion]):

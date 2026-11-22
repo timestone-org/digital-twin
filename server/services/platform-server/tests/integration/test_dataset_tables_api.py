@@ -22,6 +22,7 @@ from integration.dataset_helpers import (
     HTTP_NOT_FOUND,
     TABLES,
     code_of,
+    create_column,
     create_table,
     data_of,
     table_body,
@@ -232,6 +233,92 @@ async def test_a_table_holding_records_refuses_to_be_deleted(
     assert response.status_code == HTTP_CONFLICT
     assert code_of(response) == TABLE_NOT_EMPTY
     assert _detail_messages(response) == ["共 1 行历史数据会被一并删除"]
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "{shift_output.产量}",
+        "SUM_OVER({shift_output.产量}, '1d')",
+        "MAX_ALL({shift_output.产量})",
+    ],
+)
+async def test_deleting_a_table_names_external_formula_columns(
+    app_client: httpx.AsyncClient, expression: str
+) -> None:
+    source = await create_table(app_client)
+    await create_column(app_client, source["id"])
+    consumer = await create_table(app_client, code="plant", name="全厂汇总")
+    await create_column(
+        app_client,
+        consumer["id"],
+        key="total",
+        name="总产量",
+        source="formula",
+        formula=expression,
+    )
+    url = f"{TABLES}/{source['id']}"
+    response = await app_client.delete(url)
+
+    assert response.status_code == HTTP_CONFLICT
+    assert code_of(response) == 41209
+    detail = response.json()["details"]
+    assert [item["field"] for item in detail] == ["columns[plant.total]"]
+    assert "全厂汇总" in detail[0]["message"]
+    assert "总产量" in detail[0]["message"]
+    assert (await app_client.get(url)).is_success
+    assert (
+        await app_client.delete(url, params={"force": "true"})
+    ).status_code == HTTP_NO_CONTENT
+    surviving = data_of(await app_client.get(f"{TABLES}/{consumer['id']}"))
+    assert surviving["columns"][0]["formula"] == expression
+
+
+async def test_deleting_a_linked_table_also_reports_its_history(
+    app_context: AppContext,
+) -> None:
+    client = app_context.client
+    source = await create_table(client)
+    await create_column(client, source["id"])
+    await _seed_record(app_context.session, source["id"])
+    other = await create_table(client, code="plant", name="成品表")
+    await create_column(
+        client,
+        other["id"],
+        key="total",
+        name="合计",
+        source="formula",
+        formula="{shift_output.产量} + MAX_ALL({shift_output.产量})",
+    )
+
+    response = await client.delete(f"{TABLES}/{source['id']}")
+
+    assert code_of(response) == 41209
+    assert [d["field"] for d in response.json()["details"]] == [
+        "records",
+        "columns[plant.total]",
+    ]
+    assert "1 行" in _detail_messages(response)[0]
+    assert await _record_count(app_context.session, source["id"]) == 1
+
+
+async def test_deleting_a_table_ignores_another_tables_similar_code(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_table(app_client, code="plant_a")
+    other = await create_table(app_client, code="plant_ab")
+    await create_column(app_client, other["id"])
+    await create_column(
+        app_client,
+        other["id"],
+        key="own",
+        name="本表合计",
+        source="formula",
+        formula="MAX_ALL({plant_ab.产量})",
+    )
+    response = await app_client.delete(f"{TABLES}/{source['id']}")
+
+    assert response.status_code == HTTP_NO_CONTENT
 
 
 async def test_force_deletes_the_table_together_with_its_records(

@@ -24,6 +24,7 @@ from ai_assistant.apps.chat.schemas import (
 )
 from ai_assistant.apps.chat.services.model_profiles import ModelDefaults
 from lib.auth import CallerContext
+from lib.db import commit_before_receipt
 from lib.errors import Conflict
 from lib.logging import get_logger
 from lib.web import Page, PageParams
@@ -129,13 +130,16 @@ async def create_session(
     )
     session_crud.add(session, chat_session)
     await session.flush()
+    result = SessionOut.model_validate(chat_session)
+    # 幂等层会在服务返回时缓存结果，须先确认这次建会话已经提交。
+    await commit_before_receipt(session)
     _logger.info(
         "chat_session_created",
         "会话已创建",
-        session_id=str(chat_session.id),
-        surface_kind=chat_session.surface_kind,
+        session_id=str(result.id),
+        surface_kind=result.surface_kind,
     )
-    return SessionOut.model_validate(chat_session)
+    return result
 
 
 def ensure_known_profile(chosen: str | None, known: Collection[str]) -> None:

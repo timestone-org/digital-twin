@@ -153,6 +153,7 @@ function mountLayer(over: Partial<LayerProps> = {}): Harness {
         h('div', [
           h(CanvasNodeLayer, {
             ...props,
+            outlineAt: () => null,
             startGesture: pointer.start,
             onPick: (id: string, additive: boolean) => {
               seen.picks.push([id, additive])

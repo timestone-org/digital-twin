@@ -36,12 +36,14 @@ TRGM = "trgm"
 # 也不能给它们加 schema 前缀——操作符加不了前缀，函数加了反而与 `%` 不一致
 _TRGM_SEARCH = text(
     # 理由：拼进这段 SQL 的只有 schema 名这个常量，查询串走绑定参数
-    "SELECT id, similarity(text, :q) AS score "  # noqa: S608
-    f"FROM {DB_SCHEMA}.kb_chunks "
+    "SELECT c.id, similarity(c.text, :q) AS score "  # noqa: S608
+    f"FROM {DB_SCHEMA}.kb_chunks c "
+    f"JOIN {DB_SCHEMA}.kb_documents d ON d.id=c.document_id "
     # ⚠ 这里的 `%` 是 pg_trgm 的相似操作符，**不是**占位符转义：
     # SQLAlchemy 的 `text()` 不做 pyformat 转义（asyncpg 用 $n），写成 `%%`
     # 的话传下去的就是 `%%`，而 Postgres 报的是「operator does not exist」
-    "WHERE base_id = :base_id AND text % :q "
+    "WHERE c.base_id = :base_id AND c.text % :q "
+    "AND coalesce(d.source_revision_state, 'current') = 'current' "
     "ORDER BY score DESC LIMIT :limit"
 )
 

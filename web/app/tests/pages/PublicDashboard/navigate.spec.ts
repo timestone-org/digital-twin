@@ -30,6 +30,7 @@ vi.mock('@/composables/useRealtimeChannel', () => ({
     isConnected: ref(true),
     connectionState: ref('open'),
     isRejected: ref(false),
+    publicAbnormalCloses: ref(0),
     subscribe: vi.fn(() => () => undefined),
   }),
   useRealtimeChannel: () => ({

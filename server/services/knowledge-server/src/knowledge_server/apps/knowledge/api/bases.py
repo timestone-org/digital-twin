@@ -9,11 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from knowledge_server.apps.knowledge import crud
 from knowledge_server.apps.knowledge.schemas import (
     KnowledgeBaseIn,
+    KnowledgeBaseMetadataIn,
     KnowledgeBaseOut,
     SourceIn,
     SourceOut,
 )
 from knowledge_server.apps.knowledge.services import library_service
+from knowledge_server.apps.knowledge.services.embedding.space import (
+    current,
+    model_label,
+)
 from knowledge_server.catalog import (
     KNOWLEDGE_MANAGE,
     KNOWLEDGE_USE,
@@ -31,6 +36,18 @@ ContainerDep = Annotated[Container, Depends(get_container)]
 UseDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_USE))]
 ManageDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_MANAGE))]
 PageDep = Annotated[PageParams, Depends(page_params)]
+
+
+def _initial_embedding(container: Container) -> library_service.EmbeddingChoice:
+    """取建库时实际可用的嵌入档。Args: container。"""
+    selected = current(container.embedder)
+    return (
+        library_service.EmbeddingChoice(
+            model_label(selected.model), selected.dimensions, selected.identity
+        )
+        if selected is not None
+        else library_service.EmbeddingChoice.of(container.embedding_choice())
+    )
 
 
 @router.post(
@@ -52,7 +69,7 @@ async def create(
 
     Args: session, container, actor, body。
     """
-    embedding = library_service.EmbeddingChoice.of(container.embedding_choice())
+    embedding = _initial_embedding(container)
     owner = str(actor.user_id)
     return ok(
         await library_service.create_base(session, body, owner, embedding)
@@ -61,7 +78,10 @@ async def create(
 
 @router.get("", response_model=ApiResponse[Page[KnowledgeBaseOut]])
 async def list_all(
-    session: SessionDep, _viewer: UseDep, params: PageDep
+    session: SessionDep,
+    _viewer: UseDep,
+    params: PageDep,
+    container: ContainerDep,
 ) -> ApiResponse[Page[KnowledgeBaseOut]]:
     """列一页知识库。
 
@@ -70,20 +90,51 @@ async def list_all(
     rows, total = await crud.knowledge_base.list_bases(
         session, offset=params.offset, limit=params.size
     )
-    return ok(await library_service.base_page(session, rows, params, total))
+    return ok(
+        await library_service.base_page(
+            session, rows, params, total, container.embedder
+        )
+    )
 
 
 @router.get("/{base_id}", response_model=ApiResponse[KnowledgeBaseOut])
 async def get_one(
-    session: SessionDep, _viewer: UseDep, base_id: uuid.UUID
+    session: SessionDep,
+    _viewer: UseDep,
+    base_id: uuid.UUID,
+    container: ContainerDep,
 ) -> ApiResponse[KnowledgeBaseOut]:
     """取一个知识库。
 
     Args: session, _viewer, base_id。
     """
     row = await library_service.read_base(session, base_id)
-    counts = await crud.document.counts_by_base(session, [row.id])
-    return ok(library_service.base_out(row, counts.get(row.id, 0)))
+    return ok(
+        await library_service.base_details(session, row, container.embedder)
+    )
+
+
+@router.patch(
+    "/{base_id}",
+    response_model=ApiResponse[KnowledgeBaseOut],
+    summary="修改知识库名称或描述",
+)
+async def update_metadata(
+    session: SessionDep,
+    container: ContainerDep,
+    _actor: ManageDep,
+    base_id: uuid.UUID,
+    body: KnowledgeBaseMetadataIn,
+) -> ApiResponse[KnowledgeBaseOut]:
+    """更新提交的管理信息，空描述用于清除原描述。
+
+    Args: session, container, _actor, base_id, body。
+    """
+    return ok(
+        await library_service.update_metadata(
+            session, base_id, body, container.embedder
+        )
+    )
 
 
 @router.delete("/{base_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -108,9 +159,7 @@ async def list_sources(
 
     Args: session, _viewer, base_id。
     """
-    await library_service.read_base(session, base_id)
-    rows = await crud.source.list_sources(session, base_id)
-    return ok([library_service.source_out(one) for one in rows])
+    return ok(await library_service.list_sources(session, base_id))
 
 
 @router.post(

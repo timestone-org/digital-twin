@@ -4,6 +4,7 @@
 把要用的行读出来、放掉只读事务，再去总线上等——事务里禁止外部 IO。
 """
 
+import asyncio
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,9 +16,11 @@ from collectwire.commands import (
     REASON_HTTP_RESPONSE_INVALID,
 )
 from collectwire.http import HttpOptions
+from lib.errors import AppError
 from lib.logging import get_logger
 from platform_server.apps.collect.errors import (
     BrowseUnsupported,
+    CollectorWriteUnconfirmed,
     WriteUnsupported,
 )
 from platform_server.apps.collect.models import CollectSource
@@ -31,7 +34,9 @@ from platform_server.apps.collect.schemas import (
 from platform_server.apps.collect.services import (
     point_service,
     source_service,
+    write_audit,
 )
+from platform_server.apps.collect.services.audit import AuditActor
 from platform_server.apps.collect.services.command_bus import CommandBus
 from platform_server.apps.collect.services.presenters import (
     to_browse_item_out,
@@ -163,13 +168,14 @@ async def write_point(
     bus: CommandBus,
     point_id: uuid.UUID,
     value: object,
+    actor: AuditActor,
 ) -> WriteOut:
     """向现场下发一个写值。
 
     ⚠ 这条链路上**没有任何一层重试**：写超时不代表没写成功，重试可能向 PLC
     下发两次。调用方要重试就必须带同一个幂等键，由幂等层挡住
     （runtime-resilience §2 与 api-contract §7）。
-    Args: session, bus, point_id, value。
+    Args: session, bus, point_id, value, actor。
     """
     point = await point_service.require_point(session, point_id)
     source = await source_service.require_source(session, point.source_id)
@@ -179,12 +185,60 @@ async def write_point(
         raise WriteUnsupported("HTTP 采集驱动只读")
     source_id, code = point.source_id, point.code
     await release_read_transaction(session)
+    intent = await write_audit.begin(session, actor, point_id, source_id)
+    await _send_write(session, bus, intent, code, value)
     node_key = compose_node_key(source_id, code)
-    await bus.write(source_id, code, value)
     # ⚠ 只记「谁写了哪个点位」（谁 = 写上下文绑进日志的 user_id），不记值：
     # 写值载荷可能是配方参数一类的敏感数据，请求体禁入日志（observability §3）
     _logger.info("collect_point_written", "写值已下发", point_id=str(point_id))
     return WriteOut(point_id=point_id, node_key=node_key, is_written=True)
+
+
+async def _send_write(
+    session: AsyncSession,
+    bus: CommandBus,
+    intent: write_audit.WriteIntent,
+    code: str,
+    value: object,
+) -> None:
+    """沿用设备回执结论，审计结算失败时保留保护窗口。
+
+    Args: session, bus, intent, code, value。
+    """
+    try:
+        await bus.write(intent.source_id, code, value)
+    except asyncio.CancelledError:
+        _logger.warning(
+            "collect_write_audit_cancelled",
+            "写请求中断，已保留未结算意图",
+            intent_id=str(intent.id),
+        )
+        raise
+    except Exception as error:
+        await _settle_write_error(session, intent, error)
+        raise
+    if not await write_audit.settle(session, intent, "write_confirmed"):
+        raise _unconfirmed_settlement()
+
+
+async def _settle_write_error(
+    session: AsyncSession, intent: write_audit.WriteIntent, error: Exception
+) -> None:
+    """按现有明确拒绝标志区分结算。Args: session, intent, error。"""
+    kind: write_audit.Settlement = "write_unconfirmed"
+    outcome_code = None
+    if isinstance(error, AppError):
+        outcome_code = error.code
+        if error.is_execution_rejected:
+            kind = "write_rejected"
+    if not await write_audit.settle(
+        session, intent, kind, outcome_code=outcome_code
+    ):
+        raise _unconfirmed_settlement() from error
+
+
+def _unconfirmed_settlement() -> CollectorWriteUnconfirmed:
+    return CollectorWriteUnconfirmed("写值结算未确认，请先核对现场值")
 
 
 def _reachability_detail(reason: str) -> str:

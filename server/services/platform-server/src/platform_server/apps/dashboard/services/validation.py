@@ -16,6 +16,7 @@ from platform_server.apps.dashboard.errors import (
     LayoutInvalid,
 )
 from platform_server.apps.dashboard.services.binding_rules import (
+    check_compute_details,
     check_field_keys,
     check_sources,
     referenced_node_keys,
@@ -75,6 +76,9 @@ async def collect_issues(
             bindings, module_types=module_types, catalog=context.catalog
         ),
         *check_sources(bindings, known_node_keys=known),
+        *check_compute_details(
+            bindings, module_types=module_types, catalog=context.catalog
+        ),
     ]
 
 

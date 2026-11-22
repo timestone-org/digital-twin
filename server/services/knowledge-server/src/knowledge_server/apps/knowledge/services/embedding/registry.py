@@ -14,6 +14,8 @@ from openai import OpenAIError
 
 from knowledge_server.apps.knowledge.services.embedding.ports import (
     Embedder,
+    EmbeddingSpace,
+    EmbeddingUnavailable,
     NullEmbedder,
 )
 from llmcore import (
@@ -21,8 +23,10 @@ from llmcore import (
     EmbeddingAdapter,
     build_openai_embedding,
 )
+from llmcore.embedding_snapshot import EmbeddingBatch
 from llmcore.endpoints import EmbeddingEndpoint
 from llmcore.errors import classified
+from llmcore.ports import SnapshotEmbeddingAdapter
 
 
 @dataclass(frozen=True)
@@ -57,6 +61,26 @@ class RemoteEmbedder:
     def can_embed(self) -> bool:
         """此刻解得出端点就能算。"""
         return self.adapter.is_ready
+
+    @property
+    def space(self) -> EmbeddingSpace | None:
+        """当前可调用的嵌入空间。"""
+        adapter = self.adapter
+        if not isinstance(adapter, SnapshotEmbeddingAdapter):
+            return None
+        identity, model = adapter.identity, adapter.model
+        if not identity or not model or not adapter.is_ready:
+            return None
+        return EmbeddingSpace(identity, model, adapter.dimensions)
+
+    async def embed_batch(self, texts: Sequence[str]) -> EmbeddingBatch:
+        """返回该批实际使用的模型、空间及向量。Args: texts。"""
+        if not isinstance(self.adapter, SnapshotEmbeddingAdapter):
+            raise EmbeddingUnavailable("嵌入适配器无法核验向量来源")
+        try:
+            return await self.adapter.embed_batch(texts)
+        except OpenAIError as error:
+            raise classified(error) from error
 
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """把一批文本转成向量。

@@ -13,6 +13,7 @@ from platform_server.apps.modeling.crud import command
 from platform_server.apps.modeling.models.command import ModelingCommand
 from platform_server.apps.modeling.schemas.command import (
     CommandFailureOut,
+    CommandOperation,
     CommandState,
     ModelingCommandOut,
 )
@@ -46,7 +47,7 @@ async def find_command(
     )
     if row is None:
         raise CommandNotFound("没有这条建模命令的记录")
-    return present(row, now)
+    return present(row, now, selector=operation.name)
 
 
 async def get_command(
@@ -63,7 +64,12 @@ async def get_command(
     return present(row, now)
 
 
-def present(row: ModelingCommand, now: datetime) -> ModelingCommandOut:
+def present(
+    row: ModelingCommand,
+    now: datetime,
+    *,
+    selector: CommandOperation | None = None,
+) -> ModelingCommandOut:
     operation = parse_scope(row.scope)
     is_pending = row.state == "pending"
     state = row.state
@@ -71,7 +77,12 @@ def present(row: ModelingCommand, now: datetime) -> ModelingCommandOut:
         state = "unknown"
     return ModelingCommandOut(
         id=row.id,
-        operation=operation.name,
+        operation=(
+            "run_pipeline"
+            if row.requested_operation == "run_pipeline"
+            and selector != "train_instance"
+            else operation.name
+        ),
         resource_id=operation.resource_id,
         state=_STATES.validate_python(state),
         http_status=row.http_status,

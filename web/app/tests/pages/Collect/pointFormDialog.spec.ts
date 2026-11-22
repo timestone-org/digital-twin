@@ -10,16 +10,17 @@ import type { VueWrapper } from '@vue/test-utils'
 import { DtNumberInput, DtSelect, DtSwitch } from '@dt/ui'
 
 import PointFormDialog from '@/pages/Collect/components/PointFormDialog.vue'
-import type { CollectProtocol } from '@dt/contracts'
+import type { CollectPoint, CollectProtocol } from '@dt/contracts'
 
 async function render(
   protocol: CollectProtocol = 'opcua',
   busy = false,
+  point: CollectPoint | null = null,
 ): Promise<VueWrapper> {
   const wrapper = mount(PointFormDialog, {
     props: {
       modelValue: true,
-      point: null,
+      point,
       protocol,
       busy,
     },
@@ -234,4 +235,57 @@ it('死区只管归档：关掉归档时不显示，提交照旧带上原值', a
     deadband: 0.5,
   })
   wrapper.unmount()
+})
+
+const lowHeartbeatPoint: CollectPoint = {
+  id: 'fixture',
+  source_id: 'source',
+  node_key: 'source:fixture',
+  code: 'fixture',
+  name: '合成点位',
+  address: 'ns=2;s=Fixture',
+  data_type: 'float',
+  unit: null,
+  sampling_interval_ms: 1000,
+  deadband: 0,
+  archive_enabled: true,
+  archive_max_interval_ms: 25,
+  archive_retention_days: null,
+  created_at: '',
+  updated_at: '',
+}
+
+it('重新输入已有的短归档心跳时按原值保存', async () => {
+  const wrapper = await render('opcua', false, lowHeartbeatPoint)
+  try {
+    const heartbeat = wrapper.findAll('input[role="spinbutton"]')[2]
+    if (heartbeat === undefined) throw new Error('归档心跳输入不存在')
+    await heartbeat.setValue('25.0')
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text() === '保存')
+      ?.trigger('click')
+    expect(wrapper.emitted('update')?.[0]?.[0]).toMatchObject({
+      archive_max_interval_ms: 25,
+    })
+  } finally {
+    wrapper.unmount()
+  }
+})
+
+it('归档心跳不是整数时不提交更新', async () => {
+  const wrapper = await render('opcua', false, lowHeartbeatPoint)
+  try {
+    const heartbeat = wrapper.findAll('input[role="spinbutton"]')[2]
+    if (heartbeat === undefined) throw new Error('归档心跳输入不存在')
+    await heartbeat.setValue('1000.5')
+    await wrapper
+      .findAll('button')
+      .find((one) => one.text() === '保存')
+      ?.trigger('click')
+    expect(wrapper.emitted('update')).toBeUndefined()
+    expect(wrapper.text()).toContain('归档心跳必须是正整数')
+  } finally {
+    wrapper.unmount()
+  }
 })

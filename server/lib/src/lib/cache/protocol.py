@@ -19,7 +19,12 @@ class CacheLike(Protocol):
     ) -> bool: ...
 
     async def renew_if_owner(
-        self, key: str, value: str, *, ttl_s: int
+        self,
+        key: str,
+        value: str,
+        *,
+        ttl_s: int,
+        replacement: str | None = None,
     ) -> bool: ...
 
     async def delete_if_owner(

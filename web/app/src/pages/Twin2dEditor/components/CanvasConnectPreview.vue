@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * @fileoverview 从一个端口拉出来的连线预览：一条跟着指针走的虚线，松手落到别的节点
+ * @fileoverview 从端口或设备轮廓拉出的连线预览：一条跟着指针走的虚线，松手落到别的节点
  * 上才抛一条新连线的两端。
  *
  * ⚠ 预览期间一个字都不往文档里写：拉到一半松在空白处的那一手要能整个丢掉，而写进去
@@ -39,10 +39,17 @@ interface NodePair {
   style: Twin2dNodeStyle
 }
 
+interface LinkGrab {
+  nodeId: string
+  portId: string
+  event: PointerEvent
+  t?: number | undefined
+}
+
 const props = defineProps<{
   canvas: Twin2dCanvas
-  /** 从哪个端口起手；换一个 `event` 对象即起一次新手势，null = 没在拉线。 */
-  source: { nodeId: string; portId: string; event: PointerEvent } | null
+  /** 从哪里起手；换一个 `event` 对象即起一次新手势，null = 没在拉线。 */
+  source: LinkGrab | null
   nodes: readonly Twin2dNode[]
   nodeStyles: readonly Twin2dNodeStyle[]
   /** 当前视口倍率。 */
@@ -61,7 +68,7 @@ const emit = defineEmits<{
 
 /** 起手那一端；手势期间捕获着，不再回头读 `source`。 */
 const from = shallowRef<Twin2dEndpoint | null>(null)
-/** 起手端口在画布上的落点。 */
+/** 起手端点在画布上的落点。 */
 const origin = shallowRef<Pt | null>(null)
 /** 指针当前落点（设计坐标）。 */
 const tip = shallowRef<Pt | null>(null)
@@ -93,15 +100,18 @@ function pairOf(nodeId: string): NodePair | null {
 }
 
 /**
- * 起手端口在画布上的落点；端口寻不到时 null。
+ * 起手端点在画布上的落点；端口寻不到时 null。
  * ⚠ 走 `resolveEdgeEnd` 而不是直接拿端口坐标：带引脚符号的端口，线是从引脚**外端**
  * 起画的，拿端口坐标画预览会让虚线从引脚中段横穿出去，而落定之后又跳回外端。
  * @param pair 节点与它的样式
- * @param portId 端口 id
+ * @param end 端点
  */
-function portPoint(pair: NodePair, portId: string): Pt | null {
-  if (portWorldPos(pair.node, pair.style, portId) === null) return null
-  const end: Twin2dEndpoint = { nodeId: pair.node.id, portId, t: null }
+function sourcePoint(pair: NodePair, end: Twin2dEndpoint): Pt | null {
+  if (
+    end.t === null &&
+    portWorldPos(pair.node, pair.style, end.portId) === null
+  )
+    return null
   // 端口解析得出，所以第三级的「朝向对方中心」用不上，给节点自己的原点即可
   const toward: Pt = { x: pair.node.x, y: pair.node.y }
   return resolveEdgeEnd(end, pair.node, pair.style, toward).point
@@ -151,18 +161,17 @@ function track(at: Pt): void {
 
 /**
  * 起一次拉线。
- * @param nodeId 起手端口所在的节点
- * @param portId 起手端口
+ * @param end 按下的端点
  * @param event 起手的那一下 pointerdown
  */
-function begin(nodeId: string, portId: string, event: PointerEvent): void {
-  const pair = pairOf(nodeId)
-  const at = pair === null ? null : portPoint(pair, portId)
+function begin(end: Twin2dEndpoint, event: PointerEvent): void {
+  const pair = pairOf(end.nodeId)
+  const at = pair === null ? null : sourcePoint(pair, end)
   if (at === null) {
     emit('done')
     return
   }
-  from.value = { nodeId, portId, t: null }
+  from.value = end
   origin.value = at
   tip.value = at
   target.value = null
@@ -197,7 +206,10 @@ watch(
   (next) => {
     if (next === null || next.event === started) return
     started = next.event
-    begin(next.nodeId, next.portId, next.event)
+    begin(
+      { nodeId: next.nodeId, portId: next.portId, t: next.t ?? null },
+      next.event,
+    )
   },
 )
 

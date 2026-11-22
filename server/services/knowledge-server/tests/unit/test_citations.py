@@ -12,6 +12,7 @@ from knowledge_server.apps.chat.services import citations
 from knowledge_server.apps.chat.services.citations import Ledger
 from knowledge_server.apps.chat.services.markers import (
     MAX_CIRCLED,
+    historical_text,
     marker_of,
     numbers_in,
 )
@@ -74,6 +75,22 @@ def test_the_same_chunk_hit_twice_keeps_one_marker() -> None:
     assert ledger.mark(_hit(one), "手册库", "正文") == "①"
     assert ledger.mark(_hit(one), "手册库", "正文") == "①"
     assert len(ledger.issued) == 1
+
+
+def test_old_reply_and_summary_markers_do_not_address_the_current_ledger() -> (
+    None
+):
+    text = "阀门上限①；第二组(2)；函数 f(2) 与 f(3)；④普通分点"
+    projected = historical_text(text, {1: "first-chunk", 2: "next-chunk"})
+    assert projected == (
+        "阀门上限（历史资料块 first-chunk）；第二组（历史资料块 next-chunk）；"
+        "函数 f(2) 与 f(3)；（4）普通分点"
+    )
+    assert numbers_in(projected) == [2, 3]
+    assert historical_text("历史摘要①与 f(3)", {}) == "历史摘要（1）与 f(3)"
+    assert historical_text("记录尺寸(3)，来源③", {3: "chunk-id"}) == (
+        "记录尺寸(3)，来源（历史资料块 chunk-id）"
+    )
 
 
 def test_markers_run_on_across_several_searches() -> None:

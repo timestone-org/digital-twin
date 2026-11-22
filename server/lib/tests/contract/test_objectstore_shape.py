@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from lib.objectstore import (
+    ObjectChanged,
     ObjectNotFound,
     ObjectStore,
     S3ObjectStore,
@@ -70,6 +71,33 @@ async def test_writing_the_same_key_twice_overwrites() -> None:
     await store.put_bytes("k", b"second", content_type="text/plain")
 
     assert await store.get_bytes("k") == b"second"
+
+
+async def test_create_only_write_preserves_the_first_object() -> None:
+    store = FakeObjectStore()
+    assert await store.put_if_absent("k", b"one", content_type="text/plain")
+    assert not await store.put_if_absent("k", b"two", content_type="text/plain")
+    assert await store.get_bytes("k") == b"one"
+
+
+async def test_guarded_operations_reject_a_same_size_update() -> None:
+    store = FakeObjectStore()
+    await store.put_bytes("key", b"red", content_type="text/plain")
+    initial = await store.stat("key")
+    assert initial is not None
+    assert (
+        await store.read_prefix("key", max_bytes=2, expected_etag=initial.etag)
+        == b"re"
+    )
+    await store.copy("key", "copy", expected_etag=initial.etag)
+    assert await store.get_bytes("copy") == b"red"
+
+    await store.put_bytes("key", b"tan", content_type="text/plain")
+    with pytest.raises(ObjectChanged):
+        await store.read_prefix("key", max_bytes=2, expected_etag=initial.etag)
+    with pytest.raises(ObjectChanged):
+        await store.copy("key", "stale", expected_etag=initial.etag)
+    assert await store.stat("stale") is None
 
 
 async def test_the_ticket_carries_the_key_and_ttl() -> None:

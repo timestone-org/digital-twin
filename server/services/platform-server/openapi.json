@@ -1921,6 +1921,51 @@
         "title": "ApiResponse[DashboardOut]",
         "type": "object"
       },
+      "ApiResponse_DashboardPublicationStateOut_": {
+        "properties": {
+          "code": {
+            "default": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DashboardPublicationStateOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldErrorOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "default": "ok",
+            "title": "Message",
+            "type": "string"
+          },
+          "trace_id": {
+            "default": "",
+            "title": "Trace Id",
+            "type": "string"
+          }
+        },
+        "title": "ApiResponse[DashboardPublicationStateOut]",
+        "type": "object"
+      },
       "ApiResponse_DashboardShareOut_": {
         "properties": {
           "code": {
@@ -9315,6 +9360,45 @@
         "title": "CompliancePolicyOut",
         "type": "object"
       },
+      "ComputedBindingWarningOut": {
+        "description": "导入时保留的一条派生规格问题。",
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "field_key": {
+            "title": "Field Key",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "module_type": {
+            "title": "Module Type",
+            "type": "string"
+          },
+          "node_client_key": {
+            "title": "Node Client Key",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "node_client_key",
+          "module_type",
+          "field_key",
+          "field",
+          "reason",
+          "message"
+        ],
+        "title": "ComputedBindingWarningOut",
+        "type": "object"
+      },
       "ConfigFieldConditionOut": {
         "description": "条件显示：同级字段的当前值落在 `in_values` 里才渲染本字段。",
         "properties": {
@@ -10175,6 +10259,28 @@
             "title": "Include Point Bindings",
             "type": "boolean"
           },
+          "interaction_node_map": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "type": "string"
+                },
+                "maxProperties": 2000,
+                "propertyNames": {
+                  "maxLength": 128,
+                  "minLength": 1
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Node Map"
+          },
           "new_name": {
             "anyOf": [
               {
@@ -10223,6 +10329,13 @@
             "additionalProperties": true,
             "title": "Chrome Json",
             "type": "object"
+          },
+          "computed_binding_warnings": {
+            "items": {
+              "$ref": "#/components/schemas/ComputedBindingWarningOut"
+            },
+            "title": "Computed Binding Warnings",
+            "type": "array"
           },
           "created_at": {
             "format": "date-time",
@@ -10419,6 +10532,51 @@
           "chrome_json"
         ],
         "title": "DashboardOut",
+        "type": "object"
+      },
+      "DashboardPublicationStateOut": {
+        "description": "已授权的发布态读取及跳转提示。",
+        "properties": {
+          "dashboard_id": {
+            "format": "uuid",
+            "title": "Dashboard Id",
+            "type": "string"
+          },
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "public_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Token"
+          },
+          "unpublished_targets": {
+            "items": {
+              "$ref": "#/components/schemas/UnpublishedJumpTargetOut"
+            },
+            "title": "Unpublished Targets",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dashboard_id",
+          "is_public",
+          "public_token",
+          "updated_at"
+        ],
+        "title": "DashboardPublicationStateOut",
         "type": "object"
       },
       "DashboardShareOut": {
@@ -14897,6 +15055,11 @@
             ],
             "title": "Is Enabled"
           },
+          "is_signature_change_confirmed": {
+            "default": false,
+            "title": "Is Signature Change Confirmed",
+            "type": "boolean"
+          },
           "max_rows_per_call": {
             "anyOf": [
               {
@@ -15172,6 +15335,11 @@
             "additionalProperties": true,
             "title": "Fingerprint",
             "type": "object"
+          },
+          "has_legacy_utc_time_features": {
+            "default": false,
+            "title": "Has Legacy Utc Time Features",
+            "type": "boolean"
           },
           "id": {
             "format": "uuid",
@@ -15538,6 +15706,7 @@
               "create_instance",
               "configure_instance",
               "train_instance",
+              "run_pipeline",
               "publish_version",
               "deploy_instance",
               "create_deployment",
@@ -17846,6 +18015,7 @@
             "type": "string"
           },
           "row": {
+            "description": "请求 rows 的下标，从 0 开始。错误正文以 1 作为首行编号。",
             "title": "Row",
             "type": "integer"
           }
@@ -21882,6 +22052,18 @@
             ],
             "title": "Created By Name"
           },
+          "locator_ts": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator Ts"
+          },
           "overrides": {
             "anyOf": [
               {
@@ -23635,6 +23817,17 @@
               }
             ],
             "title": "Updated By"
+          },
+          "updated_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated By Name"
           },
           "value": {
             "anyOf": [
@@ -25488,6 +25681,28 @@
         "additionalProperties": false,
         "description": "把模板实例化成目标项目下的一张新大屏。缺省名是模板名。",
         "properties": {
+          "interaction_node_map": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maxLength": 128,
+                  "minLength": 1,
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                  "type": "string"
+                },
+                "maxProperties": 2000,
+                "propertyNames": {
+                  "maxLength": 128,
+                  "minLength": 1
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interaction Node Map"
+          },
           "name": {
             "anyOf": [
               {
@@ -26058,6 +26273,31 @@
           "graph"
         ],
         "title": "TransferPipeline",
+        "type": "object"
+      },
+      "UnpublishedJumpTargetOut": {
+        "description": "发布者可查看的未公开目标。",
+        "properties": {
+          "dashboard_id": {
+            "format": "uuid",
+            "title": "Dashboard Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "project_name": {
+            "title": "Project Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dashboard_id",
+          "name",
+          "project_name"
+        ],
+        "title": "UnpublishedJumpTargetOut",
         "type": "object"
       },
       "UnresolvedBindingOut": {
@@ -26891,7 +27131,7 @@
         ]
       },
       "put": {
-        "description": "整份保存。保存前会问一遍 opcua-server：节点还在不在、类型对不对。\n\nArgs: model_id, payload, session, nodes, _manager。",
+        "description": "整份保存。保存前会问一遍 opcua-server：节点还在不在、类型对不对。\n\nArgs: model_id, payload, sessions, nodes, _manager。",
         "operationId": "put_publication_api_v1_platform_ac_models__model_id__publication_put",
         "parameters": [
           {
@@ -27651,7 +27891,7 @@
         ]
       },
       "put": {
-        "description": "把这台空调的这个数据集指向外部库里的一个对象。\n\nArgs: ac_unit_id, dataset, payload, session, reader, _manager。",
+        "description": "把这台空调的这个数据集指向外部库里的一个对象。\n\nArgs: ac_unit_id, dataset, payload, sessions, reader, _manager。",
         "operationId": "put_binding_api_v1_platform_ac_units__ac_unit_id__data_bindings__dataset__put",
         "parameters": [
           {
@@ -27810,7 +28050,7 @@
     },
     "/api/v1/platform/ac-units/{ac_unit_id}/raw-samples": {
       "get": {
-        "description": "区间内的逐行原始数据，游标翻页。\n\nArgs: ac_unit_id, session, reader, window, cursor, _viewer。",
+        "description": "区间内的逐行原始数据，游标翻页。\n\nArgs: ac_unit_id, sessions, reader, window, cursor, _viewer。",
         "operationId": "list_raw_samples_api_v1_platform_ac_units__ac_unit_id__raw_samples_get",
         "parameters": [
           {
@@ -27902,7 +28142,7 @@
     },
     "/api/v1/platform/ac-units/{ac_unit_id}/raw-series": {
       "get": {
-        "description": "按分钟桶聚合的折线图数据，桶宽在响应里回显。\n\nArgs: ac_unit_id, session, reader, window, options, _viewer。",
+        "description": "按分钟桶聚合的折线图数据，桶宽在响应里回显。\n\nArgs: ac_unit_id, sessions, reader, window, options, _viewer。",
         "operationId": "list_raw_series_api_v1_platform_ac_units__ac_unit_id__raw_series_get",
         "parameters": [
           {
@@ -28670,6 +28910,24 @@
               "title": "Status",
               "type": "string"
             }
+          },
+          {
+            "description": "按点位编码区分大小写精确匹配",
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按点位编码区分大小写精确匹配",
+              "title": "Code"
+            }
           }
         ],
         "responses": {
@@ -28760,7 +29018,7 @@
     },
     "/api/v1/platform/collect-points/{point_id}": {
       "delete": {
-        "description": "删点位。被大屏绑着就 409 并列出那些大屏；`force` 跳过绑定守卫。\n\nArgs: point_id, session, write, is_forced。",
+        "description": "删点位。有大屏或台账列引用就 409；`force` 跳过引用检查。\n\nArgs: point_id, session, write, is_forced。",
         "operationId": "delete_point_api_v1_platform_collect_points__point_id__delete",
         "parameters": [
           {
@@ -31486,7 +31744,7 @@
     },
     "/api/v1/platform/dashboards/{dashboard_id}/publication": {
       "get": {
-        "description": "读这张屏此刻的发布态与公开链接。\n\nArgs: dashboard_id, session, _manager。",
+        "description": "读发布态与公开链接，有查看权限时附未公开的跳转目标。\n\nArgs: dashboard_id, session, manager。",
         "operationId": "read_dashboard_publication_api_v1_platform_dashboards__dashboard_id__publication_get",
         "parameters": [
           {
@@ -31505,7 +31763,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApiResponse_DashboardShareOut_"
+                  "$ref": "#/components/schemas/ApiResponse_DashboardPublicationStateOut_"
                 }
               }
             },
@@ -32344,7 +32602,7 @@
     },
     "/api/v1/platform/dataset-tables/{table_id}": {
       "delete": {
-        "description": "删台账。下面还有数据行时先确认；`force` 连历史一起删。\n\nArgs: table_id, session, _write, is_forced。",
+        "description": "删除台账。409 列出历史数据和其他台账的公式引用。确认后用 `force` 删除。\n\nArgs: table_id, session, _write, is_forced。",
         "operationId": "delete_table_api_v1_platform_dataset_tables__table_id__delete",
         "parameters": [
           {
@@ -33509,6 +33767,25 @@
               ],
               "title": "Ts"
             }
+          },
+          {
+            "description": "数据行精确时间，优先于 ts",
+            "in": "query",
+            "name": "locator_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "数据行精确时间，优先于 ts",
+              "title": "Locator Ts"
+            }
           }
         ],
         "responses": {
@@ -33577,6 +33854,25 @@
                 }
               ],
               "title": "Ts"
+            }
+          },
+          {
+            "description": "数据行精确时间，优先于 ts",
+            "in": "query",
+            "name": "locator_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "数据行精确时间，优先于 ts",
+              "title": "Locator Ts"
             }
           }
         ],
@@ -33658,6 +33954,25 @@
                 }
               ],
               "title": "Ts"
+            }
+          },
+          {
+            "description": "数据行精确时间，优先于 ts",
+            "in": "query",
+            "name": "locator_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "数据行精确时间，优先于 ts",
+              "title": "Locator Ts"
             }
           }
         ],
@@ -33744,6 +34059,25 @@
                 }
               ],
               "title": "Ts"
+            }
+          },
+          {
+            "description": "数据行精确时间，优先于 ts",
+            "in": "query",
+            "name": "locator_ts",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "数据行精确时间，优先于 ts",
+              "title": "Locator Ts"
             }
           }
         ],
@@ -35739,6 +36073,7 @@
                 "create_instance",
                 "configure_instance",
                 "train_instance",
+                "run_pipeline",
                 "publish_version",
                 "deploy_instance",
                 "create_deployment",
@@ -39948,7 +40283,7 @@
     },
     "/api/v1/platform/open-models/{code}:calculate": {
       "post": {
-        "description": "返回按模型规则计算的逐行明细。Args: payload, session, deps, call。",
+        "description": "返回按模型规则计算的逐行明细。Args: payload, deps, call。",
         "operationId": "calculate_api_v1_platform_open_models__code__calculate_post",
         "parameters": [
           {
@@ -40006,7 +40341,7 @@
     },
     "/api/v1/platform/open-models/{code}:detect": {
       "post": {
-        "description": "按模型阈值判断一批设备实时输入。Args: payload, session, deps, call。",
+        "description": "按模型阈值判断一批设备实时输入。Args: payload, deps, call。",
         "operationId": "detect_api_v1_platform_open_models__code__detect_post",
         "parameters": [
           {
@@ -40064,7 +40399,7 @@
     },
     "/api/v1/platform/open-models/{code}:predict": {
       "post": {
-        "description": "算一批数。\n\nArgs: payload, session, deps, call。",
+        "description": "算一批数。\n\nArgs: payload, deps, call。",
         "operationId": "predict_api_v1_platform_open_models__code__predict_post",
         "parameters": [
           {
@@ -41682,7 +42017,7 @@
     },
     "/api/v1/platform/rooms/{room_id}/live-readings": {
       "get": {
-        "description": "房间里每台绑了原始数据的机组在回看窗内的最后一条可用读数。\n\nArgs: room_id, session, reader, _viewer。",
+        "description": "房间里每台绑了原始数据的机组在回看窗内的最后一条可用读数。\n\nArgs: room_id, sessions, reader, _viewer。",
         "operationId": "read_live_readings_api_v1_platform_rooms__room_id__live_readings_get",
         "parameters": [
           {
@@ -41726,7 +42061,7 @@
     },
     "/api/v1/platform/rooms/{room_id}/startup-batches": {
       "get": {
-        "description": "批次列表、当前批次、进度、组合覆盖度、数据范围与指纹是否过期。\n\nArgs: room_id, session, reader, _viewer。",
+        "description": "批次列表、当前批次、进度、组合覆盖度、数据范围与指纹是否过期。\n\nArgs: room_id, sessions, reader, _viewer。",
         "operationId": "list_startup_batches_api_v1_platform_rooms__room_id__startup_batches_get",
         "parameters": [
           {

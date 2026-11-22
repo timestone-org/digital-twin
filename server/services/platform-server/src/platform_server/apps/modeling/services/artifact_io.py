@@ -4,9 +4,8 @@
 是因为求值路径要 import 前者却绝不许碰后者
 （docs/MODELING_PLATFORM_DESIGN.md D9）。
 
-⚠ 反序列化是**一次同步的 CPU 活**，在事件循环上跑。放进线程池并不能让它让出
-GIL，放进进程池又得把结果再序列化一次送回来——那正是要省掉的开销。所以：限死
-产物体积把这一次停顿框住，并只在每个进程每个版本上付一次（靠 `ArtifactCache`）。
+开放调用只使用 read_bytes 读取字节，校验、解码与预测由推理工作进程完成。
+fetch 为本地求值提供按摘要缓存的模型本体。
 """
 
 from collections import OrderedDict
@@ -74,7 +73,7 @@ async def fetch(
     cached = None if cache is None else cache.get(digest)
     if cached is not None:
         return cached
-    payload = await _read(store, as_text(meta.get("object_key")))
+    payload = await read_bytes(store, as_text(meta.get("object_key")))
     estimator = artifact_store.load(
         payload,
         digest=digest,
@@ -117,7 +116,7 @@ async def promote(
     return {**meta, "object_key": target_key}
 
 
-async def _read(store: ObjectStore, key: str) -> bytes:
+async def read_bytes(store: ObjectStore, key: str) -> bytes:
     """读回字节，顺带把体积卡住。
 
     Args: store, key。

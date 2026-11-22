@@ -18,11 +18,13 @@ export interface Workspace {
   tabs: Readonly<Ref<readonly WorkspaceTab[]>>
   activeKey: Readonly<Ref<string>>
   closing: Readonly<Ref<boolean>>
+  confirmingLogout: Readonly<Ref<boolean>>
   canRetain: (to: RouteLocationNormalized) => boolean
-  /** 这一页的关闭已经过了守卫，随后那次切走的路由守卫不该再问一遍。 */
+  /** 页签已确认关闭或会话已结束，随后的路由离开可直接放行。 */
   isClosing: (key: string) => boolean
   close: (key: string) => Promise<void>
   closeAll: () => Promise<void>
+  confirmLogout: () => Promise<boolean>
   update: (
     key: string,
     patch: Partial<Pick<WorkspaceTab, 'title' | 'dirty'>>,

@@ -184,6 +184,7 @@ describe('弹窗的对外面', () => {
   it('强删弹窗以 conflict 非空进入二级确认，confirm 带 force 布尔', () => {
     expect(propNames(ForceDeleteDialog).sort()).toEqual([
       'conflict',
+      'details',
       'loading',
       'message',
       'modelValue',

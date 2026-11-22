@@ -24,6 +24,8 @@ const props = withDefaults(
   { autoScroll: true, secondsPerItem: 3 },
 )
 
+defineSlots<{ default: (scope: { isDuplicate: boolean }) => unknown }>()
+
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
 // 一圈至少滚这么久，否则条目少时快得看不清
 const MIN_DURATION_S = 4
@@ -119,10 +121,12 @@ onBeforeUnmount(() => {
       :class="{ 'dt-scrolllist__track--anim': isRolling }"
       :style="trackStyle"
     >
-      <div ref="copyRef" class="dt-scrolllist__copy"><slot /></div>
+      <div ref="copyRef" class="dt-scrolllist__copy">
+        <slot :is-duplicate="false" />
+      </div>
       <!-- 无缝衔接用的第二份副本，只在真滚起来时才需要 -->
       <div v-if="isRolling" class="dt-scrolllist__copy" aria-hidden="true">
-        <slot />
+        <slot :is-duplicate="true" />
       </div>
     </div>
   </div>

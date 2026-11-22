@@ -8,12 +8,11 @@
 
 import asyncio
 
-import uvicorn
-
 from knowledge_server.app import build_app
 from knowledge_server.settings import Settings
 from knowledge_server.worker import run_worker
 from lib.config import load_settings_or_exit
+from lib.web import serve_http
 
 
 def main() -> None:
@@ -22,13 +21,7 @@ def main() -> None:
     if settings.is_worker:
         asyncio.run(run_worker(settings))
         return
-    uvicorn.run(
-        build_app(settings),
-        host=settings.app_http_host,
-        port=settings.app_http_port,
-        log_config=None,
-        access_log=False,
-    )
+    serve_http(build_app(settings), settings)
 
 
 if __name__ == "__main__":

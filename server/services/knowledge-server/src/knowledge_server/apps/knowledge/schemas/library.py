@@ -2,15 +2,24 @@
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any, Self
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+from pydantic.json_schema import SkipJsonSchema
 
 from knowledge_server.apps.knowledge.models.knowledge_base import (
     DESCRIPTION_MAX_LENGTH,
     NAME_MAX_LENGTH,
     STRATEGIES,
 )
+from knowledge_server.apps.knowledge.schemas.reembedding import VectorStatus
 
 
 class KnowledgeBaseIn(BaseModel):
@@ -45,6 +54,37 @@ class KnowledgeBaseIn(BaseModel):
         return given
 
 
+class KnowledgeBaseMetadataIn(BaseModel):
+    """管理员提交的库名或描述。"""
+
+    model_config = ConfigDict(
+        extra="forbid", json_schema_extra={"minProperties": 1}
+    )
+    name: (
+        Annotated[
+            str,
+            StringConstraints(
+                strip_whitespace=True, min_length=1, max_length=NAME_MAX_LENGTH
+            ),
+        ]
+        | SkipJsonSchema[None]
+    ) = Field(default_factory=lambda: None)
+    description: (
+        Annotated[str, StringConstraints(max_length=DESCRIPTION_MAX_LENGTH)]
+        | SkipJsonSchema[None]
+    ) = Field(default_factory=lambda: None)
+
+    @model_validator(mode="after")
+    def _submitted_metadata(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("请提供库名或描述")
+        if "name" in self.model_fields_set and self.name is None:
+            raise ValueError("库名不能为空")
+        if "description" in self.model_fields_set and self.description is None:
+            raise ValueError("清空描述请提交空字符串")
+        return self
+
+
 class KnowledgeBaseOut(BaseModel):
     """一个库的样子。"""
 
@@ -56,6 +96,7 @@ class KnowledgeBaseOut(BaseModel):
     # 「这个库还没建索引」，不是返回空表
     embedding_model: str | None
     dimensions: int | None
+    vector_status: VectorStatus = "unindexed"
     owner_id: str
     document_count: int
     created_at: datetime
@@ -78,6 +119,7 @@ class SourceOut(BaseModel):
     id: uuid.UUID
     base_id: uuid.UUID
     kind: str
+    is_identity_editable: bool = Field(alias="can_change_identity")
     name: str
     config: dict[str, Any]
     last_synced_at: datetime | None

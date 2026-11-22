@@ -226,6 +226,27 @@ class AcStartupShardCrud(CrudBase[AcStartupShard]):
             )
         )
 
+    async def settle_pending(
+        self,
+        session: AsyncSession,
+        shard: AcStartupShard,
+        *,
+        status: str,
+        error: str | None = None,
+    ) -> bool:
+        """只结算仍在等待的分片。Args: session, shard, status, error。"""
+        statement = (
+            update(AcStartupShard)
+            .where(
+                AcStartupShard.batch_id == shard.batch_id,
+                AcStartupShard.month == shard.month,
+                AcStartupShard.status == SHARD_STATUS_PENDING,
+            )
+            .values(status=status, error=error, updated_at=func.now())
+            .returning(AcStartupShard.id)
+        )
+        return await session.scalar(statement) is not None
+
     async def count_by_status(
         self, session: AsyncSession, batch_id: uuid.UUID
     ) -> dict[str, int]:

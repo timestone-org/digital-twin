@@ -190,3 +190,24 @@ class ObjectStoreDown(AppError):
     code = 52303
     http_status = 503
     is_retryable = True
+
+
+class SourceNotEditable(AppError):
+    """上传来源只能随知识库管理。"""
+
+    code = 42336
+    http_status = 409
+
+
+class SourceIdentityInUse(AppError):
+    """已有导入的平台来源要求保持上游记录命名空间。"""
+
+    code = 42337
+    http_status = 409
+
+
+class HistoricalSourceDocument(AppError):
+    """保留引用的历史原文不能重新解析。"""
+
+    code = 42338
+    http_status = 409

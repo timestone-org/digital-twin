@@ -79,13 +79,9 @@ class Ledger:
 
         Args: hit, base_name, text。
         """
-        for one in self.issued:
-            if one.chunk_id == hit.chunk_id:
-                return one.marker
-        marker = marker_of(len(self.issued) + 1)
-        self.issued.append(
+        return self.issue(
             Cited(
-                marker=marker,
+                marker="",
                 chunk_id=hit.chunk_id,
                 document_id=hit.document_id,
                 document_title=hit.document_title,
@@ -97,6 +93,14 @@ class Ledger:
                 text=text,
             )
         )
+
+    def issue(self, evidence: Cited) -> str:
+        """为通过范围校验的块发角标，同一块只登记一次。"""
+        for one in self.issued:
+            if one.chunk_id == evidence.chunk_id:
+                return one.marker
+        marker = marker_of(len(self.issued) + 1)
+        self.issued.append(replace(evidence, marker=marker))
         return marker
 
     def seed(self, carried: Sequence[Cited]) -> None:

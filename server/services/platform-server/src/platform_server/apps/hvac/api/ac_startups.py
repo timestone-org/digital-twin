@@ -23,6 +23,7 @@ from platform_server.apps.hvac.deps import (
     get_dispatcher,
     get_manage_gate,
     get_session,
+    get_sessions,
     require,
 )
 from platform_server.apps.hvac.schemas import (
@@ -39,6 +40,7 @@ from platform_server.apps.hvac.services import (
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
+from platform_server.apps.hvac.services.sessions import Sessions
 from platform_server.settings import API_PREFIX
 
 router = APIRouter(prefix=API_PREFIX, tags=["ac-startups"])
@@ -56,6 +58,7 @@ def episode_filters(
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+SessionsDep = Annotated[Sessions, Depends(get_sessions)]
 ReaderDep = Annotated[AcSourceReader, Depends(get_ac_source_reader)]
 CursorDep = Annotated[CursorParams, Depends(cursor_params)]
 FiltersDep = Annotated[EpisodePage, Depends(episode_filters)]
@@ -98,16 +101,16 @@ async def list_startup_episodes(
 )
 async def list_startup_batches(
     room_id: uuid.UUID,
-    session: SessionDep,
+    sessions: SessionsDep,
     reader: ReaderDep,
     _viewer: ViewDep,
 ) -> ApiResponse[StartupBatchesOut]:
     """批次列表、当前批次、进度、组合覆盖度、数据范围与指纹是否过期。
 
-    Args: room_id, session, reader, _viewer。
+    Args: room_id, sessions, reader, _viewer。
     """
     summary = await ac_startup_query.list_batches(
-        session, reader, room_id=room_id, rules=ExtractionRules()
+        sessions, reader, room_id=room_id, rules=ExtractionRules()
     )
     return ok(summary)
 
@@ -152,7 +155,7 @@ async def _rebuild(
     Args: session, reader, dispatcher, room_id, payload。
     """
     resolved = await ac_startup_service.resolve_window(
-        session, reader, room_id=room_id, asked=payload
+        dispatcher.database, reader, room_id=room_id, asked=payload
     )
     plan = await _queue(
         session, room_id=room_id, resolved=resolved, timezone=reader.timezone
@@ -175,7 +178,7 @@ async def _queue(
     return await ac_startup_service.request_rebuild(
         session,
         room_id=room_id,
-        window=resolved.window,
+        window=resolved,
         rules=ExtractionRules(),
         timezone=timezone,
     )

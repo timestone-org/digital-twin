@@ -50,6 +50,7 @@ from platform_server.apps.modeling.services import (
     artifact_store,
     binding_service,
     formula_registration,
+    serving,
 )
 from platform_server.apps.modeling.services.artifact_store import (
     ArtifactRejected,
@@ -562,6 +563,9 @@ def _to_version_out(row: ModelVersion) -> ModelVersionOut:
             for key, value in as_dict(row.metrics_json).items()
         },
         signature=as_dict(row.signature_json),
+        has_legacy_utc_time_features=serving.has_legacy_utc_time_features(
+            as_dict(row.serving_json)
+        ),
         fingerprint=as_dict(row.fingerprint_json),
         description=row.description,
     )

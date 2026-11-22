@@ -17,11 +17,13 @@ class FieldError:
 
 
 class AppError(Exception):
-    """全部业务与基础设施异常的根。子类只覆盖三个类属性。"""
+    """全部业务与基础设施异常的根。子类用类属性声明结论。"""
 
     code: int = 50000
     http_status: int = 500
     is_retryable: bool = False
+    is_outcome_unknown: bool = False
+    is_execution_rejected: bool = False
 
     def __init__(
         self,

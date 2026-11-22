@@ -13,6 +13,7 @@ import { DtButton, DtIcon } from '@dt/ui'
 import { AppLogo } from '@/components/brand'
 import { appConfig } from '@/config/app'
 import { useSidebar } from '@/composables/useSidebar'
+import { useWorkspace } from '@/features/workspace/context'
 import { useAuthStore } from '@/stores/auth'
 import AppNavGroupFlyout from './AppNavGroupFlyout.vue'
 import AppNavGroupTree from './AppNavGroupTree.vue'
@@ -22,6 +23,7 @@ import { isPathActive, visibleNavItems } from './navTree'
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const workspace = useWorkspace()
 const props = defineProps<{ menu?: boolean }>()
 const { isCollapsed: preferredCollapsed, toggle } = useSidebar()
 const isCollapsed = computed(() => !props.menu && preferredCollapsed.value)
@@ -65,6 +67,7 @@ const toggleLabel = computed(() =>
 )
 
 async function onLogout(): Promise<void> {
+  if (workspace && !(await workspace.confirmLogout())) return
   await auth.logout()
   await router.replace({ name: 'login' })
 }
@@ -186,6 +189,7 @@ async function onLogout(): Promise<void> {
         icon="log-out"
         aria-label="退出登录"
         title="退出登录"
+        :disabled="workspace?.closing.value ?? false"
         @click="onLogout"
       />
     </div>

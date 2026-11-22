@@ -43,7 +43,7 @@ async def _pending_calls(
 
     Args: session, chat_session_id。
     """
-    last = await session_crud.last_message_id(session, chat_session_id)
+    last = await session_crud.last_context_message_id(session, chat_session_id)
     if last is None:
         return set()
     steps = await session_crud.steps_of(session, [last])

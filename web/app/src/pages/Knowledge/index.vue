@@ -220,6 +220,10 @@ async function removeDocument(doc: KnowledgeDocument): Promise<void> {
                 :base="page.selected.value"
                 :document-count="page.documents.value.length"
                 :refreshing="page.isRefreshing.value"
+                :save-metadata="page.editMetadata"
+                :can-edit-metadata="
+                  page.capability.value?.supportsBaseMetadata === true
+                "
                 @refresh="page.refreshDocuments"
                 @remove="dropBase(page.selected.value)"
               />

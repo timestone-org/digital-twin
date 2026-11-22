@@ -6,17 +6,26 @@
 """
 
 import uuid
+from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from knowledge_server.apps.knowledge.schemas import SyncOut
-from knowledge_server.apps.knowledge.services import sync_service
+from knowledge_server.apps.knowledge.schemas import SourceOut, SyncOut
+from knowledge_server.apps.knowledge.schemas.source_patch import (
+    SourceMetadataIn,
+)
+from knowledge_server.apps.knowledge.services import (
+    source_management,
+    sync_service,
+)
 from knowledge_server.apps.knowledge.services.sources import KnowledgeSource
-from knowledge_server.catalog import KNOWLEDGE_WRITE
+from knowledge_server.catalog import KNOWLEDGE_MANAGE, KNOWLEDGE_WRITE
 from knowledge_server.container import Container
 from knowledge_server.deps import (
     get_container,
+    get_session,
     get_sync_sessions,
     request_sources,
     require,
@@ -27,11 +36,43 @@ from lib.web import ApiResponse, ok
 
 router = APIRouter(prefix=f"{API_PREFIX}/sources", tags=["source"])
 
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+ManageDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_MANAGE))]
 SessionsDep = Annotated[sync_service.Sessions, Depends(get_sync_sessions)]
 ContainerDep = Annotated[Container, Depends(get_container)]
 WriteDep = Annotated[CallerContext, Depends(require(KNOWLEDGE_WRITE))]
 # ⚠ 按请求造：来源集里握着这一次要转发的签名身份头
 SourcesDep = Annotated[tuple[KnowledgeSource, ...], Depends(request_sources)]
+
+
+@router.patch(
+    "/{source_id}",
+    response_model=ApiResponse[SourceOut],
+    summary="编辑平台来源",
+)
+async def edit(
+    source_id: uuid.UUID,
+    body: SourceMetadataIn,
+    session: SessionDep,
+    _manager: ManageDep,
+) -> ApiResponse[SourceOut]:
+    """修改名称及指定的配置字段。Args: source_id, body, session, _manager。"""
+    return ok(await source_management.update(session, source_id, body))
+
+
+@router.delete(
+    "/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="解绑平台来源",
+)
+async def detach(
+    source_id: uuid.UUID, session: SessionDep, _manager: ManageDep
+) -> None:
+    """停止后续同步，保留已导入资料。
+
+    Args: source_id, session, _manager。
+    """
+    await source_management.detach(session, source_id)
 
 
 @router.post(
@@ -72,4 +113,7 @@ def _deps(
         store=container.objectstore,
         stream=container.stream,
         group=container.ingest_group(),
+        pending_retry_after=timedelta(
+            milliseconds=container.settings.ingest_claim_idle_ms
+        ),
     )

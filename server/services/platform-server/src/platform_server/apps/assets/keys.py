@@ -18,6 +18,16 @@ PUBLIC_PREFIXES = ("models/", "images/", "icons/")
 STAGING_PREFIX = "staging/"
 
 
+def upload_claim_key(asset_id: uuid.UUID) -> str:
+    """首次确认的持久认领键。Args: asset_id。"""
+    return f"upload-claims/{asset_id}"
+
+
+def confirmation_prefix(asset_id: uuid.UUID) -> str:
+    """首次确认的私有候选前缀。Args: asset_id。"""
+    return f"{STAGING_PREFIX}confirmations/{asset_id}/"
+
+
 def staging_key(kind: str, asset_id: uuid.UUID) -> str:
     """直传落点。
 

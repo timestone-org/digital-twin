@@ -533,6 +533,42 @@ it('生成记录显示警告并把真实文件交给下载器', async () => {
   wrapper.unmount()
 })
 
+it('取消报告下载会中止连接，迟到的原件不会被保存', async () => {
+  signIn(['report:view', 'report:render'])
+  vi.spyOn(api, 'listReportRenders').mockResolvedValue({
+    items: [job('succeeded')],
+    next: null,
+    has_more: false,
+  })
+  let finish: (value: Blob) => void = () => undefined
+  const request = vi.spyOn(api, 'downloadReport').mockImplementation(
+    () =>
+      new Promise<Blob>((done) => {
+        finish = done
+      }),
+  )
+  const save = vi
+    .spyOn(downloads, 'downloadBytes')
+    .mockImplementation(() => undefined)
+  const wrapper = mount(Renders, { global: { stubs: { teleport: true } } })
+  await flushPromises()
+  const click = async (label: string) => {
+    const button = wrapper
+      .findAllComponents(DtButton)
+      .find((item) => item.text() === label)
+    if (!button) throw new Error('缺少按钮 ' + label)
+    await button.trigger('click')
+  }
+  await click('下载 Word')
+  const signal = request.mock.calls[0]?.[1]
+  await click('取消下载')
+  expect(signal?.aborted).toBe(true)
+  finish(new Blob(['late']))
+  await flushPromises()
+  expect(save).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
 describe('定时规则列表的呈现', () => {
   const rule: ReportSchedule = {
     id: 's1',

@@ -12,9 +12,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lib.db import Database
+from lib.db import commit_before_receipt
 from lib.logging import get_logger
 from lib.stream import StreamGroup, StreamLike
+from lib.utils.ids import uuid7
 from platform_server.apps.hvac.crud import (
     ac_model_crud,
     ac_model_prediction_crud,
@@ -49,11 +50,12 @@ from platform_server.apps.hvac.schemas import (
     AcModelCreateIn,
     AcModelPatchIn,
 )
-from platform_server.apps.hvac.services import ac_model_queue
+from platform_server.apps.hvac.services import ac_dispatch, ac_model_queue
 from platform_server.apps.hvac.services.ac_model_queue import TrainMessage
 from platform_server.apps.hvac.services.ac_model_trainer import (
     metrics_to_json,
 )
+from platform_server.apps.hvac.services.sessions import Sessions
 
 # 同房间模型名的唯一约束，见 models/ac_model.py
 _NAME_CONSTRAINT = "uq_hvac_ac_models_room_id_name"
@@ -144,16 +146,15 @@ async def create_model(
     )
     session.add(model)
     await _flush_named(session)
-    # ⚠ 就地提交（同 request_rebuild 的教训）：投递跑在响应发出的那一刻，
-    # 而那早于 yield 依赖的提交——不提交，消费者会看见「模型不存在」
-    await session.commit()
+    message = _stage_training(session, model)
+    await commit_before_receipt(session)
     _logger.info(
         "ac_model_created",
         "模型已建并入队训练",
         model_id=str(model.id),
         room_id=str(payload.room_id),
     )
-    return model, ac_model_queue.new_message(model.id)
+    return model, message
 
 
 async def patch_model(
@@ -249,14 +250,26 @@ async def request_retrain(
             "这个模型已经排队或正在训练，重复触发只会白算一遍"
         )
     model.status = MODEL_STATUS_QUEUED
+    message = _stage_training(session, model)
     await session.flush()
-    await session.commit()
+    await commit_before_receipt(session)
     _logger.info(
         "ac_model_retrain_requested",
         "重训已入队",
         model_id=str(model_id),
     )
-    return model, ac_model_queue.new_message(model_id)
+    return model, message
+
+
+def _stage_training(session: AsyncSession, model: AcModel) -> TrainMessage:
+    """保存一次训练请求及原始消息。Args: session, model。"""
+    dispatch_id = uuid7()
+    model.training_dispatch_id = dispatch_id
+    message = ac_model_queue.new_message(model.id, dispatch_id)
+    ac_dispatch.stage_dispatch(
+        session, dispatch_id, ac_dispatch.TRAINING, message.to_fields()
+    )
+    return message
 
 
 async def delete_model(session: AsyncSession, model_id: uuid.UUID) -> None:
@@ -273,7 +286,7 @@ async def delete_model(session: AsyncSession, model_id: uuid.UUID) -> None:
 
 async def dispatch_training(
     stream: StreamLike,
-    database: Database,
+    database: Sessions,
     *,
     target: StreamGroup,
     message: TrainMessage,
@@ -284,6 +297,14 @@ async def dispatch_training(
     其实没有任何一条消息在路上。
     Args: stream, database, target, message。
     """
+    if message.dispatch_id is not None:
+        await ac_dispatch.publish_waiting(
+            database,
+            stream,
+            {ac_dispatch.TRAINING: target.stream},
+            (message.dispatch_id,),
+        )
+        return
     try:
         await ac_model_queue.publish_training(
             stream, target=target, message=message
@@ -299,7 +320,7 @@ async def dispatch_training(
         await _open_and_fail(database, message.model_id)
 
 
-async def _open_and_fail(database: Database, model_id: uuid.UUID) -> None:
+async def _open_and_fail(database: Sessions, model_id: uuid.UUID) -> None:
     """自开一个会话把模型判失败（投递失败时没有请求会话可用）。
 
     Args: database, model_id。

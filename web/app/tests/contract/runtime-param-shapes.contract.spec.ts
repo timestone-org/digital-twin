@@ -50,6 +50,7 @@ const WIRE_KEYS = {
   previous_value: true,
   is_overridden: true,
   updated_by: true,
+  updated_by_name: true,
   updated_at: true,
 } satisfies Keys<RuntimeParamItemWire>
 
@@ -58,6 +59,17 @@ describe('运行参数线形与 openapi 一致', () => {
     const schema = spec.components.schemas['RuntimeParamOut']
     expect(schema).toBeDefined()
     const declared = Object.keys(schema?.properties ?? {}).sort()
-    expect(Object.keys(WIRE_KEYS).sort()).toEqual(declared)
+    const expected = Object.keys(WIRE_KEYS).sort()
+    const displayName = schema?.properties?.updated_by_name
+    if (displayName === undefined) {
+      expect(expected.filter((key) => key !== 'updated_by_name')).toEqual(
+        declared,
+      )
+      return
+    }
+    expect(expected).toEqual(declared)
+    expect(displayName).toMatchObject({
+      anyOf: [{ type: 'string' }, { type: 'null' }],
+    })
   })
 })

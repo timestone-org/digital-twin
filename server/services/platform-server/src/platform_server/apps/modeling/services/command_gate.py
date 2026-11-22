@@ -21,6 +21,7 @@ from platform_server.apps.modeling.crud import command
 from platform_server.apps.modeling.models.command import ModelingCommand
 from platform_server.apps.modeling.schemas.command import CommandFailureOut
 from platform_server.apps.modeling.services.command_policy import (
+    Operation,
     hash_key,
     parse_scope,
 )
@@ -66,7 +67,7 @@ class DurableModelingGate(WriteGate):
             result = await action()
             self._audit(endpoint, result, None)
             return result
-        row, is_owner = await self._reserve(endpoint, model)
+        row, is_owner = await self._reserve(operation, model)
         self.on_command(str(row.id))
         if not is_owner:
             return await _replay(self.session, row, self.request_hash, model)
@@ -89,7 +90,7 @@ class DurableModelingGate(WriteGate):
                 )
         except AppError as error:
             if error.http_status < SERVER_ERROR_STATUS:
-                await self._record_rejection(row, error)
+                await self._record_rejection(row, error, operation)
             raise
         return result
 
@@ -112,12 +113,15 @@ class DurableModelingGate(WriteGate):
         )
 
     async def _reserve[ResultT: BaseModel](
-        self, endpoint: str, model: type[ResultT]
+        self, operation: Operation, model: type[ResultT]
     ) -> tuple[ModelingCommand, bool]:
         candidate = ModelingCommand(
             id=uuid7(),
             account_user_id=self.caller.user_id,
-            scope=endpoint,
+            scope=operation.scope,
+            requested_operation=(
+                operation.name if operation.name == "run_pipeline" else None
+            ),
             key_hash=hash_key(self.idempotency_key or ""),
             request_hash=self.request_hash,
             state="pending",
@@ -127,12 +131,14 @@ class DurableModelingGate(WriteGate):
             existing = await command.find(
                 opened,
                 command.CommandIdentity(
-                    candidate.account_user_id, endpoint, candidate.key_hash
+                    candidate.account_user_id,
+                    candidate.scope,
+                    candidate.key_hash,
                 ),
             )
         if existing is not None:
             return existing, False
-        await self._check_legacy(endpoint, model)
+        await self._check_legacy(candidate.scope, model)
         async with self.sessions.session() as opened:
             return await command.reserve(opened, candidate)
 
@@ -159,7 +165,7 @@ class DurableModelingGate(WriteGate):
             )
 
     async def _record_rejection(
-        self, row: ModelingCommand, error: AppError
+        self, row: ModelingCommand, error: AppError, operation: Operation
     ) -> None:
         # ⚠ 仅在业务保存点已回滚后记失败；提交结果未知时保留 pending。
         payload = CommandFailureOut(
@@ -185,7 +191,6 @@ class DurableModelingGate(WriteGate):
                     is_failure=True,
                 ),
             )
-            operation = parse_scope(row.scope)
             record_operator(
                 opened,
                 self.operator,

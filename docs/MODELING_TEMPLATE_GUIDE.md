@@ -91,6 +91,8 @@
 输入列、目标和处理链确定后，训练发布得到实际模型签名。模型含时间特征时检查
 `requires_timestamp` 并按签名提供 `__ts__`。不能根据尚未执行的图虚构最终签名。
 
+模型库的版本详情会标出按 UTC 提取时间特征的历史版本。若需按训练时的业务时区提取小时、星期或月份，重新训练并发布新版本，然后显式切换部署或更新台账公式绑定。原版本继续按 UTC 运行。
+
 ## 验收与启动
 
 `server/services/platform-server/scripts/verify_modeling_templates.py` 是可重复运行的真实

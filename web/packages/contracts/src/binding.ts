@@ -42,6 +42,10 @@ export interface ComputeSpec {
    * ⚠ 顺序对 `diff` / `ratio` 有意义，重排会改变结果。
    */
   inputs: string[]
+  /** 含非字符串输入的旧规格，未经修改时原样写回。 */
+  invalidWire?: Record<string, unknown>
+  /** 未被编辑器使用的原始规格字段，未经修改时原样写回。 */
+  preservedWire?: Record<string, unknown>
   /** 四舍五入到几位小数；缺省不动。 */
   precision?: number | null
 }

@@ -77,6 +77,14 @@ function oneRow(row: DatasetRecord): RecordRow {
   return made
 }
 
+it('同一个毫秒的记录按精确定位时刻区分表格行', () => {
+  const rows = toRecordRows([
+    record({ locator_ts: '2026-08-12T09:20:00.123456Z' }),
+    record({ locator_ts: '2026-08-12T09:20:00.123789Z' }),
+  ])
+  expect(new Set(rows.map((row) => row.id)).size).toBe(2)
+})
+
 function override(over: Partial<DatasetOverride> = {}): DatasetOverride {
   return {
     value: 42,

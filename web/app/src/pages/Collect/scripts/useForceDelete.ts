@@ -5,6 +5,7 @@
  * 连同强删后果写进 `conflict`，弹窗随之进入二级；confirm(true) 显式跳过守卫。
  * ⚠ 其它错误照常 toast，不进入二级——把网络错误当成引用冲突，会诱导用户强删。
  */
+import type { FieldError } from '@dt/contracts'
 import { ref, type Ref } from 'vue'
 import { useToast } from '@dt/ui'
 
@@ -18,6 +19,7 @@ export interface ForceDelete<TargetT> {
   target: Ref<TargetT | null>
   busy: Ref<boolean>
   conflict: Ref<string | null>
+  details: Ref<readonly FieldError[]>
   /** 打开一级确认。 */
   ask: (next: TargetT) => void
   /** 弹窗的 confirm 回调：force 为二级强删。 */
@@ -42,10 +44,12 @@ export function useForceDelete<TargetT>(
   const target = ref<TargetT | null>(null) as Ref<TargetT | null>
   const busy = ref(false)
   const conflict = ref<string | null>(null)
+  const details = ref<readonly FieldError[]>([])
 
   function ask(next: TargetT): void {
     target.value = next
     conflict.value = null
+    details.value = []
     open.value = true
   }
 
@@ -61,6 +65,7 @@ export function useForceDelete<TargetT>(
     } catch (caught) {
       if (!force && caught instanceof BizError && caught.status === 409) {
         conflict.value = conflictText(current, caught.message)
+        details.value = caught.details
       } else {
         toast.error(describeError(caught))
       }
@@ -69,5 +74,5 @@ export function useForceDelete<TargetT>(
     }
   }
 
-  return { open, target, busy, conflict, ask, confirm }
+  return { open, target, busy, conflict, details, ask, confirm }
 }

@@ -223,6 +223,7 @@ const OVERRIDE_KEYS = {
 const RECORD_KEYS = {
   row_id: true,
   ts: true,
+  locator_ts: true,
   values: true,
   overrides: true,
   samples: true,

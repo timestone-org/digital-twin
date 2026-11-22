@@ -175,3 +175,35 @@ async def test_the_view_code_alone_cannot_flip_the_switch(
     )
 
     assert response.status_code == HTTP_FORBIDDEN
+
+
+async def test_setting_runtime_parameter_keeps_verified_name_and_account_id(
+    app_client: httpx.AsyncClient,
+) -> None:
+    actor = app_client.headers["X-Auth-User-Id"]
+    written = await app_client.put(
+        SECTION_URL, json={"values": {"dataset_interval_s": 65}}
+    )
+    assert written.status_code == HTTP_OK
+    row = items_of(written)["dataset_interval_s"]
+    assert (row["updated_by"], row["updated_by_name"]) == (actor, "测试员")
+    loaded = items_of(await app_client.get(RUNTIME_PARAMS_URL))
+    assert loaded["dataset_interval_s"]["updated_by_name"] == "测试员"
+    assert loaded[SWITCH_KEY]["updated_by_name"] is None
+    assert "**" not in loaded[SWITCH_KEY]["hint"]
+    assert "**" not in loaded[RETENTION_SWITCH_KEY]["hint"]
+
+
+async def test_older_signed_writer_leaves_name_empty(
+    app_client: httpx.AsyncClient,
+) -> None:
+    payload = {"values": {"dataset_interval_s": 65}}
+    await app_client.put(SECTION_URL, json=payload)
+    del app_client.headers["X-Auth-Sig-V2"]
+    written = await app_client.put(
+        SECTION_URL, json={"values": {"dataset_interval_s": 70}}
+    )
+    assert written.status_code == HTTP_OK
+    row = items_of(written)["dataset_interval_s"]
+    assert row["updated_by"] == app_client.headers["X-Auth-User-Id"]
+    assert row["updated_by_name"] is None

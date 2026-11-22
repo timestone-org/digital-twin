@@ -2,6 +2,9 @@
 
 from dataclasses import dataclass
 
+from ai_assistant.apps.chat.services.perception.attachments import (
+    AttachmentParser,
+)
 from ai_assistant.apps.chat.skills import (
     SkillCatalog,
     default_catalog,
@@ -47,6 +50,7 @@ class Container:
     database: Database
     cache: Cache
     idempotency: IdempotencyStore
+    attachments: AttachmentParser
     # ⚠ 没开模型时是 `None`，而不是一个「调了会报错」的壳：这与前端那套 ports
     # 范式同口径——能力缺席就如实缺席，由调用方决定怎么说这件事
     model: GuardedModel | None
@@ -196,10 +200,7 @@ def _build_mcp(settings: Settings) -> McpCatalog:
 
 
 def build_container(settings: Settings) -> Container:
-    """按配置装配容器。
-
-    Args: settings。
-    """
+    """按配置装配容器。Args: settings。"""
     cache = Cache(url=settings.url(), timeout_s=settings.redis_timeout_s)
     tokens = _build_tokens(settings)
     # ⚠ 目录一个进程一份：注册表与嵌入那一路读的都是它的快照
@@ -227,9 +228,10 @@ def build_container(settings: Settings) -> Container:
         ),
         database=_build_database(settings),
         cache=cache,
-        idempotency=IdempotencyStore(
-            cache=cache, namespace=IDEMPOTENCY_NAMESPACE
+        idempotency=IdempotencyStore.for_database_writes(
+            cache, IDEMPOTENCY_NAMESPACE
         ),
+        attachments=AttachmentParser(),
         # ⚠ 目录一定在（`_build_catalog` 不会给 `None`），故模型面总是装得出来
         model=_build_model(settings, registry, is_catalog_on=True),
         platform=PlatformClient(

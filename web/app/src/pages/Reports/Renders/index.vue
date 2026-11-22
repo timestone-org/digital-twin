@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /** @fileoverview 生成记录、状态轮询、产物下载与警告。 */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { RouterLink } from 'vue-router'
 import {
   DtButton,
@@ -17,7 +17,7 @@ import type { DtDataColumn, ReportRender } from '@dt/contracts'
 import * as api from '@/api/reports'
 import { AppShell } from '@/components/layout'
 import PermGuard from '@/components/PermGuard.vue'
-import { useRacedFetch } from '@/composables/useRacedFetch'
+import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
 import { describeError } from '@/composables/useAsyncList'
 import { useViewMode } from '@/composables/useViewMode'
 import { downloadBytes } from '@/utils/downloadJson'
@@ -40,6 +40,7 @@ const selected = ref<ReportRender | null>(null)
 const view = useViewMode('report-renders')
 const raced = useRacedFetch()
 const catalog = useRacedFetch()
+const downloads = shallowRef(new Map<string, RacedFetch>())
 const templateNames = ref<Record<string, string>>({})
 const current = computed(() => trail.value[trail.value.length - 1])
 const pageNumber = computed(() => trail.value.length)
@@ -91,6 +92,8 @@ onBeforeUnmount(() => {
   if (timer) clearInterval(timer)
   raced.cancel()
   catalog.cancel()
+  for (const transfer of downloads.value.values()) transfer.cancel()
+  downloads.value.clear()
 })
 async function nextPage(): Promise<void> {
   if (next.value === null || loading.value) return
@@ -119,11 +122,24 @@ function fileNameOf(row: ReportRender): string {
  * @param row 生成记录
  */
 async function download(row: ReportRender): Promise<void> {
-  try {
-    downloadBytes(await api.downloadReport(row.id), fileNameOf(row))
-  } catch (caught) {
-    toast.error(describeError(caught))
+  const current = downloads.value.get(row.id)
+  if (current) {
+    current.cancel()
+    forgetDownload(row.id)
+    return
   }
+  const transfer = useRacedFetch()
+  downloads.value = new Map(downloads.value).set(row.id, transfer)
+  await transfer.run((signal) => api.downloadReport(row.id, signal), {
+    ok: (blob) => downloadBytes(blob, fileNameOf(row)),
+    fail: (caught) => toast.error(describeError(caught)),
+    settled: () => forgetDownload(row.id),
+  })
+}
+function forgetDownload(id: string): void {
+  const remaining = new Map(downloads.value)
+  remaining.delete(id)
+  downloads.value = remaining
 }
 </script>
 <template>
@@ -211,8 +227,8 @@ async function download(row: ReportRender): Promise<void> {
               size="sm"
               variant="solid"
               intent="primary"
-              icon="download"
-              label="下载 Word"
+              :icon="downloads.has(row.id) ? 'close' : 'download'"
+              :label="downloads.has(row.id) ? '取消下载' : '下载 Word'"
               @click="download(row)"
             />
           </PermGuard>

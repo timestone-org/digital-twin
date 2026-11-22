@@ -46,6 +46,7 @@ vi.mock('@/api/projectThemes', () => ({
 
 vi.mock('@/api/dashboardTemplates', () => ({
   listDashboardTemplates: vi.fn(),
+  getDashboardTemplate: vi.fn(),
   createDashboardTemplate: vi.fn(),
   deleteDashboardTemplate: vi.fn(),
   instantiateDashboardTemplate: vi.fn(),
@@ -247,4 +248,50 @@ describe('自检在弹窗打开的那一刻就发请求', () => {
     await flushPromises()
     expect(validateDashboard).not.toHaveBeenCalled()
   })
+})
+
+it('换文件后迟到的解析不能覆盖新包，关闭后的迟到文件不影响再开', async () => {
+  const wrapper = render('import')
+  const wire = (name: string) =>
+    JSON.stringify({
+      schema_version: 1,
+      name,
+      description: null,
+      design_width: 1920,
+      design_height: 1080,
+      theme_json: {},
+      chrome_json: {},
+      nodes: [],
+    })
+  const picker = wrapper.getComponent(ImportFilePicker)
+  const confirm = wrapper.getComponent(ImportDashboardDialog)
+  let release = (name: string) => {
+    void name
+  }
+  const old = new File([], 'old.json')
+  Object.defineProperty(old, 'text', {
+    value: () =>
+      new Promise<string>((resolve) => {
+        release = (name) => resolve(wire(name))
+      }),
+  })
+  picker.vm.$emit('pick', old)
+  const fresh = new File([], 'fresh.json')
+  Object.defineProperty(fresh, 'text', {
+    value: () => Promise.resolve(wire('新文件')),
+  })
+  picker.vm.$emit('pick', fresh)
+  await flushPromises()
+  release('旧文件')
+  await flushPromises()
+  expect(confirm.props('payload')?.name).toBe('新文件')
+  confirm.vm.$emit('choose-file')
+  await flushPromises()
+  expect(picker.props('open')).toBe(true)
+  picker.vm.$emit('pick', old)
+  await wrapper.setProps({ openName: null })
+  release('已取消')
+  await wrapper.setProps({ openName: 'import' })
+  await flushPromises()
+  expect(confirm.props('payload')).toBeNull()
 })

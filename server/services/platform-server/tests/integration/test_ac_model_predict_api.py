@@ -5,12 +5,15 @@
 """
 
 import uuid
+from decimal import Decimal
 from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from integration import ac_model_helpers
 from integration.ac_model_helpers import (
     PREFIX,
     SignHeaders,
@@ -20,7 +23,12 @@ from integration.ac_model_helpers import (
     seed_room,
 )
 from platform_server.apps.hvac.catalog import AC_MANAGE, AC_VIEW
-from platform_server.apps.hvac.models import AcModelArtifact
+from platform_server.apps.hvac.models import (
+    AcMetricLimit,
+    AcModelArtifact,
+    AcUnit,
+)
+from platform_server.apps.hvac.services import ac_startup_rules
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -60,6 +68,47 @@ async def test_predict_returns_quantiles_and_marks_extrapolation(
     assert outside.json()["data"]["is_in_serving_sets"] is False
     # 这个组合没攒到样本 → 共用模型兜底
     assert outside.json()["data"]["is_dedicated"] is False
+
+
+async def test_v3_model_survives_only_the_compatible_revision(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    sign: SignHeaders,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with monkeypatch.context() as old:
+        old.setattr(ac_startup_rules, "LOGIC_VERSION", 3)
+        old.setattr(ac_model_helpers, "LOGIC_VERSION", 3)
+        seeded = await seed_room(db_session)
+        limits = await db_session.scalars(
+            select(AcMetricLimit)
+            .join(AcUnit)
+            .where(AcUnit.room_id == seeded.room_id)
+            .order_by(AcUnit.serial)
+        )
+        first, second = limits
+        await db_session.delete(second)
+        await db_session.flush()
+        data = await create_model(app_client, sign([AC_MANAGE]), seeded)
+        model_id = uuid.UUID(data["id"])
+        await _mark_trained(
+            db_session, model_id, running_set=[seeded.serials[0]]
+        )
+
+    async def predict() -> httpx.Response:
+        return await app_client.post(
+            f"{PREFIX}/ac-models/{model_id}:predict",
+            headers=sign([AC_VIEW]),
+            json={"running_set": [seeded.serials[0]]},
+        )
+
+    assert (await predict()).status_code == 200
+    with monkeypatch.context() as future:
+        future.setattr(ac_startup_rules, "LOGIC_VERSION", 5)
+        assert (await predict()).status_code == 409
+    first.upper_limit = Decimal("27.00")
+    await db_session.commit()
+    assert (await predict()).status_code == 409
 
 
 async def test_predict_before_training_is_a_conflict(

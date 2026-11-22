@@ -7,6 +7,7 @@
 
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -28,7 +29,9 @@ from integration.modeling_helpers import (
     linear_graph,
 )
 from integration.test_modeling_api import _seed_ledger
+from lib.objectstore import ObjectStoreError
 from lib.testing import FakeObjectStore
+from platform_server.apps.modeling.crud import node_run_crud
 
 pytestmark = pytest.mark.requires_postgres
 
@@ -160,6 +163,62 @@ async def test_downloading_gives_a_csv_that_lines_up_with_the_ledger(
     assert head[0] == "__ts__"
     assert TEMPERATURE in head
     assert LOAD in head
+
+
+async def test_existing_csv_metadata_remains_downloadable(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+    object_store: FakeObjectStore,
+) -> None:
+    setup = _setup(app_client, db_session, worker_sessions, object_store)
+    detail = await _run_with(setup, "explegacy", is_keeping=False)
+    run_id = str(detail["id"])
+    node = await node_run_crud.get_node(
+        db_session, run_id=uuid.UUID(run_id), node_id=SOURCE_NODE
+    )
+    assert node is not None
+    key = f"modeling/runs/{run_id}/frames/{SOURCE_NODE}.{SOURCE_PORT}.csv"
+    csv_payload = b"__ts__,value\r\n1,42\r\n"
+    await object_store.put_bytes(key, csv_payload, content_type="text/csv")
+    node.frames_json = {
+        SOURCE_PORT: {
+            "object_key": key,
+            "row_count": 1,
+            "size_bytes": len(csv_payload),
+            "is_truncated": False,
+        }
+    }
+    await db_session.flush()
+
+    response = await app_client.get(
+        f"{RUNS}/{run_id}/frames/{SOURCE_NODE}", params={"port": SOURCE_PORT}
+    )
+    assert response.status_code == HTTP_OK
+    assert response.content == csv_payload
+
+
+async def test_csv_upload_failure_does_not_fail_the_node_or_run(
+    app_client: httpx.AsyncClient,
+    db_session: AsyncSession,
+    worker_sessions: MakerSessions,
+    object_store: FakeObjectStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def unavailable(_key: str, _path: Path, *, content_type: str) -> None:
+        assert content_type.startswith("text/csv")
+        raise ObjectStoreError("对象存储暂不可写")
+
+    monkeypatch.setattr(object_store, "upload_from", unavailable)
+    setup = _setup(app_client, db_session, worker_sessions, object_store)
+    detail = await _run_with(setup, "expio", is_keeping=True)
+
+    assert detail["status"] == "succeeded"
+    result = await app_client.get(f"{RUNS}/{detail['id']}/nodes/{SOURCE_NODE}")
+    assert result.status_code == HTTP_OK
+    node = data_of(result)
+    assert node["status"] == "succeeded"
+    assert node["exported_ports"] == []
 
 
 async def test_a_run_that_kept_nothing_says_what_to_do(

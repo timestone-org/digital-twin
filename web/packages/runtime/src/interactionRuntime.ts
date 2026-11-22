@@ -60,12 +60,16 @@ export interface ActiveModal {
   title: string
 }
 
+/** 装载规则后才能按本屏导航句柄确定页签初值。 */
+type InitialSelections =
+  readonly InitialSelection[] | (() => readonly InitialSelection[])
+
 export interface InteractionRuntime {
   /** 重新装载规则与节点；易失显隐态与弹窗一并清零。 */
   init(
     rules: readonly InteractionRule[],
     nodes: readonly InteractionNode[],
-    initialSelections?: readonly InitialSelection[],
+    initialSelections?: InitialSelections,
   ): void
   /** 控件上抛事件 → 命中规则 → 改运行时显隐 / 开关弹窗。 */
   dispatch(sourceNodeId: string, event: InteractionEvent): void
@@ -160,12 +164,17 @@ function applySetActive(
   event: InteractionEvent,
 ): void {
   const selected = selectedKey(event.value)
+  const visibility = new Map<string, boolean>()
   for (const group of action.groups) {
     for (const target of group.targets) {
-      if (knows(state, target)) {
-        state.overrides[target] = group.value === selected
-      }
+      visibility.set(
+        target,
+        group.value === selected || visibility.get(target) === true,
+      )
     }
+  }
+  for (const [target, isVisible] of visibility) {
+    if (knows(state, target)) state.overrides[target] = isVisible
   }
 }
 
@@ -262,14 +271,19 @@ function initIn(
   state: RuntimeState,
   nextRules: readonly InteractionRule[],
   nextNodes: readonly InteractionNode[],
-  initialSelections: readonly InitialSelection[],
+  initialSelections: InitialSelections,
 ): void {
   state.rules.value = nextRules
   state.nodes = nextNodes
   // 清键但保留对象引用，维持既有的响应式订阅
   for (const key of Object.keys(state.overrides)) delete state.overrides[key]
   state.activeModal.value = null
-  applyInitialSelections(state, initialSelections)
+  applyInitialSelections(
+    state,
+    typeof initialSelections === 'function'
+      ? initialSelections()
+      : initialSelections,
+  )
 }
 
 function dispatchIn(

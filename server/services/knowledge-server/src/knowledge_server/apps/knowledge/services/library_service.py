@@ -20,12 +20,20 @@ from knowledge_server.apps.knowledge.models import (
 )
 from knowledge_server.apps.knowledge.schemas import (
     KnowledgeBaseIn,
+    KnowledgeBaseMetadataIn,
     KnowledgeBaseOut,
     SourceIn,
     SourceOut,
 )
 from knowledge_server.apps.knowledge.schemas.source_config import (
     validate_source_config,
+)
+from knowledge_server.apps.knowledge.services.embedding import (
+    Embedder,
+    NullEmbedder,
+)
+from knowledge_server.apps.knowledge.services.embedding.space import (
+    status as vector_status,
 )
 from knowledge_server.apps.knowledge.services.sources import (
     UPLOAD_KIND,
@@ -37,6 +45,7 @@ from lib.web import Page, PageParams
 
 # 建库时自动建出来的那一路来源叫什么
 UPLOAD_SOURCE_NAME = "文件上传"
+_NO_EMBEDDER = NullEmbedder()
 
 
 @dataclass(frozen=True)
@@ -49,6 +58,7 @@ class EmbeddingChoice:
 
     model: str | None
     dimensions: int | None
+    identity: str | None = None
 
     @classmethod
     def of(cls, given: tuple[str | None, int | None]) -> "EmbeddingChoice":
@@ -93,7 +103,7 @@ async def brief_bases(
                 name=one.name,
                 description=one.description,
                 strategy=one.retrieval_strategy,
-                is_indexed=one.embedding_model is not None,
+                is_indexed=one.embedding_space_id is not None,
             )
             for one in rows
         ],
@@ -119,6 +129,7 @@ async def base_page(
     rows: Sequence[KnowledgeBase],
     params: PageParams,
     total: int,
+    embedder: Embedder = _NO_EMBEDDER,
 ) -> Page[KnowledgeBaseOut]:
     """一页库连各自的文档数。
 
@@ -134,18 +145,36 @@ async def base_page(
     counts = await crud.document.counts_by_base(
         session, [one.id for one in rows]
     )
+    unverified = await crud.knowledge_base.unverified_vectors(
+        session,
+        [
+            row.id
+            for row in rows
+            if row.embedding_space_id is None
+            and row.embedding_model is None
+            and counts.get(row.id, 0) > 0
+        ],
+    )
     return Page[KnowledgeBaseOut](
-        items=[base_out(one, counts.get(one.id, 0)) for one in rows],
+        items=[
+            base_out(one, counts.get(one.id, 0), embedder, one.id in unverified)
+            for one in rows
+        ],
         page=params.page,
         size=params.size,
         total=total,
     )
 
 
-def base_out(row: KnowledgeBase, document_count: int) -> KnowledgeBaseOut:
+def base_out(
+    row: KnowledgeBase,
+    document_count: int,
+    embedder: Embedder = _NO_EMBEDDER,
+    has_legacy_vectors: bool = False,
+) -> KnowledgeBaseOut:
     """一行库摊成出参。
 
-    Args: row, document_count。
+    Args: row, document_count, embedder, has_legacy_vectors。
     """
     return KnowledgeBaseOut(
         id=row.id,
@@ -154,6 +183,13 @@ def base_out(row: KnowledgeBase, document_count: int) -> KnowledgeBaseOut:
         retrieval_strategy=row.retrieval_strategy,
         embedding_model=row.embedding_model,
         dimensions=row.dimensions,
+        vector_status=(
+            "legacy_unverified"
+            if has_legacy_vectors
+            else (
+                vector_status(row, embedder) if document_count else "unindexed"
+            )
+        ),
         owner_id=row.owner_id,
         document_count=document_count,
         created_at=row.created_at,
@@ -161,12 +197,13 @@ def base_out(row: KnowledgeBase, document_count: int) -> KnowledgeBaseOut:
     )
 
 
-def source_out(row: KnowledgeSource) -> SourceOut:
+def source_out(row: KnowledgeSource, has_imported: bool = False) -> SourceOut:
     """一行来源摊成出参。
 
     Args: row。
     """
     return SourceOut(
+        can_change_identity=row.kind == "platform" and not has_imported,
         id=row.id,
         base_id=row.base_id,
         kind=row.kind,
@@ -176,6 +213,18 @@ def source_out(row: KnowledgeSource) -> SourceOut:
         last_error=row.last_error,
         created_at=row.created_at,
     )
+
+
+async def list_sources(
+    session: AsyncSession, base_id: uuid.UUID
+) -> list[SourceOut]:
+    """列出活动来源，并告知是否还能更换记录标识。Args: session, base_id。"""
+    await read_base(session, base_id)
+    rows = await crud.source.list_sources(session, base_id)
+    imported = await crud.source.imported_sources(
+        session, [row.id for row in rows]
+    )
+    return [source_out(row, row.id in imported) for row in rows]
 
 
 async def create_base(
@@ -195,6 +244,7 @@ async def create_base(
             description=body.description,
             owner_id=owner_id,
             embedding_model=embedding.model,
+            embedding_space_id=embedding.identity,
             dimensions=embedding.dimensions,
             retrieval_strategy=body.retrieval_strategy,
         ),
@@ -217,6 +267,31 @@ async def read_base(session: AsyncSession, base_id: uuid.UUID) -> KnowledgeBase:
     if row is None:
         raise KnowledgeBaseNotFound("知识库不存在")
     return row
+
+
+async def base_details(
+    session: AsyncSession, row: KnowledgeBase, embedder: Embedder
+) -> KnowledgeBaseOut:
+    """显示当前库的文档数和索引状态。Args: session, row, embedder。"""
+    page = await base_page(
+        session, [row], PageParams(page=1, size=1), 1, embedder
+    )
+    return page.items[0]
+
+
+async def update_metadata(
+    session: AsyncSession,
+    base_id: uuid.UUID,
+    body: KnowledgeBaseMetadataIn,
+    embedder: Embedder,
+) -> KnowledgeBaseOut:
+    """更新知识库管理元数据。Args: session, base_id, body, embedder。"""
+    row = await crud.knowledge_base.update_metadata(
+        session, base_id, body.name, body.description
+    )
+    if row is None:
+        raise KnowledgeBaseNotFound("知识库不存在")
+    return await base_details(session, row, embedder)
 
 
 async def add_source(

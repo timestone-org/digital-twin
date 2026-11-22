@@ -26,6 +26,22 @@ class DashboardShareOut(OutputModel):
     updated_at: Utc
 
 
+class UnpublishedJumpTargetOut(OutputModel):
+    """发布者可查看的未公开目标。"""
+
+    dashboard_id: uuid.UUID
+    name: str
+    project_name: str
+
+
+class DashboardPublicationStateOut(DashboardShareOut):
+    """已授权的发布态读取及跳转提示。"""
+
+    unpublished_targets: list[UnpublishedJumpTargetOut] = Field(
+        default_factory=list[UnpublishedJumpTargetOut]
+    )
+
+
 class PublicBindingOut(OutputModel):
     """公开面的一条绑定。不带 `node_id`——它已经嵌在所属节点下面了。"""
 

@@ -4,11 +4,15 @@
 """
 
 from collections.abc import Awaitable, Callable
+from functools import partial
 
 from fastapi import FastAPI
 
 from knowledge_server.apps.chat.api import CHAT_ROUTERS
 from knowledge_server.apps.knowledge.api import ROUTERS
+from knowledge_server.apps.knowledge.services.embedding.catalog import (
+    close_embedding,
+)
 from knowledge_server.apps.speech.api import SPEECH_ROUTERS
 from knowledge_server.container import Container, build_container
 from knowledge_server.schema import read_schema_facts
@@ -46,17 +50,15 @@ def build_app(settings: Settings) -> FastAPI:
 
 
 def _hooks(container: Container) -> tuple[LifespanHook, ...]:
-    """启停钩子。
-
-    ⚠ 关停顺序不是启动的逆序：外部存储最后关，在途的摄取还要用它们把
-    「这一步失败了」写回文档行——写不进去的话，界面上那份文档会永远转圈。
-
-    Args: container。
-    """
-
+    """先停止组件再关闭仍为在途工作提供存储的连接。Args: container。"""
     return (
         # ⚠ 向量列的维数先读一次再接流量：读不到只是让维数对不上时那句话说得
         # 不那么准，所以它不阻塞启动，也不进就绪探针
+        LifespanHook(
+            name="embedding-http",
+            shutdown=partial(close_embedding, container.embedder),
+            shutdown_order=69,
+        ),
         LifespanHook(
             name="schema-facts",
             startup=_read_schema_facts(container),

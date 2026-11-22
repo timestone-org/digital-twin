@@ -15,7 +15,7 @@ import { BizError } from '@/api/client'
 import * as hvac from '@/api/hvac'
 import * as opcua from '@/api/opcua'
 import { describeError } from '@/composables/useAsyncList'
-import { useRacedFetch } from '@/composables/useRacedFetch'
+import { useRacedFetch, type RacedFetch } from '@/composables/useRacedFetch'
 import {
   draftOf,
   emptyDraft,
@@ -27,12 +27,15 @@ import type { PublicationDerived, PublicationState } from './publicationState'
 const INSTANCE_LIMIT = 100
 export const NODE_LIMIT = 200
 
+const PUBLICATION_NOT_FOUND = 41625
+
 export function createPublicationActions(
   state: PublicationState,
   derived: PublicationDerived,
   modelId: () => string,
 ) {
   const nodes = useRacedFetch()
+  const publication = useRacedFetch()
 
   async function loadNodes(instanceId: string): Promise<void> {
     // ⚠ 回来时不再是最后一次就整份丢弃：这一份属于上一个实例
@@ -44,11 +47,15 @@ export function createPublicationActions(
   }
 
   return {
-    load: () => load(state, derived, modelId()),
+    load: () => load(state, derived, modelId(), publication),
     loadNodes,
     save: () => save(state, derived, modelId()),
     unbind: () => unbind(state, modelId()),
     publishNow: () => publishNow(state, modelId()),
+    dispose: () => {
+      nodes.cancel()
+      publication.cancel()
+    },
   }
 }
 
@@ -91,24 +98,40 @@ async function load(
   state: PublicationState,
   derived: PublicationDerived,
   modelId: string,
+  publication: RacedFetch,
 ): Promise<void> {
-  // ⚠ 切走再切回来会再进这里：草稿有未保存的改动时重读会静默把它冲掉
+  // 同一模型已经核实且有草稿时，保留尚未保存的改动
   if (state.loadedFor.value === modelId && derived.isDirty.value) return
+  state.loadedFor.value = null
   state.isLoading.value = true
   state.error.value = null
-  try {
-    state.instances.value = await listInstances()
-    state.saved.value = await readPublication(modelId)
-    state.draft.value =
-      state.saved.value === null
-        ? emptyDraft()
-        : draftOf(state.saved.value, derived.servingKeys.value)
-    state.loadedFor.value = modelId
-  } catch (caught) {
-    state.error.value = describeError(caught)
-  } finally {
-    state.isLoading.value = false
-  }
+  state.readError.value = null
+  await publication.run(
+    async (signal) => {
+      const [instances, saved] = await Promise.all([
+        listInstances(),
+        readPublication(modelId, signal),
+      ])
+      return { instances, saved }
+    },
+    {
+      ok: ({ instances, saved }) => {
+        state.instances.value = instances
+        state.saved.value = saved
+        state.draft.value =
+          saved === null
+            ? emptyDraft()
+            : draftOf(saved, derived.servingKeys.value)
+        state.loadedFor.value = modelId
+      },
+      fail: (caught) => {
+        state.readError.value = describeError(caught)
+      },
+      settled: () => {
+        state.isLoading.value = false
+      },
+    },
+  )
 }
 
 async function save(
@@ -116,6 +139,7 @@ async function save(
   derived: PublicationDerived,
   modelId: string,
 ): Promise<boolean> {
+  if (state.loadedFor.value !== modelId) return false
   state.isSaving.value = true
   state.error.value = null
   try {
@@ -137,6 +161,7 @@ async function unbind(
   state: PublicationState,
   modelId: string,
 ): Promise<boolean> {
+  if (state.loadedFor.value !== modelId) return false
   state.isSaving.value = true
   state.error.value = null
   try {
@@ -157,6 +182,7 @@ async function publishNow(
   state: PublicationState,
   modelId: string,
 ): Promise<boolean> {
+  if (state.loadedFor.value !== modelId) return false
   state.isPublishing.value = true
   state.error.value = null
   try {
@@ -199,14 +225,21 @@ async function listInstances(): Promise<readonly OpcuaInstance[]> {
  * 一个还没配过的模型顶着一条红色横幅。其余失败照样抛：当成「没配过」的话，
  * 下一次保存会整份盖掉线上那份绑定。
  * @param modelId 模型 id
+ * @param signal 中止信号
  */
 async function readPublication(
   modelId: string,
+  signal?: AbortSignal,
 ): Promise<AcModelPublication | null> {
   try {
-    return await hvac.getModelPublication(modelId)
+    return await hvac.getModelPublication(modelId, signal)
   } catch (caught) {
-    if (caught instanceof BizError && caught.status === 404) return null
+    if (
+      caught instanceof BizError &&
+      caught.status === 404 &&
+      caught.code === PUBLICATION_NOT_FOUND
+    )
+      return null
     throw caught
   }
 }

@@ -9,6 +9,11 @@
 import uuid
 from collections.abc import Sequence
 
+from collectwire import (
+    REASON_COLLECTOR_UNREACHABLE,
+    REASON_SOURCE_OFFLINE,
+    REASON_UNKNOWN_ACTION,
+)
 from lib.errors.base import FieldError
 from platform_server.apps.collect.errors import PointInvalid
 from platform_server.apps.collect.schemas import (
@@ -18,11 +23,18 @@ from platform_server.apps.collect.schemas import (
     AddressCheckOut,
 )
 from platform_server.apps.collect.services.command_bus import (
+    REASON_NO_REPLY,
     AddressVerdict,
     CommandBus,
 )
 
-UNVERIFIED_DETAIL = "采集侧未答复，这条寻址串还没有被现场确认"
+UNVERIFIED_DETAIL = "采集侧未返回有效的校验结论"
+_REASON_DETAILS = {
+    REASON_UNKNOWN_ACTION: "采集侧暂不支持寻址串校验",
+    REASON_SOURCE_OFFLINE: "数据源当前没有活会话",
+    REASON_COLLECTOR_UNREACHABLE: "采集侧暂时联系不上",
+    REASON_NO_REPLY: "采集侧未答复",
+}
 
 
 async def check_addresses(
@@ -33,10 +45,11 @@ async def check_addresses(
     Args: bus, source_id, addresses。
     """
     unique = list(dict.fromkeys(addresses))
-    verdicts = await bus.verify_addresses(source_id, unique)
-    if verdicts is None:
-        return [_unverified(address) for address in unique]
-    answered = {item.address: item for item in verdicts}
+    result = await bus.verify_addresses(source_id, unique)
+    if result.reason is not None:
+        detail = _REASON_DETAILS.get(result.reason, UNVERIFIED_DETAIL)
+        return [_unverified(address, detail) for address in unique]
+    answered = {item.address: item for item in result.verdicts}
     return [_checked(address, answered.get(address)) for address in unique]
 
 
@@ -63,9 +76,13 @@ def raise_if_rejected(
     )
 
 
-def _unverified(address: str) -> AddressCheckOut:
+def _unverified(
+    address: str, detail: str = UNVERIFIED_DETAIL
+) -> AddressCheckOut:
     return AddressCheckOut(
-        address=address, status=CHECK_UNVERIFIED, detail=UNVERIFIED_DETAIL
+        address=address,
+        status=CHECK_UNVERIFIED,
+        detail=f"{detail}，这条寻址串还没有被现场确认",
     )
 
 

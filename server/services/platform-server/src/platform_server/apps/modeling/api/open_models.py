@@ -6,7 +6,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
 from lib.logging import get_logger
@@ -18,7 +17,6 @@ from platform_server.apps.modeling.command_errors import ModelingRateLimited
 from platform_server.apps.modeling.deps import (
     OpenModelDeps,
     get_open_model_deps,
-    get_session,
     require,
 )
 from platform_server.apps.modeling.schemas import (
@@ -62,7 +60,6 @@ open_models = APIRouter(
     ],
 )
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
 DepsDep = Annotated[OpenModelDeps, Depends(get_open_model_deps)]
 ViewDep = Annotated[CallerContext, Depends(require(MODELING_VIEW))]
 _logger = get_logger("platform.modeling.open")
@@ -86,15 +83,15 @@ async def handle_model_rate_limit(
 async def resolve(
     code: str,
     viewer: ViewDep,
-    session: SessionDep,
     deps: DepsDep,
     request: Request,
 ) -> ResolvedCall:
-    """检查部署状态并计入当前账号的配额。Args: code, viewer, session, deps。"""
+    """检查部署状态并计入当前账号的配额。Args: code, viewer, deps。"""
     identity = get_operator_identity(request, viewer)
-    resolved = await open_model_service.resolve_call(
-        session, code=code, user_id=viewer.user_id
-    )
+    async with deps.sessions.session() as session:
+        resolved = await open_model_service.resolve_call(
+            session, code=code, user_id=viewer.user_id
+        )
     resolved = replace(
         resolved, external_operator_id=identity.external_operator_id
     )
@@ -131,17 +128,16 @@ async def get_signature(call: CallDep) -> ApiResponse[OpenModelSignatureOut]:
 )
 async def predict(
     payload: OpenModelPredictIn,
-    session: SessionDep,
     deps: DepsDep,
     call: CallDep,
 ) -> ApiResponse[OpenModelPredictOut]:
     """算一批数。
 
-    Args: payload, session, deps, call。
+    Args: payload, deps, call。
     """
     return ok(
         await open_model_service.predict_and_record(
-            session, deps=deps, resolved=call, payload=payload
+            deps=deps, resolved=call, payload=payload
         )
     )
 
@@ -153,16 +149,11 @@ async def predict(
 )
 async def detect(
     payload: OpenModelDetectIn,
-    session: SessionDep,
     deps: DepsDep,
     call: CallDep,
 ) -> ApiResponse[OpenModelDetectOut]:
-    """按模型阈值判断一批设备实时输入。Args: payload, session, deps, call。"""
-    return ok(
-        await detection.detect(
-            session, deps=deps, resolved=call, payload=payload
-        )
-    )
+    """按模型阈值判断一批设备实时输入。Args: payload, deps, call。"""
+    return ok(await detection.detect(deps=deps, resolved=call, payload=payload))
 
 
 @open_models.post(
@@ -172,13 +163,12 @@ async def detect(
 )
 async def calculate(
     payload: OpenModelCalculateIn,
-    session: SessionDep,
     deps: DepsDep,
     call: CallDep,
 ) -> ApiResponse[OpenModelCalculateOut]:
-    """返回按模型规则计算的逐行明细。Args: payload, session, deps, call。"""
+    """返回按模型规则计算的逐行明细。Args: payload, deps, call。"""
     return ok(
         await calculation.calculate_and_record(
-            session, deps=deps, resolved=call, payload=payload
+            deps=deps, resolved=call, payload=payload
         )
     )

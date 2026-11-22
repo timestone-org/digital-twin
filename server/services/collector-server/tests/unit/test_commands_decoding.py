@@ -5,46 +5,51 @@
 """
 
 import json
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from collector_server.commands import _decode
-from collectwire import BLOCK_SOCKET_MARGIN_S
+from collector_server.commands import RedisCommandTransport, _decode
+from lib.errors import DependencyUnavailable
 
 GOOD = json.dumps({"request_id": "req-1", "action": "browse"})
 
 
 @pytest.mark.parametrize(
     "raw",
-    [
-        None,
-        "只有一个字符串",
-        [],
-        ["collect:cmd:req"],
-        ["collect:cmd:req", 42],
-        ["collect:cmd:req", "这不是 JSON"],
-        ["collect:cmd:req", json.dumps([1, 2, 3])],
-    ],
-    ids=[
-        "none",
-        "not-a-pair",
-        "empty",
-        "key-only",
-        "body-not-text",
-        "body-not-json",
-        "body-not-object",
-    ],
+    [None, 42, "这不是 JSON", json.dumps([1, 2, 3])],
+    ids=["none", "not-text", "not-json", "not-object"],
 )
 def test_a_malformed_frame_decodes_to_nothing(raw: object) -> None:
     assert _decode(raw) is None
 
 
 def test_a_well_formed_frame_decodes_to_the_envelope() -> None:
-    assert _decode(["collect:cmd:req", GOOD]) == {
+    assert _decode(GOOD) == {
         "request_id": "req-1",
         "action": "browse",
     }
 
 
-def test_blocking_reads_get_a_wider_socket_budget_than_the_block() -> None:
-    assert BLOCK_SOCKET_MARGIN_S > 0
+async def test_command_take_does_not_send_again_after_losing_the_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    transport = RedisCommandTransport(
+        url="redis://127.0.0.1:1/0",
+        lease=SimpleNamespace(key="test:lease", token="test-owner"),
+        timeout_s=1.0,
+    )
+    client = transport._client
+    connection = client.connection_pool.make_connection()
+    sent = AsyncMock(side_effect=RedisTimeoutError("reply lost"))
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(client, "connection", connection)
+            patch.setattr(client, "_send_command_parse_response", sent)
+            with pytest.raises(DependencyUnavailable):
+                await transport.take(block_s=1.0)
+            sent.assert_awaited_once()
+    finally:
+        await transport.close()

@@ -331,14 +331,13 @@ class DailyConsumer:
         _log_run(message, run)
 
     async def _run_one(self, message: ac_daily_queue.DailyMessage) -> DailyRun:
-        async with self._database.session() as session:
-            return await append_day(
-                session,
-                self._context,
-                room_id=message.room_id,
-                day=message.business_date,
-                timezone=self._options.timezone,
-            )
+        return await append_day(
+            self._database,
+            self._context,
+            room_id=message.room_id,
+            day=message.business_date,
+            timezone=self._options.timezone,
+        )
 
 
 def _log_run(message: ac_daily_queue.DailyMessage, run: DailyRun) -> None:

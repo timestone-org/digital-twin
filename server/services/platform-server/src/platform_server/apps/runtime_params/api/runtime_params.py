@@ -84,7 +84,7 @@ async def replace_runtime_params(
         settings=settings,
         section=section,
         payload=payload,
-        actor=str(writer.user_id),
+        caller=writer,
     )
     return ok(state, message="运行参数已更新")
 

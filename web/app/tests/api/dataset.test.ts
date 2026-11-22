@@ -195,6 +195,17 @@ describe('数据行的读写', () => {
     expect(options.query).toEqual({ ts: '2026-02-02T03:04:00.000Z' })
     expect(client.requestData).toHaveBeenCalled()
   })
+
+  it.each([
+    (row: dataset.DatasetRowRef) =>
+      dataset.updateDatasetRecord(row, { values: {} }),
+    (row: dataset.DatasetRowRef) => dataset.deleteDatasetRecord(row),
+    (row: dataset.DatasetRowRef) => dataset.clearDatasetRecordOverrides(row),
+  ])('存在精确时刻时用 locator_ts 定位', async (send) => {
+    const locatorTs = '2026-02-02T03:04:00.000456Z'
+    await send({ ...ROW, locatorTs })
+    expect(call()[1].query).toEqual({ locator_ts: locatorTs })
+  })
 })
 
 describe('人工修正', () => {

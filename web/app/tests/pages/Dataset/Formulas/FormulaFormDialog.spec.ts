@@ -270,6 +270,36 @@ describe('建 / 改库公式弹窗', () => {
     )
   })
 
+  it('保存会破坏已有调用时，列出每一处并保留输入', async () => {
+    vi.mocked(formulas.updateDatasetFormula).mockRejectedValue(
+      new BizError(
+        ERROR_CODES.datasetFormulaInUse,
+        '两个调用不再兼容',
+        409,
+        'trace',
+        [
+          {
+            field: 'columns[plant.a]',
+            code: 'formula_incompatible',
+            message: '月报的产量列需要两个实参',
+          },
+          {
+            field: 'formulas[heat]',
+            code: 'formula_incompatible',
+            message: '供热公式需要两个实参',
+          },
+        ],
+      ),
+    )
+    const wrapper = await open(def())
+    await type(textareas()[0], '{电耗} * 3')
+    await save()
+    expect(document.body.textContent).toContain('月报的产量列需要两个实参')
+    expect(document.body.textContent).toContain('供热公式需要两个实参')
+    expect(textareas()[0]?.value).toBe('{电耗} * 3')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
   it('其余失败照旧给一句原因，且弹窗不关', async () => {
     vi.mocked(formulas.createDatasetFormula).mockRejectedValue(
       new Error('boom'),

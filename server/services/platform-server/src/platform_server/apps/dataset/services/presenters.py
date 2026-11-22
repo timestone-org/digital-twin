@@ -135,6 +135,7 @@ def to_record_out(record: DatasetRecord) -> RecordOut:
     return RecordOut(
         row_id=record.row_id,
         ts=record.ts,
+        locator_ts=record.ts,
         values=effective_values(record),
         overrides=_override_traces(record.overrides_json) or None,
         samples=_sample_counts(record.samples_json) or None,

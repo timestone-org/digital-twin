@@ -16,6 +16,8 @@ import type {
   PublicDashboardPayload,
 } from '@dt/contracts'
 
+import { BizError } from '@/api/client'
+import { DASHBOARD_NOT_PUBLISHED_CODE } from '@/api/dashboardShare'
 import { __resetDashboardBootstrap } from '@/bootstrap/dashboard'
 import PublicDashboard from '@/pages/PublicDashboard/index.vue'
 
@@ -37,6 +39,7 @@ vi.mock('vue-router', () => ({
 const connectionState = ref<ModuleConnectionState>('open')
 const isConnected = computed(() => connectionState.value === 'open')
 const isRejected = ref(false)
+const publicAbnormalCloses = ref(0)
 // ⚠ 显式给出签名：不带类型的 `vi.fn()` 记不下入参，`calls[0][0]` 取不到主题
 const subscribe = vi.fn<
   (
@@ -48,7 +51,13 @@ const closeChannel = vi.fn()
 
 /** 一条桩通道；两个入口给的是同一条，跟真实现一样。 */
 function channel() {
-  return { isConnected, connectionState, isRejected, subscribe }
+  return {
+    isConnected,
+    connectionState,
+    isRejected,
+    publicAbnormalCloses,
+    subscribe,
+  }
 }
 
 vi.mock('@/composables/useRealtimeChannel', () => ({
@@ -65,7 +74,8 @@ const getPublicDashboard =
     (token: string, signal?: AbortSignal) => Promise<PublicDashboardPayload>
   >()
 
-vi.mock('@/api/dashboardShare', () => ({
+vi.mock(import('@/api/dashboardShare'), async (importOriginal) => ({
+  ...(await importOriginal()),
   getPublicDashboard: (token: string, signal?: AbortSignal) =>
     getPublicDashboard(token, signal),
 }))
@@ -135,6 +145,7 @@ beforeEach(() => {
   __resetDashboardBootstrap()
   connectionState.value = 'open'
   isRejected.value = false
+  publicAbnormalCloses.value = 0
   subscribe.mockClear()
   closeChannel.mockClear()
   getPublicDashboard.mockReset()
@@ -383,6 +394,65 @@ describe('通道断了的角标', () => {
 })
 
 describe('撤回', () => {
+  it('连续异常关闭后复核，临时失败留屏，明确撤回停连', async () => {
+    const wrapper = mount(PublicDashboard)
+    await flushPromises()
+    publicAbnormalCloses.value = 2
+    await flushPromises()
+    expect(getPublicDashboard).toHaveBeenCalledTimes(1)
+
+    getPublicDashboard.mockRejectedValueOnce(
+      new BizError(50300, '暂时不可用', 503, ''),
+    )
+    publicAbnormalCloses.value = 3
+    await flushPromises()
+    expect(getPublicDashboard).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-test="public-stage"]').exists()).toBe(true)
+    expect(closeChannel).not.toHaveBeenCalled()
+
+    getPublicDashboard.mockRejectedValueOnce(
+      new BizError(
+        DASHBOARD_NOT_PUBLISHED_CODE,
+        '公开链接无效或已被撤回',
+        404,
+        '',
+      ),
+    )
+    publicAbnormalCloses.value = 4
+    await flushPromises()
+    expect(getPublicDashboard).toHaveBeenCalledTimes(3)
+    expect(wrapper.find('[data-test="public-stage"]').exists()).toBe(false)
+    expect(closeChannel).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('切换公开票据后忽略之前票据的撤回响应', async () => {
+    const wrapper = mount(PublicDashboard)
+    await flushPromises()
+
+    let failOldCheck: ((error: BizError) => void) | undefined
+    getPublicDashboard.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          failOldCheck = reject
+        }),
+    )
+    publicAbnormalCloses.value = 3
+    await flushPromises()
+    expect(getPublicDashboard).toHaveBeenCalledTimes(2)
+
+    routePublicToken.value = 'tok-2'
+    await flushPromises()
+    expect(getPublicDashboard).toHaveBeenCalledTimes(3)
+    failOldCheck?.(
+      new BizError(DASHBOARD_NOT_PUBLISHED_CODE, '旧票据已撤回', 404, ''),
+    )
+    await flushPromises()
+    expect(wrapper.find('[data-test="public-stage"]').exists()).toBe(true)
+    expect(closeChannel).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('通道被拒时回头再问一次这张屏还公开吗', async () => {
     const wrapper = mount(PublicDashboard)
     await flushPromises()
@@ -400,7 +470,14 @@ describe('撤回', () => {
   it('撤回之后落到错误态，而不是把停住的画面继续摆着', async () => {
     const wrapper = mount(PublicDashboard)
     await flushPromises()
-    getPublicDashboard.mockRejectedValue(new Error('公开链接无效或已被撤回'))
+    getPublicDashboard.mockRejectedValue(
+      new BizError(
+        DASHBOARD_NOT_PUBLISHED_CODE,
+        '公开链接无效或已被撤回',
+        404,
+        '',
+      ),
+    )
 
     isRejected.value = true
     await flushPromises()

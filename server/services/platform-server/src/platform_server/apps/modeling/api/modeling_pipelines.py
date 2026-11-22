@@ -200,7 +200,7 @@ async def start_run(
     Args: pipeline_id, payload, session, context, response。
     """
     run = await write.run_once(
-        endpoint=f"modeling.train_instance.{pipeline_id}",
+        endpoint=f"modeling.run_pipeline.{pipeline_id}",
         model=RunOut,
         action=lambda: run_service.start_run(
             session, pipeline_id=pipeline_id, payload=payload, context=context

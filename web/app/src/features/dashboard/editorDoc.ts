@@ -15,7 +15,7 @@ import type {
   ModuleManifest,
 } from '@dt/contracts'
 
-import { fromBindingDetail } from '@/api/dashboardWire'
+import { fromBindingDetail, fromComputeSpec } from '@/api/dashboardWire'
 import type { LayoutBindingInput, LayoutNodeInput } from '@/api/dashboard'
 import { newClientUuid } from '@/api/idempotency'
 import { readConfigAt, writeConfigAt, type ConfigPath } from './configPath'
@@ -587,7 +587,7 @@ function toBindingInput(binding: BindingPayload): LayoutBindingInput {
     source_kind: binding.sourceKind,
     node_key: binding.nodeKey,
     static_value_json: binding.staticValueJson,
-    compute_json: binding.computeJson,
+    compute_json: fromComputeSpec(binding.computeJson),
     detail_json:
       binding.detailJson === null
         ? null

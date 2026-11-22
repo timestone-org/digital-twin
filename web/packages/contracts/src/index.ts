@@ -90,6 +90,7 @@ export type { ApiKey, ApiKeyFilters, ApiKeySecret } from './apiKey'
 export type {
   KnowledgeAnswer,
   KnowledgeBase,
+  KnowledgeBaseMetadataPatch,
   KnowledgeCapability,
   KnowledgeChatAdvanceIn,
   KnowledgeChatMessage,
@@ -111,11 +112,24 @@ export type {
   KnowledgeRerankCapability,
   KnowledgeSearchResult,
   KnowledgeSource,
+  KnowledgePlatformSourcePatch,
+  KnowledgeSourceMetadataPatch,
   KnowledgeStrategy,
   KnowledgeSyncResult,
   KnowledgeUploadTicket,
   KnowledgeVectorLane,
 } from './knowledge'
+export {
+  KNOWLEDGE_VECTOR_STATUSES,
+  KNOWLEDGE_REEMBEDDING_STATUSES,
+} from './knowledgeEmbedding'
+export type {
+  KnowledgeVectorStatus,
+  KnowledgeReembeddingStatus,
+  KnowledgeReembeddingPreview,
+  KnowledgeReembeddingStart,
+  KnowledgeReembeddingJob,
+} from './knowledgeEmbedding'
 export {
   KNOWLEDGE_CHAT_CONFLICT_CODE,
   KNOWLEDGE_DOCUMENT_STATUSES,
@@ -332,6 +346,7 @@ export type {
   ProjectPayload,
 } from './dashboard'
 export type {
+  ComputedBindingWarning,
   DashboardExportPayload,
   DashboardImportResult,
   ExportBindingPayload,
@@ -432,6 +447,7 @@ export {
   COLLECT_CHECK_STATUSES,
   COLLECT_DATA_TYPES,
   COLLECT_ERROR_CATEGORIES,
+  COLLECT_MIN_ARCHIVE_HEARTBEAT_MS,
   COLLECT_MIN_INTERVAL_MS,
   COLLECT_POINT_BATCH_MAX,
   COLLECT_POINT_DELETE_BATCH_MAX,

@@ -1,6 +1,6 @@
 """组合根：把配置拧成各个协作对象。装配只在这里发生，模块顶层不做副作用。"""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from auth_server.apps.auth.services import (
     ApiKeyService,
@@ -84,17 +84,19 @@ def _build_auth(
     api_keys: ApiKeyService,
     hasher: BoundedHasher,
 ) -> AuthService:
+    login_limiter = FixedWindowLimiter(
+        cache=cache,
+        namespace="login",
+        limit=settings.login_max_attempts,
+        window_s=settings.login_window_s,
+        message="登录失败次数过多，请稍后再试",
+    )
     return AuthService(
         tokens=tokens,
         api_keys=api_keys,
         hasher=hasher,
-        login_limiter=FixedWindowLimiter(
-            cache=cache,
-            namespace="login",
-            limit=settings.login_max_attempts,
-            window_s=settings.login_window_s,
-            message="登录失败次数过多，请稍后再试",
-        ),
+        login_limiter=login_limiter,
+        account_login_limiter=replace(login_limiter, namespace="login-account"),
         signup_limiter=FixedWindowLimiter(
             cache=cache,
             namespace="signup",

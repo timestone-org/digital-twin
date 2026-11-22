@@ -93,6 +93,7 @@ class FillMissing(OperatorBase):
 
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
+        self._is_loaded = False
         self._fills: dict[str, float] = {}
         self._fit: dict[str, ColumnFit] = {}
         self._ran: FillRun | None = None
@@ -110,12 +111,13 @@ class FillMissing(OperatorBase):
         Args: inputs。
         """
         frame = frame_input(inputs, "frame")
+        has_fit = self._is_loaded or bool(self._fills)
         keys = (
             tuple(self._fills)
-            if self._fills
+            if has_fit
             else fit_columns(frame, self._config.columns, self.split_plan)
         )
-        train = None if self._fills else training_frame(frame, self.split_plan)
+        train = None if has_fit else training_frame(frame, self.split_plan)
         if train is not None:
             self._fits(train, keys)
             self._ran = FillRun(
@@ -146,6 +148,7 @@ class FillMissing(OperatorBase):
         """
         self.validate_fitted(params)
         self._fills = {key: float(value) for key, value in params.items()}
+        self._is_loaded = True
 
     @classmethod
     def validate_fitted(cls, params: dict[str, Any]) -> None:
@@ -260,6 +263,7 @@ class ClipOutlier(OperatorBase):
 
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
+        self._is_loaded = False
         self._bounds: dict[str, dict[str, float]] = {}
         self._fit: dict[str, ColumnFit] = {}
         self._ran: ClipRun | None = None
@@ -277,12 +281,13 @@ class ClipOutlier(OperatorBase):
         Args: inputs。
         """
         frame = frame_input(inputs, "frame")
+        has_fit = self._is_loaded or bool(self._bounds)
         keys = (
             tuple(self._bounds)
-            if self._bounds
+            if has_fit
             else fit_columns(frame, self._config.columns, self.split_plan)
         )
-        train = None if self._bounds else training_frame(frame, self.split_plan)
+        train = None if has_fit else training_frame(frame, self.split_plan)
         if train is not None:
             self._fits(train, keys)
             self._ran = self._recorded(frame, train, keys)
@@ -331,6 +336,7 @@ class ClipOutlier(OperatorBase):
         self._bounds = {
             key: _bound_entry(key, value) for key, value in params.items()
         }
+        self._is_loaded = True
 
     @classmethod
     def validate_fitted(cls, params: dict[str, Any]) -> None:

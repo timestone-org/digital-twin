@@ -24,6 +24,7 @@ const OUTCOME_LABELS: Record<string, string> = {
   set_changed: '中途改了组合',
   timeout: '超时未达标',
   data_gap: '数据有缺口',
+  unassessed: '未评估',
 }
 
 const OUTCOME_INTENTS: Record<string, DtIntent> = {

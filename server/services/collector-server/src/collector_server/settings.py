@@ -11,7 +11,7 @@ from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from collectwire.http import http_origin
-from lib.config import AppSettings, PostgresSettings, RedisSettings
+from lib.config import HttpAppSettings, PostgresSettings, RedisSettings
 
 SERVICE_NAME = "collector-server"
 # 只挂探针。业务面在 platform（配置面）与 Redis（快照、命令总线）
@@ -40,7 +40,7 @@ class MigrationSettings(PostgresSettings):
     postgres_schema: str = DB_SCHEMA
 
 
-class Settings(AppSettings, PostgresSettings, RedisSettings):
+class Settings(HttpAppSettings, PostgresSettings, RedisSettings):
     """进程启动时构造一次并冻结。"""
 
     model_config = SettingsConfigDict(
@@ -91,7 +91,7 @@ class Settings(AppSettings, PostgresSettings, RedisSettings):
     # 条目，因此追不上就是丢历史——buffer 会在流长到顶时响亮告警
     archive_stream_maxlen: int = Field(default=10_000, ge=1)
 
-    # 命令总线取请求的阻塞时长。它同时是关停时最坏要等的一拍
+    # 命令总线队列为空时单次等待请求的时长
     command_block_s: float = Field(default=1.0, gt=0)
     # 应答键的存活期。发起方已经超时走人的应答不该留在 Redis 里
     command_reply_ttl_s: int = Field(default=60, ge=1)

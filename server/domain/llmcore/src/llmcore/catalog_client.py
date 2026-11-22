@@ -155,6 +155,13 @@ class CatalogCache:
             await self._pull()
         return self._catalog
 
+    async def confirm_current(self) -> ModelCatalog:
+        """强制核实当前分配，需做持久切换时不能采信陈旧快照。"""
+        catalog = await self.refresh(is_forced=True)
+        if self._is_failing:
+            raise CatalogUnavailable("无法确认最新的模型分配")
+        return catalog
+
     async def _pull(self) -> None:
         try:
             fetched = await self._client.fetch()

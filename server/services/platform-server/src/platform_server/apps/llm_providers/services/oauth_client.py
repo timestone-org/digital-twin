@@ -20,6 +20,7 @@
 
 import datetime as dt
 from dataclasses import dataclass
+from http import HTTPStatus
 from typing import Any, cast
 
 import httpx
@@ -180,20 +181,27 @@ class OAuthClient:
     async def _send(
         self, url: str, body: dict[str, str], *, is_form: bool
     ) -> httpx.Response:
-        """发一跳；连不上就抬成「服务不可达」。
+        """发一跳并区分暂时不可用与有效的上游响应。
 
         Args: url, body, is_form。
         """
         try:
-            if is_form:
-                return await self._client.post(
-                    url, data=body, headers=_HEADERS, timeout=HTTP_TIMEOUT_S
-                )
-            return await self._client.post(
-                url, json=body, headers=_HEADERS, timeout=HTTP_TIMEOUT_S
+            response = await self._client.post(
+                url,
+                data=body if is_form else None,
+                json=None if is_form else body,
+                headers=_HEADERS,
+                timeout=HTTP_TIMEOUT_S,
             )
         except httpx.HTTPError as error:
             raise LlmLoginUpstreamUnavailable("登录服务此刻连不上") from error
+        if response.status_code == HTTPStatus.TOO_MANY_REQUESTS:
+            raise LlmLoginUpstreamUnavailable(
+                "登录服务当前请求过多，请稍后重试"
+            )
+        if response.is_server_error:
+            raise LlmLoginUpstreamUnavailable("登录服务暂时不可用，请稍后重试")
+        return response
 
     async def _posted(
         self, url: str, body: dict[str, str], *, is_form: bool

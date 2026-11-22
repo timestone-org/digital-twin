@@ -9,6 +9,11 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import {
+  createMemoryHistory,
+  createRouter,
+  type LocationQueryRaw,
+} from 'vue-router'
 
 import { DtConfirmHost, DtToastHost, useConfirm, useToast } from '@dt/ui'
 
@@ -37,12 +42,6 @@ vi.mock('@/api/assets', () => api)
 vi.mock('@/pages/Assets/components/AssetModelViewer.vue', () => ({
   __esModule: true,
   default: { name: 'AssetModelViewer', template: '<div data-test="viewer" />' },
-}))
-
-vi.mock('vue-router', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  useRoute: () => ({ path: '/assets', query: {} }),
-  RouterLink: { template: '<a><slot /></a>' },
 }))
 
 const KINDS: AssetKindSpec[] = [
@@ -116,9 +115,19 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-async function render(codes: string[] = ['asset:view', 'asset:manage']) {
+async function render(
+  codes: string[] = ['asset:view', 'asset:manage'],
+  query: LocationQueryRaw = {},
+) {
   signIn(codes)
-  const wrapper = mount(AssetsPage)
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/assets', name: 'assets', component: AssetsPage }],
+  })
+  await router.push({ name: 'assets', query })
+  const wrapper = mount(AssetsPage, {
+    global: { plugins: [router], stubs: { RouterLink: true } },
+  })
   await flushPromises()
   return wrapper
 }
@@ -181,6 +190,33 @@ describe('素材库页', () => {
     })
   })
 
+  it('打开共享链接时首屏使用地址中的素材类型和搜索词', async () => {
+    await render(undefined, { kind: 'model', q: '厂房' })
+    expect(api.listAssets).toHaveBeenCalledTimes(1)
+    expect(api.listAssets).toHaveBeenCalledWith('model', {
+      limit: 50,
+      offset: 0,
+      q: '厂房',
+    })
+  })
+
+  it('从历史链接切入另一个筛选时同步列表和输入框', async () => {
+    const wrapper = await render()
+    await wrapper.vm.$router.push({
+      name: 'assets',
+      query: { kind: 'model', q: '设备区' },
+    })
+    await flushPromises()
+
+    expect(api.listAssets).toHaveBeenLastCalledWith('model', {
+      limit: 50,
+      offset: 0,
+      q: '设备区',
+    })
+    const input = wrapper.get<HTMLInputElement>('[aria-label="按名字搜索素材"]')
+    expect(input.element.value).toBe('设备区')
+  })
+
   it('类型标签取服务端目录，不在前端另抄一份', async () => {
     const wrapper = await render()
     expect(wrapper.text()).toContain('三维模型')
@@ -208,7 +244,7 @@ describe('素材库页', () => {
   })
 
   it('切类型会按新类型重新从第一页取', async () => {
-    const wrapper = await render()
+    const wrapper = await render(undefined, { embed: '1' })
     const tab = wrapper
       .findAll('button')
       .find((node) => node.text().includes('三维模型'))
@@ -218,6 +254,10 @@ describe('素材库页', () => {
       limit: 50,
       offset: 0,
       q: '',
+    })
+    expect(wrapper.vm.$router.currentRoute.value.query).toEqual({
+      embed: '1',
+      kind: 'model',
     })
   })
 

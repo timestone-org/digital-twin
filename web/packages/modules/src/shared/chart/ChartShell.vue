@@ -86,7 +86,7 @@ function chartOptions(): UseEChartOptions {
   }
 }
 
-useEChart(chartOptions())
+const { hasLoadError } = useEChart(chartOptions())
 </script>
 
 <template>
@@ -95,7 +95,14 @@ useEChart(chartOptions())
       <div class="dt-chart__body">
         <div ref="chartRef" class="dt-chart__canvas" v-bind="ariaAttrs" />
         <slot name="notice" />
-        <p v-if="isEmpty" class="dt-chart__empty">
+        <p
+          v-if="hasLoadError"
+          class="dt-chart__empty dt-chart__error"
+          role="status"
+        >
+          图表加载失败，请刷新页面重试
+        </p>
+        <p v-else-if="isEmpty" class="dt-chart__empty">
           {{ emptyText ?? '暂无数据' }}
         </p>
       </div>
@@ -130,5 +137,8 @@ useEChart(chartOptions())
   font-size: 13px;
   inset: 0;
   pointer-events: none;
+}
+.dt-chart__error {
+  color: var(--state-danger);
 }
 </style>

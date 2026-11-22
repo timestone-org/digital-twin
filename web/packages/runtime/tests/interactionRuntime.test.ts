@@ -349,3 +349,42 @@ describe('当前在哪一格', () => {
     expect(runtime.activeValueOf('btn')).toBe('')
   })
 })
+
+describe('多个互斥组共享图元', () => {
+  const forward = [
+    { value: 'a', targets: ['shared', 'a-only', 'shared'] },
+    { value: 'b', targets: ['shared', 'b-only'] },
+    { value: 'a', targets: ['second-a'] },
+  ]
+  for (const groups of [forward, [...forward].reverse()]) {
+    it(
+      '开屏和换选均按所有命中组的并集显示，列表顺序不改变结果 ' +
+        groups[0]?.targets[0],
+      () => {
+        const engine = createInteractionRuntime()
+        const names = ['shared', 'a-only', 'b-only', 'second-a', 'outside']
+        const nodes = names.map((nodeId) => ({
+          nodeId,
+          isVisible: nodeId === 'outside',
+        }))
+        engine.init(
+          [
+            {
+              id: 'old-rule',
+              source: { nodeId: 'tabs', event: 'select' },
+              action: { type: 'setActive', groups },
+            },
+          ],
+          nodes,
+          [{ nodeId: 'tabs', value: 'a' }],
+        )
+        const visible = () => names.filter((id) => engine.isVisible(id))
+        expect(visible()).toEqual(['shared', 'a-only', 'second-a', 'outside'])
+        engine.dispatch('tabs', { event: 'select', value: 'b' })
+        expect(visible()).toEqual(['shared', 'b-only', 'outside'])
+        engine.dispatch('tabs', { event: 'select', value: 'no-group' })
+        expect(visible()).toEqual(['outside'])
+      },
+    )
+  }
+})

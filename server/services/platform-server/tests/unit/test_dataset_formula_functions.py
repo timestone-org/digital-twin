@@ -251,3 +251,26 @@ def test_an_aggregate_that_overflows_is_blank(source: str) -> None:
 
 def test_a_rounding_that_overflows_is_blank() -> None:
     assert compute("ROUND(1.7e308, -308)") is None
+
+
+@pytest.mark.parametrize(
+    ("value", "places", "expected"),
+    [
+        (2.5, 0, 3.0),
+        (-2.5, 0, -3.0),
+        (2.675, 2, 2.68),
+        (-2.675, 2, -2.68),
+        (125, -1, 130.0),
+        (-125, -1, -130.0),
+        (0.045, 2, 0.05),
+        (4.49, 0, 4.0),
+        (1.25, 1.9, 1.3),
+        (1.25, 1e30, 1.25),
+        (1.25, -1e30, 0.0),
+        (1.7976931348623157e308, -308, None),
+    ],
+)
+def test_round_uses_decimal_halves(
+    value: float, places: float, expected: float | None
+) -> None:
+    assert compute("ROUND({x}, {n})", x=value, n=places) == expected

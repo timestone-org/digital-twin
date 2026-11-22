@@ -45,6 +45,7 @@ from lib.auth import (
     encode_identity,
     encode_permissions,
     sign_context,
+    sign_named_context,
 )
 from lib.config import load_settings
 from lib.db import Database, run_after_commit_hooks
@@ -81,6 +82,7 @@ from platform_server.apps.dashboard.services import (
     ValidationContext,
 )
 from platform_server.apps.dataset import catalog as dataset_catalog
+from platform_server.apps.dataset.deps import get_record_sessions
 from platform_server.apps.dataset.services import (
     BackfillRunner,
 )
@@ -192,6 +194,13 @@ def postgres_available(settings: Settings) -> bool:
 
 
 @pytest.fixture
+def _require_postgres(postgres_available: bool) -> None:
+    """要求测试可使用真实 PostgreSQL。Args: postgres_available。"""
+    if not postgres_available:
+        pytest.skip("本机连不到 Postgres")
+
+
+@pytest.fixture
 def sign(settings: Settings) -> SignHeaders:
     """造一组边缘会下发的签名身份头。
 
@@ -204,8 +213,9 @@ def sign(settings: Settings) -> SignHeaders:
         *,
         lifetime_s: int = HEADER_TTL_S,
         role: str = "admin",
+        account_id: uuid.UUID | None = None,
     ) -> dict[str, str]:
-        user_id = str(uuid.uuid4())
+        user_id = str(account_id or uuid.uuid4())
         encoded_role = encode_identity(role)
         permissions = encode_permissions(codes)
         expires_at = int(utcnow().timestamp()) + lifetime_s
@@ -215,13 +225,15 @@ def sign(settings: Settings) -> SignHeaders:
             permissions_b64=permissions,
             expires_at=expires_at,
         )
+        username = encode_identity("测试员")
         return {
             "X-Auth-User-Id": user_id,
-            "X-Auth-Username": encode_identity("测试员"),
+            "X-Auth-Username": username,
             "X-Auth-Role": encoded_role,
             "X-Auth-Permissions": permissions,
             "X-Auth-Exp": str(expires_at),
             "X-Auth-Sig": sign_context(secret, context),
+            "X-Auth-Sig-V2": sign_named_context(secret, context, username),
         }
 
     return make
@@ -425,7 +437,12 @@ def _wire_fakes(
     application.dependency_overrides[get_node_writer] = lambda: fakes.nodes
     # 自己开短事务的那两个口都换成用例这条。⚠ 漏换一个的表现是它另开一条
     # 连接，看不见用例种下的数据——而那一侧只会静默地记不上
-    for opener in (get_sessions, get_modeling_sessions, get_asset_sessions):
+    for opener in (
+        get_sessions,
+        get_modeling_sessions,
+        get_asset_sessions,
+        get_record_sessions,
+    ):
         application.dependency_overrides[opener] = lambda: MakerSessions(maker)
     application.dependency_overrides[get_dashboard_validation_context] = (
         lambda: validation
@@ -435,15 +452,11 @@ def _wire_fakes(
 @pytest.fixture
 async def app_context(
     settings: Settings,
-    postgres_available: bool,
+    _require_postgres: None,
     sign: SignHeaders,
     external_fakes: ExternalFakes,
 ) -> AsyncIterator[AppContext]:
-    """整装应用 + 同连接的会话，每条用例一个回滚事务。
-    ⚠ 外库与 Redis 一律换成假件：用例不许打网络，CI 里也没有它们。
-    """
-    if not postgres_available:
-        pytest.skip("本机连不到 Postgres")
+    """每个用例使用真实平台应用、同一条回滚连接与隔离的外部依赖。"""
     application = build_app(settings)
     connection = await application.state.container.database.engine.connect()
     transaction = await connection.begin()
@@ -479,6 +492,7 @@ async def app_context(
             recompute=recording_recompute(container),
             sessions=MakerSessions(maker),
         )
+    await container.model_inference.close()
     await transaction.rollback()
     await connection.close()
     await container.realtime.close()

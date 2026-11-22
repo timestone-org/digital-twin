@@ -5,13 +5,16 @@
 
 import json
 from collections.abc import AsyncIterator
+from types import SimpleNamespace
 from typing import Any
 from uuid import uuid4
 
 import pytest
 from redis.asyncio import Redis
 
+from collector_server import commands
 from collector_server import container as wiring
+from collector_server.apps.collect.bus.consumer import CommandConsumer
 from collector_server.apps.collect.plan.store import PlanStore
 from collector_server.apps.collect.runtime.session import SourceSession
 from collector_server.apps.collect.runtime.sink import SnapshotSink
@@ -25,7 +28,9 @@ from collector_server.lease import RedisLease
 from collector_server.settings import Settings
 from collector_server.snapshot import RedisSnapshotStore
 from collectwire import (
+    ACTION_READ,
     REQUEST_KEY,
+    STATUS_OK,
     TRACEPARENT_KEY,
     CollectPlan,
     PlanSource,
@@ -34,6 +39,7 @@ from collectwire import (
     snapshot_owner_stamp,
     snapshot_owners_key,
 )
+from lib.errors import DependencyUnavailable
 
 TTL_S = 30
 TS_MS = 1_767_323_045_000
@@ -214,9 +220,11 @@ async def test_an_unreachable_redis_surfaces_as_a_dependency_failure(
 
 
 async def test_a_request_on_the_bus_is_taken_exactly_once(
-    redis_url: str, client: Any
+    redis_url: str, client: Any, snapshot_lease: RedisLease
 ) -> None:
-    transport = RedisCommandTransport(url=redis_url, block_s=1.0)
+    transport = RedisCommandTransport(
+        url=redis_url, lease=snapshot_lease, timeout_s=1.0
+    )
     try:
         await client.lpush(
             REQUEST_KEY, json.dumps({"request_id": "req-1", "action": "browse"})
@@ -231,10 +239,124 @@ async def test_a_request_on_the_bus_is_taken_exactly_once(
         await transport.close()
 
 
-async def test_a_reply_carries_the_trace_and_expires(
-    redis_url: str, client: Any
+async def test_expired_holder_leaves_queued_reads_for_successor(
+    live_settings: Settings,
+    client: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    driver: Any,
 ) -> None:
-    transport = RedisCommandTransport(url=redis_url, block_s=1.0)
+    monkeypatch.setattr(wiring, "LEASE_KEY", f"collect:test:leader:{uuid4()}")
+    former = wiring._build_redis(live_settings)
+    successor = wiring._build_redis(live_settings)
+    source_id, first, second = str(uuid4()), str(uuid4()), str(uuid4())
+    request_ids = [first, second]
+    driver.samples = [(24.5, TS_MS, "good")]
+    old = _read_consumer(former, None)
+    new = _read_consumer(
+        successor, SimpleNamespace(driver=driver, is_online=True)
+    )
+    try:
+        assert await former.lease.acquire()
+        assert await client.pexpire(former.lease.key, 0)
+        assert former.lease.token is not None
+        assert await successor.lease.acquire()
+        for request_id in request_ids:
+            await _queue_read(client, request_id, source_id)
+
+        assert not await old.handle_once()
+        assert not await client.exists(reply_key(first))
+        for taken, expected_id in enumerate(request_ids, start=1):
+            assert await new.handle_once()
+            assert await client.llen(REQUEST_KEY) == len(request_ids) - taken
+            response = json.loads(await client.rpop(reply_key(expected_id)))
+            assert response["request_id"] == expected_id
+            assert response["status"] == STATUS_OK
+            assert response["data"]["samples"][0]["value"] == 24.5
+        assert driver.reads == [("test-reading",), ("test-reading",)]
+        assert not await new.handle_once()
+    finally:
+        await client.delete(
+            REQUEST_KEY, *(reply_key(rid) for rid in request_ids)
+        )
+        for faces in (former, successor):
+            await faces.lease.release()
+            await faces.lease.close()
+            await faces.transport.close()
+            await faces.snapshot.close()
+            await faces.stream.close()
+
+
+def _read_consumer(
+    faces: wiring.RedisFaces, session: SimpleNamespace | None
+) -> CommandConsumer:
+    locator = SimpleNamespace(is_leader=True, session_of=lambda _: session)
+    return CommandConsumer(
+        transport=faces.transport,
+        locator=locator,
+        block_s=0.1,
+        reply_ttl_s=TTL_S,
+        clock=lambda: TS_MS,
+    )
+
+
+async def _queue_read(client: Any, request_id: str, source_id: str) -> None:
+    await client.lpush(
+        REQUEST_KEY,
+        json.dumps(
+            {
+                "request_id": request_id,
+                "action": ACTION_READ,
+                "source_id": source_id,
+                "deadline_ms": TS_MS + 1000,
+                "point_codes": ["test-reading"],
+            }
+        ),
+    )
+
+
+async def test_empty_command_bus_yields_until_its_wait_budget(
+    redis_url: str, snapshot_lease: RedisLease, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    transport = RedisCommandTransport(
+        url=redis_url, lease=snapshot_lease, timeout_s=1.0
+    )
+    delay: list[float] = []
+
+    async def advance_clock(seconds: float) -> None:
+        delay.append(seconds)
+
+    monkeypatch.setattr(
+        commands,
+        "get_running_loop",
+        lambda: SimpleNamespace(time=lambda: sum(delay)),
+    )
+    monkeypatch.setattr(commands, "sleep", advance_clock)
+    try:
+        assert await transport.take(block_s=0.12) is None
+        assert delay == pytest.approx([0.1, 0.02])
+    finally:
+        await transport.close()
+
+
+async def test_command_take_fails_closed_if_redis_is_unavailable(
+    snapshot_lease: RedisLease,
+) -> None:
+    transport = RedisCommandTransport(
+        url="redis://127.0.0.1:1/0", lease=snapshot_lease, timeout_s=0.2
+    )
+    try:
+        with pytest.raises(DependencyUnavailable):
+            await transport.take(block_s=0.1)
+    finally:
+        await transport.close()
+
+
+async def test_a_reply_carries_the_trace_and_expires(
+    redis_url: str, client: Any, snapshot_lease: RedisLease
+) -> None:
+    transport = RedisCommandTransport(
+        url=redis_url, lease=snapshot_lease, timeout_s=1.0
+    )
     try:
         await transport.reply("req-2", {"status": "ok"}, ttl_s=TTL_S)
         stored = await client.lrange(reply_key("req-2"), 0, -1)
@@ -248,9 +370,11 @@ async def test_a_reply_carries_the_trace_and_expires(
 
 
 async def test_a_corrupt_request_is_skipped_instead_of_killing_the_loop(
-    redis_url: str, client: Any
+    redis_url: str, client: Any, snapshot_lease: RedisLease
 ) -> None:
-    transport = RedisCommandTransport(url=redis_url, block_s=1.0)
+    transport = RedisCommandTransport(
+        url=redis_url, lease=snapshot_lease, timeout_s=1.0
+    )
     try:
         await client.lpush(REQUEST_KEY, "这不是 JSON")
         assert await transport.take(block_s=1.0) is None

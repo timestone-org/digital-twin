@@ -56,7 +56,9 @@ from platform_server.apps.hvac.models import (
 from platform_server.apps.hvac.rooms import RoomUnit
 from platform_server.apps.hvac.services.ac_room_configuration import (
     RoomConfiguration,
+    legacy_startup_assessment,
     load_configuration,
+    read_batch_configuration,
 )
 from platform_server.apps.hvac.services.ac_startup_rules import ExtractionRules
 from platform_server.apps.hvac.startups import OUTCOME_USABLE
@@ -189,10 +191,15 @@ async def _load_inputs(
     units = sorted((item.unit for item in bound), key=lambda unit: unit.serial)
     excluded = await ac_startup_exclusion_crud.map_by_room(session, room_id)
     episodes = await ac_startup_episode_crud.list_by_batch(session, batch.id)
+    assessment = legacy_startup_assessment(
+        batch, read_batch_configuration(batch)
+    )
     samples = [
         _to_sample(row)
         for row in episodes
-        if row.outcome == OUTCOME_USABLE and row.started_at not in excluded
+        if row.outcome == OUTCOME_USABLE
+        and row.started_at not in excluded
+        and (assessment is None or assessment.allows(row.started_at))
     ]
     return _Inputs(
         samples=samples, units=units, batch=batch, configuration=configuration

@@ -1,6 +1,6 @@
 """公式库的数据访问。"""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
@@ -23,6 +23,21 @@ class FormulaCrud(CrudBase[DatasetFormula]):
 
     def __init__(self) -> None:
         super().__init__(DatasetFormula)
+
+    async def lock_definitions(
+        self, session: AsyncSession, *, is_editing_library: bool
+    ) -> None:
+        """库变更排他，列定义共享，在取得任何表或列行锁之前调用。
+
+        Args: session, is_editing_library。
+        """
+        key = func.hashtextextended("platform.dataset.formula_definitions", 0)
+        lock = (
+            func.pg_advisory_xact_lock
+            if is_editing_library
+            else func.pg_advisory_xact_lock_shared
+        )
+        await session.execute(select(lock(key)))
 
     async def list_all(self, session: AsyncSession) -> list[DatasetFormula]:
         """全部条目，**含停用的**。

@@ -64,7 +64,13 @@ async def compile_for_save(
         raise _invalid(reason)
     if not draft.is_formula:
         return None
-    return plan.parsed[draft.key].deps.to_json()
+    deps = plan.parsed[draft.key].deps
+    codes = deps.external_table_codes
+    if codes:
+        existing = await table_crud.lock_reference_codes(session, codes)
+        if missing := sorted(codes - existing):
+            raise _invalid(f"引用了不存在的台账：{'、'.join(missing)}")
+    return deps.to_json()
 
 
 def _entries(

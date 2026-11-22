@@ -11,6 +11,7 @@ from typing import Protocol
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from unit.database_fakes import MakerSessions
 
 from lib.stream import StreamEntry
 from platform_server.apps.hvac.crud import (
@@ -199,7 +200,7 @@ async def test_a_rebuild_only_enqueues_and_never_extracts(
 
 
 async def test_an_episode_crossing_a_month_is_extracted_exactly_once(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """⚠ 跨月的那次开机必须恰好抽出一次，起始与达标时刻都对得上。"""
     room_id = await make_room(db_session, "跨月")
@@ -212,7 +213,7 @@ async def test_an_episode_crossing_a_month_is_extracted_exactly_once(
     )
     context = context_for(crossing_rows())
     for message in plan.messages:
-        await run_shard(db_session, context, message)
+        await run_shard(worker_sessions, context, message)
     found = await ac_startup_episode_crud.list_by_batch(
         db_session, plan.batch.id
     )
@@ -224,7 +225,7 @@ async def test_an_episode_crossing_a_month_is_extracted_exactly_once(
 
 
 async def test_the_january_shard_reads_past_its_own_month(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """1 月那片要向后多读到 2 月，才判得出跨月这次到底有没有达标。"""
     room_id = await make_room(db_session, "越界")
@@ -236,7 +237,7 @@ async def test_the_january_shard_reads_past_its_own_month(
         timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
-    await run_shard(db_session, context, plan.messages[0])
+    await run_shard(worker_sessions, context, plan.messages[0])
     reader = context.reader
     assert isinstance(reader, StubReader)
     start, end = reader.windows[0]
@@ -277,7 +278,7 @@ async def test_the_batch_is_on_disk_before_the_plan_is_handed_back(
 
 
 async def test_the_february_shard_sees_the_start_but_does_not_write_it(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """2 月那片看得见 1 月的起机，但不归它写——否则同一次开机会有两份。"""
     room_id = await make_room(db_session, "归属")
@@ -289,12 +290,12 @@ async def test_the_february_shard_sees_the_start_but_does_not_write_it(
         timezone="Asia/Shanghai",
     )
     context = context_for(crossing_rows())
-    run = await run_shard(db_session, context, plan.messages[1])
+    run = await run_shard(worker_sessions, context, plan.messages[1])
     assert run.episode_count == 0
 
 
 async def test_replaying_a_message_writes_no_duplicate(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """队列是 at-least-once：同一条消息重放，事件与进度都不该翻倍。"""
     room_id = await make_room(db_session, "重放")
@@ -307,7 +308,7 @@ async def test_replaying_a_message_writes_no_duplicate(
     )
     context = context_for(crossing_rows())
     for _ in range(3):
-        await run_shard(db_session, context, plan.messages[0])
+        await run_shard(worker_sessions, context, plan.messages[0])
     found = await ac_startup_episode_crud.list_by_batch(
         db_session, plan.batch.id
     )
@@ -319,7 +320,7 @@ async def test_replaying_a_message_writes_no_duplicate(
 
 
 async def test_a_shard_persists_the_idle_minutes_it_counted(
-    db_session: AsyncSession,
+    db_session: AsyncSession, worker_sessions: MakerSessions
 ) -> None:
     """⚠ 分片写事件走的是 Core 路径的取值表，漏一列不会报错。
 
@@ -336,7 +337,7 @@ async def test_a_shard_persists_the_idle_minutes_it_counted(
         timezone="Asia/Shanghai",
     )
     for message in plan.messages:
-        await run_shard(db_session, context_for(crossing_rows()), message)
+        await run_shard(worker_sessions, context_for(crossing_rows()), message)
     episodes = await ac_startup_episode_crud.list_by_batch(
         db_session, plan.batch.id
     )

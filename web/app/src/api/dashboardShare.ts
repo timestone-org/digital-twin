@@ -12,10 +12,16 @@ import type {
 import { requestData } from './client'
 import { idempotent, onPlatform } from './dashboard'
 import type {
+  DashboardPublicationState,
+  DashboardPublicationStateWire,
   DashboardPublicationWire,
   PublicDashboardWire,
 } from './dashboardShareWire'
-import { toPublication, toPublicDashboard } from './dashboardShareWire'
+import {
+  toPublication,
+  toPublicationState,
+  toPublicDashboard,
+} from './dashboardShareWire'
 import { newIdempotencyKey } from './idempotency'
 
 /**
@@ -34,12 +40,12 @@ export const DASHBOARD_NOT_PUBLISHED_CODE = 41016
 export async function getDashboardPublication(
   dashboardId: string,
   signal?: AbortSignal,
-): Promise<DashboardPublication> {
-  const wire = await requestData<DashboardPublicationWire>(
+): Promise<DashboardPublicationState> {
+  const wire = await requestData<DashboardPublicationStateWire>(
     `/dashboards/${dashboardId}/publication`,
     onPlatform(signal === undefined ? {} : { signal }),
   )
-  return toPublication(wire)
+  return toPublicationState(wire)
 }
 
 /**

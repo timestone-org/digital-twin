@@ -2,11 +2,15 @@
 
 import uuid
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.db import CrudBase
-from platform_server.apps.dashboard.models import Dashboard, DashboardNode
+from platform_server.apps.dashboard.models import (
+    Dashboard,
+    DashboardNode,
+    DashboardProject,
+)
 
 SORTABLE = {
     "name": Dashboard.name,
@@ -57,6 +61,26 @@ class DashboardCrud(CrudBase[Dashboard]):
         for dashboard_id, total in rows.all():
             counts[dashboard_id] = int(total)
         return counts
+
+    async def unpublished_targets(
+        self, session: AsyncSession, dashboard_ids: set[uuid.UUID]
+    ) -> list[tuple[uuid.UUID, str, str]]:
+        """批查未公开的跳转目标及所属项目。Args: session, dashboard_ids。"""
+        if not dashboard_ids:
+            return []
+        rows = await session.execute(
+            select(Dashboard.id, Dashboard.name, DashboardProject.name)
+            .join(DashboardProject, DashboardProject.id == Dashboard.project_id)
+            .where(
+                Dashboard.id.in_(dashboard_ids),
+                or_(
+                    Dashboard.is_public.is_not(True),
+                    Dashboard.public_token.is_(None),
+                ),
+            )
+            .order_by(DashboardProject.name, *DEFAULT_ORDER)
+        )
+        return list(rows.tuples().all())
 
     async def count_by_project(
         self, session: AsyncSession, project_id: uuid.UUID

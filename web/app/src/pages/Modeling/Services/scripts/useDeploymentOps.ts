@@ -3,6 +3,7 @@ import type { ModelDeployment } from '@dt/contracts'
 import { useConfirm, useToast } from '@dt/ui'
 import { ref } from 'vue'
 
+import { BizError } from '@/api/client'
 import * as modeling from '@/api/modeling'
 import { describeError } from '@/composables/useAsyncList'
 
@@ -39,6 +40,31 @@ async function attempt<T>(
 
 type DeploymentPatch = Parameters<typeof modeling.updateModelDeployment>[1]
 
+async function save(
+  deploymentId: string,
+  patch: DeploymentPatch,
+  canConfirm: () => boolean,
+  confirm: ReturnType<typeof useConfirm>,
+): Promise<ModelDeployment | null> {
+  try {
+    return await modeling.updateModelDeployment(deploymentId, patch)
+  } catch (caught) {
+    if (!(caught instanceof BizError) || caught.code !== 41435) throw caught
+    if (!canConfirm()) return null
+    const accepted = await confirm.ask({
+      title: '新版本的调用格式有变化',
+      message: '输入字段或输出格式已变化。请核对该部署的调用方已适配新版本。',
+      confirmText: '已核对，切换版本',
+      danger: true,
+    })
+    if (!accepted || !canConfirm()) return null
+    return modeling.updateModelDeployment(deploymentId, {
+      ...patch,
+      is_signature_change_confirmed: true,
+    })
+  }
+}
+
 export function useDeploymentOps(onDone: () => void) {
   const isBusy = ref(false)
   const toast = useToast()
@@ -63,9 +89,13 @@ export function useDeploymentOps(onDone: () => void) {
     isBusy,
     remove,
     /** 换版本、改配额、启停。 */
-    update: async (deploymentId: string, patch: DeploymentPatch) => {
+    update: async (
+      deploymentId: string,
+      patch: DeploymentPatch,
+      canConfirm = () => false,
+    ) => {
       const done = await run(() =>
-        modeling.updateModelDeployment(deploymentId, patch),
+        save(deploymentId, patch, canConfirm, confirm),
       )
       if (done !== null) toast.success('已保存')
       return done

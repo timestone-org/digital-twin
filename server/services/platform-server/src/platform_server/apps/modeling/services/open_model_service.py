@@ -3,7 +3,7 @@
 import math
 import time
 import uuid
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import cast
 
@@ -36,8 +36,8 @@ from platform_server.apps.modeling.models import (
 )
 from platform_server.apps.modeling.operators import (
     CHANNEL_BINARY,
-    OperatorError,
 )
+from platform_server.apps.modeling.operators.frame import DTYPE_STRING
 from platform_server.apps.modeling.protocols import ModelTask
 from platform_server.apps.modeling.schemas import (
     OpenModelInfoOut,
@@ -49,14 +49,18 @@ from platform_server.apps.modeling.schemas import (
 from platform_server.apps.modeling.schemas.signature import (
     OpenModelSignatureOut,
 )
-from platform_server.apps.modeling.services import artifact_io
 from platform_server.apps.modeling.services.artifact_store import (
     ArtifactRejected,
 )
+from platform_server.apps.modeling.services.inference_pool import InferencePool
+from platform_server.apps.modeling.services.inference_task import (
+    ArtifactIdentity,
+    ScoreRows,
+)
 from platform_server.apps.modeling.services.jsonshape import as_dict, as_list
 from platform_server.apps.modeling.services.serving import (
-    CompiledModel,
-    compile_model,
+    PredictionRow,
+    PredictionValue,
 )
 from platform_server.apps.modeling.services.serving_contract import invoke_url
 from platform_server.apps.modeling.services.sessions import Sessions
@@ -94,10 +98,8 @@ class OpenModelDeps:
     #: ⚠ 调用记录要走**自己的**事务：请求那条在出错时会整个回滚，
     #: 而「这次调用失败了」恰恰是最该留下来的那一条
     sessions: Sessions
+    inference: InferencePool
     store: ObjectStore | None = None
-    artifacts: artifact_io.ArtifactCache = field(
-        default_factory=artifact_io.ArtifactCache
-    )
 
 
 async def resolve_call(
@@ -140,7 +142,6 @@ async def guard_rate(
 
 
 async def predict_and_record(
-    session: AsyncSession,
     *,
     deps: OpenModelDeps,
     resolved: ResolvedCall,
@@ -153,14 +154,12 @@ async def predict_and_record(
     ⚠ 鉴权与限流那几种失败**不记**：它们在 `resolve_call` 里就被拒了，还没
     归到任何一个部署的账上；而记下来正好给了未授权的调用者一个撑爆这张表的
     办法（防线 ⑬）。
-    Args: session, deps, resolved, payload。
+    Args: deps, resolved, payload。
     """
     started = time.monotonic()
     counted = replace(resolved, row_count=len(payload.rows))
     try:
-        answer = await predict(
-            session, deps=deps, resolved=counted, payload=payload
-        )
+        answer = await predict(deps=deps, resolved=counted, payload=payload)
     except AppError as error:
         await record_call(deps, counted, started, error.http_status, error.code)
         raise
@@ -207,7 +206,6 @@ async def record_call(
 
 
 async def predict(
-    session: AsyncSession,
     *,
     deps: OpenModelDeps,
     resolved: ResolvedCall,
@@ -217,7 +215,7 @@ async def predict(
 
     ⚠ 整批一次算完（`predict_many`），不逐行调：通道 B 逐行调等于逐行付一次
     到 C 的往返。
-    Args: session, deps, resolved, payload。
+    Args: deps, resolved, payload。
     """
     if resolved.version.task == "rule_calculation":
         raise PredictRequestInvalid(
@@ -228,15 +226,21 @@ async def predict(
             f"一次最多算 {resolved.deployment.max_rows_per_call} 行，"
             f"这次给了 {len(payload.rows)} 行"
         )
-    compiled = await _compiled(session, deps, resolved.version)
     entry = _entry_of(resolved.version)
+    is_text_allowed = resolved.version.task in ("regression", "classification")
     rows = [
-        _as_args(row, entry, index) for index, row in enumerate(payload.rows)
+        _as_args(row, entry, index, is_text_allowed=is_text_allowed)
+        for index, row in enumerate(payload.rows)
     ]
     try:
-        predictions = compiled.predict_many(rows)
-    except OperatorError as error:
-        raise PredictRequestInvalid(str(error)) from error
+        identity = await _artifact_identity(deps, resolved.version)
+        predictions = await deps.inference.predict(
+            ScoreRows(dict(resolved.version.serving_json), rows),
+            identity,
+            deps.store,
+        )
+    except ArtifactRejected as error:
+        raise DeploymentUnservable(str(error)) from error
     _require_finite(predictions)
     return OpenModelPredictOut(
         model=OpenModelInfoOut(
@@ -259,46 +263,26 @@ def _require_finite(predictions: list[float | None]) -> None:
             )
 
 
-async def _compiled(
-    session: AsyncSession, deps: OpenModelDeps, version: ModelVersion
-) -> CompiledModel:
-    """把版本编译成可调用对象，通道 B 顺带把模型本体装回来。
-
-    Args: session, deps, version。
-    """
-    try:
-        return compile_model(
-            dict(version.serving_json),
-            estimator=await _estimator(session, deps, version),
-        )
-    except (ArtifactRejected, OperatorError) as error:
-        raise DeploymentUnservable(str(error)) from error
-
-
-async def _estimator(
-    session: AsyncSession, deps: OpenModelDeps, version: ModelVersion
-) -> object | None:
-    """通道 B 的模型本体；通道 A 给 `None`。
-
-    Args: session, deps, version。
-    """
+async def _artifact_identity(
+    deps: OpenModelDeps, version: ModelVersion
+) -> ArtifactIdentity | None:
+    """在短事务中读取不可变版本的制品引用。Args: deps, version。"""
     if version.serving_channel != CHANNEL_BINARY:
         return None
     if deps.store is None:
         raise ArtifactRejected("本部署没有配对象存储，这个模型用不了")
-    row = await model_artifact_crud.get_by_version(session, version.id)
-    if row is None:
-        raise ArtifactRejected("这个模型版本没有留下模型产物")
-    return await artifact_io.fetch(
-        deps.store,
-        {
-            "object_key": row.object_key,
-            "digest": row.digest,
-            "format_version": row.format_version,
-            "runtime": dict(row.runtime_json),
-        },
-        deps.artifacts,
-    )
+    async with deps.sessions.session() as session:
+        row = await model_artifact_crud.get_by_version(session, version.id)
+        if row is None:
+            raise ArtifactRejected("这个模型版本没有留下模型产物")
+        return ArtifactIdentity(
+            key=row.object_key,
+            digest=row.digest,
+            version=row.format_version,
+            runtime={
+                key: str(value) for key, value in row.runtime_json.items()
+            },
+        )
 
 
 def _entry_of(version: ModelVersion) -> list[dict[str, object]]:
@@ -313,20 +297,32 @@ def _entry_of(version: ModelVersion) -> list[dict[str, object]]:
 
 
 def _as_args(
-    row: OpenModelRow, entry: list[dict[str, object]], index: int
-) -> tuple[list[float | None], datetime | None]:
+    row: OpenModelRow,
+    entry: list[dict[str, object]],
+    index: int,
+    *,
+    is_text_allowed: bool,
+) -> PredictionRow:
     """把一行请求摆成「按序的实参 + 这一行的时刻」。
 
     ⚠ 实参**按入口契约的顺序**取，不按请求里键的顺序：JSON 对象无序，
     按请求顺序取就是把甲的值喂给乙，而结果看着完全正常（D5）。
     Args: row, entry, index。
     """
-    args: list[float | None] = []
+    args: list[PredictionValue] = []
     for column in entry:
         key = str(column.get("key") or "")
         if key not in row and column.get("is_required"):
             raise PredictRequestInvalid(f"第 {index + 1} 行缺少「{key}」")
-        args.append(_as_number(row.get(key), key, index))
+        value = row.get(key)
+        if (
+            is_text_allowed
+            and column.get("dtype") == DTYPE_STRING
+            and isinstance(value, str)
+        ):
+            args.append(value)
+        else:
+            args.append(_as_number(value, key, index))
     return args, _row_moment(row, index)
 
 

@@ -11,8 +11,10 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
 
 import pytest
+from integration.embedding_support import CertifiedTestEmbedder
 
 from knowledge_server.apps.knowledge import crud
+from knowledge_server.apps.knowledge.services.embedding.space import tag
 from knowledge_server.apps.knowledge.services.indexing import (
     IndexPair,
     PgVectorIndex,
@@ -90,7 +92,7 @@ class _Missing:
 
 
 @dataclass(frozen=True)
-class _Embedder:
+class _Embedder(CertifiedTestEmbedder):
     """按块正文长度造一条稳定的假向量。
 
     ⚠ 造出来的维数必须**真的等于** `dimensions`：`vector(N)` 的 N 是建表时
@@ -125,7 +127,7 @@ class _NoEmbedder:
         raise AssertionError("不该被调到")
 
 
-class _LateEmbedder:
+class _LateEmbedder(CertifiedTestEmbedder):
     """刷过目录之后才算得出向量的那一路，与生产的动态嵌入档同形。"""
 
     id = "late"
@@ -382,9 +384,14 @@ async def test_the_indexed_chunk_comes_back_from_pgvector(
         document_id,
     )
     probe = (await embedder.embed(["出口温度不得高于 65 ℃"]))[0]
+    assert embedder.space is not None
+    model_tag = tag(embedder.space.identity)
     async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
         found = await PgVectorIndex(dimensions=db_dimensions).search(
-            session, VectorQuery(base_id=base_id, vector=probe, limit=5)
+            session,
+            VectorQuery(
+                model_tag=model_tag, base_id=base_id, vector=probe, limit=5
+            ),
         )
     assert found
     assert all(one.score > 0 for one in found)
@@ -412,9 +419,14 @@ async def test_a_reingest_replaces_the_old_vectors(
         document_id,
     )
     probe = (await embedder.embed(["出口温度不得高于 65 ℃"]))[0]
+    assert embedder.space is not None
+    model_tag = tag(embedder.space.identity)
     async with db_sessions() as session:  # pyright: ignore[reportCallIssue]
         found = await PgVectorIndex(dimensions=db_dimensions).search(
-            session, VectorQuery(base_id=base_id, vector=probe, limit=10)
+            session,
+            VectorQuery(
+                model_tag=model_tag, base_id=base_id, vector=probe, limit=10
+            ),
         )
     assert len(found) == await _chunks(db_sessions, base_id)
 

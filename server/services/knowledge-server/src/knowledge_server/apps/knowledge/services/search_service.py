@@ -3,12 +3,14 @@
 import uuid
 from dataclasses import asdict
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from knowledge_server.apps.knowledge.errors import (
     RetrievalUnavailable,
     StrategyCannotAnswer,
 )
+from knowledge_server.apps.knowledge.models import KnowledgeBase
 from knowledge_server.apps.knowledge.schemas import (
     AskIn,
     AskOut,
@@ -73,6 +75,24 @@ def search_out(made: RetrievalResult) -> SearchOut:
     )
 
 
+async def _confirm_read(
+    session: AsyncSession,
+    base_id: uuid.UUID,
+    published: tuple[str | None, uuid.UUID | None],
+) -> None:
+    """整轮问答都应属于同一已发布代次。Args: session, base_id, published。"""
+    current = (
+        await session.execute(
+            select(
+                KnowledgeBase.embedding_space_id,
+                KnowledgeBase.active_embedding_generation_id,
+            ).where(KnowledgeBase.id == base_id)
+        )
+    ).one_or_none()
+    if current is None or tuple(current) != published:
+        raise RetrievalUnavailable("查询期间知识库已切换向量代次，请重新检索")
+
+
 async def search(
     session: AsyncSession,
     strategies: tuple[RetrievalStrategy, ...],
@@ -87,6 +107,7 @@ async def search(
     Args: session, strategies, base_id, body。
     """
     base = await library_service.read_base(session, base_id)
+    published = (base.embedding_space_id, base.active_embedding_generation_id)
     chosen = strategy_for(body.strategy or base.retrieval_strategy, strategies)
     try:
         made = await chosen.retrieve(
@@ -98,6 +119,7 @@ async def search(
     except StrategyUnavailable as error:
         reason = error.reason or "这个库还检索不了"
         raise RetrievalUnavailable(reason) from error
+    await _confirm_read(session, base_id, published)
     return search_out(made)
 
 
@@ -115,6 +137,7 @@ async def ask(
     Args: session, strategies, base_id, body。
     """
     base = await library_service.read_base(session, base_id)
+    published = (base.embedding_space_id, base.active_embedding_generation_id)
     chosen = strategy_for(body.strategy or base.retrieval_strategy, strategies)
     if not chosen.is_answering:
         raise StrategyCannotAnswer(
@@ -131,6 +154,7 @@ async def ask(
     except StrategyUnavailable as error:
         reason = error.reason or "这个库还检索不了"
         raise RetrievalUnavailable(reason) from error
+    await _confirm_read(session, base_id, published)
     return AskOut(
         answer=made.answer,
         citations=[hit_out(one) for one in made.hits],

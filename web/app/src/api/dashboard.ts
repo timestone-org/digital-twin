@@ -10,7 +10,6 @@
 import type {
   BindingSourceKind,
   BindingTransform,
-  ComputeSpec,
   DashboardPayload,
   Page,
 } from '@dt/contracts'
@@ -40,7 +39,7 @@ export interface LayoutBindingInput {
   source_kind: BindingSourceKind
   node_key?: string | null
   static_value_json?: unknown
-  compute_json?: ComputeSpec | null
+  compute_json?: Record<string, unknown> | null
   /** ⚠ 键是 snake_case，服务端要读里面的 `node_key`（见 dashboardWire.ts）。 */
   detail_json?: Record<string, unknown> | null
   transform_json?: BindingTransform | null

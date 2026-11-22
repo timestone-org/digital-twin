@@ -50,21 +50,23 @@ function lastHandle() {
  * @param layoutWidth 未变换的布局宽
  * @param visualWidth 累积 transform 之后的视觉宽
  */
-function stubStage(layoutWidth: number, visualWidth: number): void {
+function stubStage(layoutWidth: number, visualWidth: number) {
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(
     layoutWidth,
   )
-  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
-    x: 0,
-    y: 0,
-    width: visualWidth,
-    height: 0,
-    top: 0,
-    right: visualWidth,
-    bottom: 0,
-    left: 0,
-    toJSON: () => ({}),
-  })
+  return vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockReturnValue({
+      x: 0,
+      y: 0,
+      width: visualWidth,
+      height: 0,
+      top: 0,
+      right: visualWidth,
+      bottom: 0,
+      left: 0,
+      toJSON: () => ({}),
+    })
 }
 
 /** 最近一次 setOption 的口径。 */
@@ -91,6 +93,7 @@ const Host = defineComponent({
       default: () => ({}),
     },
     hasChart: { type: Boolean, default: true },
+    hostKey: { type: Number, default: 0 },
     hooks: { type: Object as PropType<ChartHooks>, default: () => ({}) },
   },
   setup(props) {
@@ -108,11 +111,11 @@ const Host = defineComponent({
       onItemClick: props.hooks.onItemClick,
       itemValueOf: props.hooks.itemValueOf,
     })
-    useEChart(options())
-    return { rootRef, chartRef }
+    const { hasLoadError } = useEChart(options())
+    return { rootRef, chartRef, hasLoadError }
   },
   template:
-    '<div ref="rootRef"><div v-if="hasChart" ref="chartRef" class="canvas" /></div>',
+    '<div ref="rootRef" :data-load-error="hasLoadError"><div v-if="hasChart" :key="hostKey" ref="chartRef" class="canvas" /></div>',
 })
 
 async function mountChart(props: Record<string, unknown> = {}) {
@@ -206,6 +209,57 @@ describe('挂载与释放', () => {
   })
 })
 
+describe('图表宿主置换', () => {
+  it('旧宿主已失败时，新宿主尚未完成初始化也不显示旧错误', async () => {
+    echarts.createChart.mockRejectedValueOnce(new Error('旧资源下线'))
+    let finish = () => {}
+    echarts.createChart.mockImplementationOnce(
+      (el, init = {}) =>
+        new Promise((resolve) => {
+          finish = () => resolve(echarts.newHandle(el, init))
+        }),
+    )
+    const wrapper = await mountChart()
+    try {
+      expect(wrapper.attributes('data-load-error')).toBe('true')
+      const oldHost = wrapper.get('.canvas').element
+      await wrapper.setProps({ hostKey: 1 })
+      expect(wrapper.get('.canvas').element).not.toBe(oldHost)
+      expect(echarts.createChart).toHaveBeenCalledTimes(2)
+      expect(wrapper.attributes('data-load-error')).toBe('false')
+    } finally {
+      finish()
+      await flushPromises()
+      wrapper.unmount()
+    }
+  })
+
+  it('旧宿主迟到的失败不会覆盖新宿主已经完成的首帧', async () => {
+    let finish = () => {}
+    echarts.createChart.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          finish = () => reject(new Error('旧资源下线'))
+        }),
+    )
+    const wrapper = mount(Host, { attachTo: document.body })
+    try {
+      await wrapper.setProps({ hostKey: 1 })
+      await flushPromises()
+      expect(echarts.createChart).toHaveBeenCalledTimes(2)
+      const active = lastHandle()
+      expect(active.setOption).toHaveBeenCalledTimes(1)
+      finish()
+      await flushPromises()
+      expect(wrapper.attributes('data-load-error')).toBe('false')
+      expect(active.dispose).not.toHaveBeenCalled()
+      expect(active.setOption).toHaveBeenCalledTimes(1)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+})
+
 describe('建实例失败', () => {
   // ⚠ 失败了不许把容器记成「已绑定」：否则之后同一个容器再也不会重试，图区永久空白
   it('建实例失败后，下一帧刷新在同一个容器上重试', async () => {
@@ -281,7 +335,7 @@ describe('刷新口径', () => {
     const handle = lastHandle()
     handle.setOption.mockClear()
 
-    document.body.style.setProperty('--accent-primary', 'red')
+    document.body.style.color = 'red'
     await vi.waitFor(() => expect(handle.setOption).toHaveBeenCalled())
 
     expect(lastUpdate(handle)).toEqual({ notMerge: true })
@@ -418,6 +472,29 @@ describe('尺寸跟随', () => {
 })
 
 describe('舞台缩放下的位图分辨率', () => {
+  it('短距缩放保持现有图，明显缩放重建位图', async () => {
+    stubStage(100, 100)
+    const wrapper = await mountChart()
+    const first = lastHandle()
+    try {
+      const measure = stubStage(100, 110)
+      document.body.style.transform = 'scale(1.1)'
+      await vi.waitFor(() => expect(measure).toHaveBeenCalled())
+      expect(echarts.createChart).toHaveBeenCalledTimes(1)
+      expect(first.setOption).toHaveBeenCalledTimes(1)
+
+      stubStage(100, 140)
+      document.body.style.transform = 'scale(1.4)'
+      await vi.waitFor(() =>
+        expect(echarts.createChart).toHaveBeenCalledTimes(2),
+      )
+      expect(lastHandle().init).toEqual({ devicePixelRatio: 140 / 100 })
+      expect(first.dispose).toHaveBeenCalledTimes(1)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
   it('缩放比折进分辨率——不折的话 2 倍舞台上 canvas 只有一半分辨率', async () => {
     vi.stubGlobal('devicePixelRatio', 1.5)
     stubStage(100, 200)

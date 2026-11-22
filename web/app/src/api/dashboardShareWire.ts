@@ -23,6 +23,28 @@ export interface DashboardPublicationWire {
   updated_at: string
 }
 
+/** 尚未公开的大屏及所属项目。 */
+export interface UnpublishedJumpTargetWire {
+  dashboard_id: string
+  name: string
+  project_name: string
+}
+
+/** 发布态读取增加跳转提示，兼容尚未提供该字段的服务。 */
+export interface DashboardPublicationStateWire extends DashboardPublicationWire {
+  unpublished_targets?: UnpublishedJumpTargetWire[]
+}
+
+export interface UnpublishedJumpTarget {
+  dashboardId: string
+  name: string
+  projectName: string
+}
+
+export interface DashboardPublicationState extends DashboardPublication {
+  unpublishedTargets: UnpublishedJumpTarget[]
+}
+
 /**
  * 公开面的一条绑定：比管理面的 `BindingWire` **窄**。
  * ⚠ 没有 `node_id` / `created_at` / `updated_at`（它已经嵌在所属节点下面了），
@@ -86,6 +108,20 @@ export function toPublication(
     dashboardId: wire.dashboard_id,
     isPublic: wire.is_public,
     publicToken: wire.public_token,
+  }
+}
+
+/** 映射只读的发布态及跳转提示。 */
+export function toPublicationState(
+  wire: DashboardPublicationStateWire,
+): DashboardPublicationState {
+  return {
+    ...toPublication(wire),
+    unpublishedTargets: (wire.unpublished_targets ?? []).map((target) => ({
+      dashboardId: target.dashboard_id,
+      name: target.name,
+      projectName: target.project_name,
+    })),
   }
 }
 

@@ -7,6 +7,7 @@
 
 import base64
 import json
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
@@ -291,13 +292,53 @@ async def test_an_id_token_without_our_namespace_yields_no_account() -> None:
     assert bundle.plan_type is None
 
 
-async def test_a_body_that_is_not_json_still_lands_a_sane_error() -> None:
+@pytest.mark.parametrize(
+    ("status", "message"),
+    [
+        (429, "登录服务当前请求过多，请稍后重试"),
+        (500, "登录服务暂时不可用，请稍后重试"),
+        (503, "登录服务暂时不可用，请稍后重试"),
+    ],
+)
+@pytest.mark.parametrize(
+    "call",
+    [
+        OAuthClient.start_device_code,
+        lambda client: client.poll_device_code(
+            device_auth_id="device", user_code="user-code", interval_s=5
+        ),
+        lambda client: client.exchange_code(_grant()),
+        lambda client: client.refresh("test-refresh"),
+    ],
+    ids=["start", "poll", "exchange", "refresh"],
+)
+async def test_a_transient_response_is_not_authorization_rejection(
+    status: int,
+    message: str,
+    call: Callable[[OAuthClient], Awaitable[object]],
+) -> None:
+    seen: list[httpx.Request] = []
+    body = {"error": {"code": "invalid_grant", "message": "隔离供应商响应"}}
+    client = _client(_recorded(seen, (status, body)))
+    with pytest.raises(LlmLoginUpstreamUnavailable, match=message):
+        await call(client)
+    assert len(seen) == 1
+
+
+async def test_a_non_json_server_error_is_unavailable() -> None:
     def html(_request: httpx.Request) -> httpx.Response:
-        return httpx.Response(500, text="<html>反代插了一段</html>")
+        return httpx.Response(502, text="<html>反代暂不可用</html>")
 
     client = _client(httpx.MockTransport(html))
-    with pytest.raises(LlmLoginRejected):
+    with pytest.raises(LlmLoginUpstreamUnavailable):
         await client.start_device_code()
+
+
+async def test_rejected_refresh_keeps_the_oauth_reason() -> None:
+    body = {"error": {"code": "invalid_grant", "message": "授权已撤销"}}
+    client = _client(_replies((400, body)))
+    with pytest.raises(LlmLoginRejected, match="授权已撤销"):
+        await client.refresh("test-refresh")
 
 
 async def test_a_dead_endpoint_is_unavailable_not_rejected() -> None:

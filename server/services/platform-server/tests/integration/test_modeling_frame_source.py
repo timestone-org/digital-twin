@@ -77,3 +77,52 @@ async def test_complete_days_stop_at_read_time_without_dropping_future_inputs(
     result = operator.run({"frame": frame})["frame"]
     assert isinstance(result, Frame)
     assert result.rows == expected
+
+
+async def test_ledger_preserves_legacy_false_and_counts_invalid_boolean_cells(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    saved = await create_table(
+        app_client, code="boolean_source", name="启停数据"
+    )
+    table_id = str(saved["id"])
+    await create_column(
+        app_client, table_id, key="running", name="是否运行", data_type="bool"
+    )
+    values = (False, " FaLsE ", "否", "on", 0, 2, "意外状态", None)
+    for minute, value in enumerate(values):
+        db_session.add(
+            DatasetRecord(
+                table_id=uuid.UUID(table_id),
+                row_id=uuid7(),
+                ts=START + timedelta(minutes=minute),
+                values_json={"running": value},
+                source="manual",
+            )
+        )
+    await db_session.commit()
+
+    frame = await load_frame(
+        db_session,
+        request=SourceRequest(
+            table_code=str(saved["code"]),
+            columns=("running",),
+            since=START.isoformat(),
+            until=UNTIL.isoformat(),
+            row_source="manual",
+            row_limit=100,
+        ),
+        now=READ_AT,
+    )
+
+    assert frame.rows == (
+        (False,),
+        (False,),
+        (False,),
+        (True,),
+        (False,),
+        (True,),
+        (None,),
+        (None,),
+    )
+    assert frame.column_of("running").coerce_failed == 1

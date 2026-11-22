@@ -9,9 +9,13 @@
  */
 import { onScopeDispose, provide, ref, watch, type Ref } from 'vue'
 import type { DashboardNodePayload } from '@dt/contracts'
-import { INTERACTION_KEY, createInteractionRuntime } from '@dt/runtime'
+import {
+  INTERACTION_KEY,
+  createInteractionRuntime,
+  type GetModuleManifest,
+} from '@dt/runtime'
 
-import { parseInteractionRules } from '@/features/dashboard/interactionRules'
+import { loadInteractions } from '@/features/dashboard/loadInteractions'
 
 /** 跳转提示挂多久（毫秒）；到点自己收，不留一条挡视线的浮条。 */
 const JUMP_NOTICE_MS = 3200
@@ -27,6 +31,7 @@ export interface PreviewInteraction {
 
 export interface PreviewInteractionInput {
   nodes: () => readonly DashboardNodePayload[]
+  getManifest: GetModuleManifest
   /** 页面级外观袋（草稿态），联动规则在它的 `interactions` 一段里。 */
   chromeJson: () => Record<string, unknown>
   /** 正在编辑的这张屏的 id：高亮「当前在哪一格」靠它跟路由目标比。 */
@@ -69,13 +74,7 @@ export function usePreviewInteraction(
   watch(
     () => [input.nodes(), input.chromeJson()] as const,
     ([nodes, chromeJson]) => {
-      interaction.init(
-        parseInteractionRules(chromeJson),
-        nodes.map((node) => ({
-          nodeId: node.id,
-          isVisible: node.isVisible,
-        })),
-      )
+      loadInteractions(interaction, chromeJson, nodes, input.getManifest)
     },
     { immediate: true },
   )

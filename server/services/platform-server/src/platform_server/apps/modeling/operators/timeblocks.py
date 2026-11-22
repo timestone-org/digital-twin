@@ -69,6 +69,11 @@ class TimeRun:
     tz_offset_minutes: int
     #: 实际覆盖的时刻区间（UTC 毫秒）；一行都没有时给 `None`
     span: tuple[int, int] | None
+    business_timezone: str | None = None
+
+    @property
+    def timezone_label(self) -> str:
+        return self.business_timezone or tz_text(self.tz_offset_minutes)
 
 
 def time_blocks(run: TimeRun) -> tuple[ReportBlock, ...]:
@@ -90,7 +95,7 @@ def _time_columns(run: TimeRun) -> ReportBlock:
             added=list(run.made),
             kept=len(run.result.columns),
             reason=(
-                f"按业务时区 {tz_text(run.tz_offset_minutes)} "
+                f"按业务时区 {run.timezone_label} "
                 f"从每一行的时刻造了 {len(run.made)} 列"
             ),
         ),
@@ -106,14 +111,19 @@ def _time_axis(run: TimeRun) -> ReportBlock:
     block = axis_block(
         BlockAt(zone="step", title="时区口径", port=PORT, tier=TIER_SCALAR),
         TimeAxis(
-            tz_offset_minutes=run.tz_offset_minutes,
+            tz_offset_minutes=(
+                0 if run.business_timezone else run.tz_offset_minutes
+            ),
             actual_since=None if span is None else moment_text(span[0]),
             actual_until=None if span is None else moment_text(span[1]),
         ),
     )
-    return _alerted(
-        block, (TZ_ALERT.format(zone=tz_text(run.tz_offset_minutes)),)
+    text = (
+        f"按业务时区 {run.business_timezone} 逐行取时间特征，时间轴显示 UTC"
+        if run.business_timezone
+        else TZ_ALERT.format(zone=run.timezone_label)
     )
+    return _alerted(block, (text,))
 
 
 def _time_breakdown(run: TimeRun) -> ReportBlock:

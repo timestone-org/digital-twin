@@ -12,24 +12,13 @@
 
 import httpx
 
+from lib.auth import IDENTITY_HEADERS
 from lib.errors import DependencyUnavailable
 from lib.logging import current_traceparent, get_logger
 
 _logger = get_logger("assistant.upstream.auth")
 
 _REISSUE = "/internal/v1/users/{user_id}/edge-headers"
-
-# 要收下的那几个。⚠ 与 `identity.FORWARDED` 同源：少收一个就是下一次调用
-# 「齐全但少一格」，而下游报的是签名不符
-_TAKEN = (
-    "X-Auth-User-Id",
-    "X-Auth-Username",
-    "X-Auth-Role",
-    "X-Auth-Permissions",
-    "X-Auth-Permissions-Truncated",
-    "X-Auth-Exp",
-    "X-Auth-Sig",
-)
 
 
 class AuthUnavailable(DependencyUnavailable):
@@ -95,7 +84,7 @@ class AuthClient:
             raise AuthUnavailable(_reason(error)) from error
         return {
             name: response.headers[name]
-            for name in _TAKEN
+            for name in IDENTITY_HEADERS
             if response.headers.get(name)
         }
 

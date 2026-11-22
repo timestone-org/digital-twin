@@ -24,6 +24,7 @@ from platform_server.apps.dashboard.schemas.template import (
 )
 from platform_server.apps.dashboard.schemas.transfer import (
     DashboardExportOut,
+    DashboardImportIn,
     DashboardImportOut,
 )
 from platform_server.apps.dashboard.services.dashboard_service import (
@@ -130,10 +131,13 @@ async def instantiate_template(
     template = await require_template(session, template_id)
     created = await import_dashboard(
         session,
-        project_id=payload.target_project_id,
-        payload=package_of(template),
+        DashboardImportIn(
+            project_id=payload.target_project_id,
+            payload=package_of(template),
+            new_name=payload.name or template.name,
+            interaction_node_map=payload.interaction_node_map,
+        ),
         context=context,
-        new_name=payload.name or template.name,
     )
     _logger.info(
         "dashboard_template_instantiated",

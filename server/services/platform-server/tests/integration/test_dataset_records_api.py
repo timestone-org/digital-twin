@@ -5,16 +5,20 @@
 UPDATE（`ts` 是分区键，改不动）、以及写完不报脏（大屏静默不更新）。
 """
 
+from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
 from conftest import AppContext
+from sqlalchemy.ext.asyncio import AsyncSession
 from unit.dataset_fakes import FakeSetSink
 
 from integration.dataset_helpers import (
     DIRTY_KEY,
     HTTP_BAD_REQUEST,
+    HTTP_CONFLICT,
     HTTP_CREATED,
     HTTP_NOT_FOUND,
     TABLES,
@@ -27,14 +31,19 @@ from integration.dataset_helpers import (
     records_url,
 )
 from lib.utils.ids import uuid7
+from platform_server.apps.dataset.crud import record_crud
+from platform_server.apps.dataset.models import DatasetRecord
 
 pytestmark = pytest.mark.requires_postgres
 
 RECORD_NOT_FOUND = 41207
 RECORD_INVALID = 41213
+RECORD_AMBIGUOUS = 41214
 NODE_KEY = "0192f0c0-0000-7000-8000-00000000abcd:outlet_temp"
 FIRST_MOMENT = "2026-08-23T10:00:00.000Z"
 SECOND_MOMENT = "2026-08-23T11:00:00.000Z"
+LEGACY_STAMP = "2026-08-23T10:00:00.123Z"
+MICROSECOND_STAMP = "2026-08-23T10:00:00.123456Z"
 
 
 async def seed_table(client: httpx.AsyncClient, **column: Any) -> str:
@@ -72,6 +81,79 @@ async def test_a_manual_value_lands_in_the_row(
     assert created["record"]["values"] == {"产量": 7.0}
     assert created["record"]["overrides"] is None
     assert created["record"]["source"] == "manual"
+
+
+@pytest.mark.parametrize("method", ["PATCH", "DELETE"])
+async def test_millisecond_timestamp_can_locate_microsecond_record(
+    app_client: httpx.AsyncClient,
+    method: str,
+) -> None:
+    table_id = await seed_table(app_client)
+    receipt = await create_record(
+        app_client, table_id, ts=MICROSECOND_STAMP, values={"产量": 7}
+    )
+    record = receipt["record"]
+    assert record["ts"] == LEGACY_STAMP
+    payload = (
+        {"json": {"ts": record["ts"], "values": {"产量": 8}}}
+        if method == "PATCH"
+        else {}
+    )
+
+    response = await app_client.request(
+        method,
+        record_url(table_id, record["row_id"]),
+        params={"ts": record["ts"]},
+        **payload,
+    )
+
+    assert response.status_code == 200, response.text
+    if method == "PATCH":
+        saved = data_of(response)["record"]
+        assert saved["ts"] == LEGACY_STAMP
+        assert saved["locator_ts"] == MICROSECOND_STAMP
+
+
+async def test_exact_locator_distinguishes_rows_in_one_millisecond(
+    app_client: httpx.AsyncClient, db_session: AsyncSession
+) -> None:
+    table_id = await seed_table(app_client)
+    receipt = await create_record(
+        app_client, table_id, ts=LEGACY_STAMP, values={"产量": 7}
+    )
+    first = receipt["record"]
+    record_crud.add(
+        db_session,
+        DatasetRecord(
+            table_id=UUID(table_id),
+            row_id=UUID(first["row_id"]),
+            ts=datetime.fromisoformat(MICROSECOND_STAMP),
+            values_json={"产量": 11},
+            source="manual",
+        ),
+    )
+    await db_session.flush()
+    url = record_url(table_id, first["row_id"])
+    legacy = await app_client.delete(url, params={"ts": LEGACY_STAMP})
+    assert (legacy.status_code, code_of(legacy)) == (
+        HTTP_CONFLICT,
+        RECORD_AMBIGUOUS,
+    )
+
+    saved = await app_client.patch(
+        url,
+        params={"locator_ts": first["locator_ts"]},
+        json={"values": {"产量": 8}},
+    )
+    assert saved.status_code == 200
+    deleted = await app_client.delete(
+        url, params={"locator_ts": MICROSECOND_STAMP}
+    )
+    assert deleted.status_code == 200
+    listing = data_of(await app_client.get(records_url(table_id)))["items"]
+    assert [(row["locator_ts"], row["values"]) for row in listing] == [
+        (first["locator_ts"], {"产量": 8.0}),
+    ]
 
 
 async def test_a_point_column_value_is_recorded_as_a_correction(
@@ -181,6 +263,42 @@ async def test_editing_one_column_keeps_the_collected_value(
     record = data_of(response)["record"]
     assert record["values"] == {"产量": 8.0, "温度": 25.0}
     assert record["overrides"]["温度"]["value"] == 25.0
+
+
+async def test_partial_edit_keeps_omitted_required_manual_values(
+    app_client: httpx.AsyncClient,
+) -> None:
+    table = await create_table(app_client)
+    table_id = str(table["id"])
+    await create_column(app_client, table_id, key="产量", is_required=True)
+    await create_column(app_client, table_id, key="水量")
+    before = await create_record(
+        app_client, table_id, ts=FIRST_MOMENT, values={"产量": 30, "水量": 12}
+    )
+    target = record_url(table_id, before["record"]["row_id"], FIRST_MOMENT)
+
+    changed = await app_client.patch(target, json={"values": {"水量": 18}})
+    assert changed.status_code == 200, changed.text
+    assert data_of(changed)["record"]["values"] == {"产量": 30, "水量": 18}
+
+    cleared = await app_client.patch(target, json={"values": {"水量": None}})
+    assert cleared.status_code == 200, cleared.text
+    assert data_of(cleared)["record"]["values"] == {"产量": 30, "水量": None}
+
+
+async def test_explicit_null_cannot_clear_a_required_manual_value(
+    app_client: httpx.AsyncClient,
+) -> None:
+    table_id = await seed_table(app_client, key="产量", is_required=True)
+    before = await create_record(
+        app_client, table_id, ts=FIRST_MOMENT, values={"产量": 30}
+    )
+    target = record_url(table_id, before["record"]["row_id"], FIRST_MOMENT)
+
+    rejected = await app_client.patch(target, json={"values": {"产量": None}})
+    assert rejected.status_code == HTTP_BAD_REQUEST
+    assert code_of(rejected) == RECORD_INVALID
+    assert rejected.json()["details"][0]["field"] == "values[产量]"
 
 
 async def test_changing_the_data_time_keeps_the_row_identity(

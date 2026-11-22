@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from knowledge_server.apps.chat.services import budget
-from knowledge_server.apps.chat.services.citations import Ledger
+from knowledge_server.apps.chat.services.citations import Cited, Ledger
 from knowledge_server.apps.chat.services.scope import BaseScope
 from knowledge_server.apps.knowledge.services import (
     HitOut,
@@ -94,7 +94,9 @@ KNOWLEDGE_SPECS: tuple[ToolSpec, ...] = (
     ToolSpec(
         name=READ_CHUNK,
         description=(
-            "读取召回块及前后相邻块；chunk_id 来自检索结果，仍受会话范围约束。"
+            "读取召回块和前后相邻块；chunk_id 取自检索或历史依据，"
+            "仍受会话范围约束。"
+            "只给实际请求的块发本轮 mark。"
         ),
         parameters=object_schema(
             {"chunk_id": string_schema("哪一块，取自 kb.search 的回执")},
@@ -206,12 +208,30 @@ class KnowledgeTools:
         chunk_id = _uuid(arguments, "chunk_id")
         async with self.sessions() as session:
             found = await chunk_service.read_around(session, chunk_id)
-        if found is None:
-            raise UnknownTool("没有这一块；chunk_id 要取自 kb.search 的回执")
-        # ⚠ 这一道最容易漏：列库与检索都拦住了，模型仍可能从历史消息里翻出
-        # 一个越界的 chunk_id——而那是整段原文，不是一条摘要
-        self.scope.require(found.base_id)
+            if found is None:
+                raise UnknownTool("没有这一块；请重新用 kb.search 查找")
+            # 历史块 ID 不能跳过当前会话范围。
+            self.scope.require(found.base_id)
+            base = await library_service.read_base(session, found.base_id)
+        location = found.citation_location()
+        excerpt = budget.snippet_chars(self.result_chars, 1, MAX_SNIPPET_CHARS)
+        marker = self.ledger.issue(
+            Cited(
+                marker="",
+                chunk_id=chunk_id,
+                document_id=found.document_id,
+                document_title=found.document_title,
+                base_name=base.name,
+                heading_path=found.heading_path,
+                where=location.label,
+                page=location.page,
+                page_end=location.page_end,
+                text=found.text[:excerpt],
+            )
+        )
         return {
+            "mark": marker,
+            "chunk_id": str(chunk_id),
             "document_title": found.document_title,
             "heading_path": found.heading_path,
             "locator": found.locator,

@@ -73,6 +73,13 @@ watch(
         这个版本不可上线：{{ props.version.unservable_reason }}
       </DtNotice>
 
+      <DtNotice
+        v-if="props.version.has_legacy_utc_time_features"
+        intent="warning"
+      >
+        此版本按 UTC
+        计算时间特征。若需使用业务时区，请重新训练并发布新版本，再切换部署或更新台账公式绑定。
+      </DtNotice>
       <section>
         <h4 class="dt-ml-detail__title">要提供哪几列</h4>
         <SignatureTable :rows="inputs" />

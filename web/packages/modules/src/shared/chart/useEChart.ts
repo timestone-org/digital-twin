@@ -4,7 +4,7 @@
  * 容器不要求常驻：挂 v-if 或被 :key 置换时，元素出现即（重）建、消失即释放。
  */
 import type { InteractionEvent } from '@dt/contracts'
-import { onBeforeUnmount, onMounted, watch, type Ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 
 import { chartDprOf, dprDrifted, tryCreate } from './chartHost'
 import type { ChartHandle, ECOption } from './echarts'
@@ -91,7 +91,7 @@ function install(
 }
 
 /** 实例与观察者的持有者，不碰 Vue 生命周期。 */
-function createBinder(opts: UseEChartOptions) {
+function createBinder(opts: UseEChartOptions, hasLoadError: Ref<boolean>) {
   let chart: ChartHandle | null = null
   let observer: ResizeObserver | null = null
   let boundEl: HTMLElement | null = null
@@ -102,18 +102,15 @@ function createBinder(opts: UseEChartOptions) {
   // 建实例要 await 动态 import；期间容器换了或已卸载，回来的实例必须当场扔掉
   let generation = 0
 
-  /** 刷新一帧；只有全量那一档复查缩放比，值刷新每秒都来、量布局不值当。 */
-  function refresh(full: boolean): void {
+  /** 全量刷新与布局变化复查位图倍率。 */
+  function refresh(full: boolean, shouldPaint = true): void {
     const drifted = full && boundEl && chart && dprDrifted(boundEl, builtDpr)
     const rebuild = failedEl ?? (drifted ? boundEl : null)
-    if (rebuild) {
-      void attach(rebuild)
-      return
-    }
-    if (chart) paint(chart, opts, full)
+    if (rebuild) void attach(rebuild)
+    else if (chart && shouldPaint) paint(chart, opts, full)
   }
 
-  function detach(): void {
+  function release(shouldClearError = true): void {
     generation += 1
     observer?.disconnect()
     observer = null
@@ -121,18 +118,21 @@ function createBinder(opts: UseEChartOptions) {
     chart = null
     boundEl = null
     failedEl = null
+    if (shouldClearError) hasLoadError.value = false
   }
 
   async function attach(el: HTMLElement): Promise<void> {
-    detach()
+    release(false)
     const token = generation
     boundEl = el
     builtDpr = chartDprOf(el)
     const instance = await tryCreate(el, builtDpr)
     // 期间被换掉的实例当场扔掉；建失败的容器记下来，下一帧刷新重试
-    if (token !== generation || instance === null) {
+    const isCurrent = token === generation
+    if (isCurrent) hasLoadError.value = instance === null
+    if (!isCurrent || instance === null) {
       instance?.dispose()
-      if (token === generation) failedEl = el
+      if (isCurrent) failedEl = el
       return
     }
     chart = instance
@@ -143,7 +143,7 @@ function createBinder(opts: UseEChartOptions) {
     bind: (el: HTMLElement): void => {
       if (el !== boundEl) void attach(el)
     },
-    detach,
+    detach: release,
     refresh,
     get: (): ChartHandle | null => chart,
   }
@@ -155,8 +155,10 @@ function createBinder(opts: UseEChartOptions) {
  */
 export function useEChart(opts: UseEChartOptions): {
   getChart: () => ChartHandle | null
+  hasLoadError: Readonly<Ref<boolean>>
 } {
-  const binder = createBinder(opts)
+  const hasLoadError = ref(false)
+  const binder = createBinder(opts, hasLoadError)
 
   onMounted(() => {
     if (opts.chartRef.value) binder.bind(opts.chartRef.value)
@@ -172,8 +174,12 @@ export function useEChart(opts: UseEChartOptions): {
     deep: opts.valuesDeep ?? true,
   })
   // 换肤必须整图重算：只换 series 改不掉轴、图例与提示框的颜色。
-  useThemeRedraw(opts.rootRef, () => binder.refresh(true))
+  useThemeRedraw(
+    opts.rootRef,
+    () => binder.refresh(true),
+    () => binder.refresh(true, false),
+  )
   onBeforeUnmount(binder.detach)
 
-  return { getChart: binder.get }
+  return { getChart: binder.get, hasLoadError }
 }

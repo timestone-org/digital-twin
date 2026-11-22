@@ -1,18 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 编辑画布的节点层：按文档序画节点、拖动、点选，外加选中框、旋转手柄
- * 与端口点。渲染件复用 `@dt/twin2d` 的 `Twin2dNodeBox`——编辑器与大屏所见即所得，
- * 靠的就是两边同一个渲染件。
- *
- * ⚠ 手势期间只改本地草稿，`pointerup` 才抛一次 `change`（落 commit 归上层）：一次
- * 拖动走几百个 `pointermove`，逐帧落库之后撤销键就再也按不回上一步。
- * ⚠ 同一份草稿逐帧原样抛一次 `preview`（纯变更，谁都不写文档）：连线层照
- * 「文档态 ∪ 这一帧草稿」画，不给它的话线在整个拖动过程里停在旧位置，松手才跳一次。
- * ⚠ 手势走画布壳递下来的那条总线（`startGesture`），本层不另装一副 window 监听：
- * 每层各起一台状态机的话，「上一次没收场就先顶掉它」这条互斥就不成立了。
- * ⚠ sprite 宿主归画布壳挂，本层一份都不挂：两处都挂会让同一份 symbol 在文档里重号，
- * 而一处都不挂时图标**静默消失**——`<use>` 元素照样在，只是解析不到任何目标。
- */
+/** @fileoverview 节点的渲染、拖动、点选与端口手势。 */
 import {
   Twin2dNodeBox,
   applyNodeTransform,
@@ -21,6 +8,7 @@ import {
 } from '@dt/twin2d'
 import type {
   Pt,
+  Twin2dEndpoint,
   Twin2dIconResolver,
   Twin2dNode,
   Twin2dNodeRotation,
@@ -83,6 +71,12 @@ interface GuideView {
   style: CSSProperties
 }
 
+type OutlineAt = (
+  node: Twin2dNode,
+  style: Twin2dNodeStyle,
+  event: PointerEvent,
+) => Twin2dEndpoint | null
+
 const props = defineProps<{
   /** 节点实例，文档序即绘制序。 */
   nodes: readonly Twin2dNode[]
@@ -100,12 +94,11 @@ const props = defineProps<{
   scale: number
   /** 起一次手势；画布壳的指针总线出这一支，本组件不另装监听。 */
   startGesture: (spec: Twin2dGestureSpec) => boolean
+  /** 查询这一按是否命中设备轮廓。 */
+  outlineAt: OutlineAt
   /** `asset:<uuid>` → 可直接用的地址。 */
   resolveIcon?: Twin2dIconResolver
-  /**
-   * 别的层（标注）这一帧吸出来的参考线，与本层自己那些画在一起。
-   * ⚠ 参考线只有本层一副画法：各层各画一副的话，同一根线在两层里粗细与虚实都不一样。
-   */
+  /** 标注层与节点层共用的对齐参考线。 */
   extraGuides?: readonly Twin2dGuideLine[]
 }>()
 
@@ -117,28 +110,20 @@ const emit = defineEmits<{
   /** 这一帧的草稿表，不进撤销栈；null = 没有草稿了，照文档画。 */
   preview: [nodes: readonly Twin2dNode[] | null]
   /** 从一个端口点起手，交给连线预览。 */
-  portGrab: [nodeId: string, portId: string, event: PointerEvent]
+  portGrab: [nodeId: string, portId: string, event: PointerEvent, t?: number]
 }>()
 
-/**
- * 手势期间的本地草稿；null = 没在拖，或者拖了但一步都没挪。
- * ⚠ `shallowRef`：整份换引用，深响应式在每一帧上白走一遍全表。
- */
+/** 手势期间的本地节点草稿。 */
 const draft = shallowRef<readonly Twin2dNode[] | null>(null)
 
-/**
- * 这份草稿是照哪一份文档节点表算出来的；null = 眼下没有草稿。
- * ⚠ 不做成响应式：只在收场那一下比一次引用，进模板会白引一次重绘。
- */
+/** 草稿起手时的文档节点表。 */
 let draftBase: readonly Twin2dNode[] | null = null
 
 /** 这一帧吸出来的参考线；手势收场即清空。 */
 const guides = shallowRef<readonly Twin2dGuideLine[]>([])
 
 /**
- * 换一份草稿，同一份原样交给上层。
- * ⚠ 引用没变就一次都不抛：一步都没挪的那些帧照样走到这里，抛出去就是让连线层
- * 白重算一遍全图的走线。
+ * 将变更后的草稿交给连线层。
  * @param next 这一帧的草稿；null = 回到文档态
  */
 function setDraft(next: readonly Twin2dNode[] | null): void {
@@ -357,9 +342,23 @@ function onNodeDown(view: NodeView, event: PointerEvent): void {
     emit('pick', id, true)
     return
   }
+  const end = props.outlineAt(view.node, view.style, event)
+  if (end !== null) {
+    emit('portGrab', id, end.portId, event, end.t ?? undefined)
+    return
+  }
   const inPick = props.selectedIds.includes(id)
   if (!inPick) emit('pick', id, false)
   startMove(id, inPick ? props.selectedIds : [id], event, inPick)
+}
+
+function onNodeHover(view: NodeView, event: PointerEvent): void {
+  if (!(event.currentTarget instanceof Element)) return
+  const hit =
+    !event.ctrlKey &&
+    !event.metaKey &&
+    props.outlineAt(view.node, view.style, event) !== null
+  event.currentTarget.toggleAttribute('data-connect-outline', hit)
 }
 </script>
 
@@ -376,6 +375,7 @@ function onNodeDown(view: NodeView, event: PointerEvent): void {
         :id-prefix="`${EDIT_ID_PREFIX}${view.node.id}`"
         :resolve-icon="iconResolver"
         @pointerdown="onNodeDown(view, $event)"
+        @pointermove="onNodeHover(view, $event)"
       />
     </div>
     <span
@@ -430,6 +430,10 @@ function onNodeDown(view: NodeView, event: PointerEvent): void {
 .t2e-node {
   pointer-events: auto;
   cursor: move;
+
+  &[data-connect-outline] {
+    cursor: crosshair;
+  }
   user-select: none;
 }
 

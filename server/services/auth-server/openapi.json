@@ -3213,7 +3213,7 @@
     },
     "/api/v1/auth/sessions": {
       "post": {
-        "description": "账号口令登录。\n\nArgs: payload, session, container。",
+        "description": "账号口令登录。\n\nArgs: payload, container。",
         "operationId": "create_session_api_v1_auth_sessions_post",
         "requestBody": {
           "content": {

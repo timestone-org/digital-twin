@@ -8,7 +8,7 @@
  * ⚠ 掐回合与卸载都要把挂着的提问结掉（`features/ai/askQueue.ts`）。不结的话
  * 回合永远停在那次 await 上：界面既不动也不报错，输入框一直禁着。
  */
-import { computed, onScopeDispose, ref, type Ref } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, type Ref } from 'vue'
 import type {
   AssistantAskAnswer,
   KnowledgeChatSessionDetail,
@@ -76,6 +76,7 @@ export function useKnowledgeConversation(
     onCompleted,
     state,
     isRunning,
+    failedQuestion: shallowRef<ChatEntry | null>(null),
     edit,
     // 掐掉回合的同时把挂着的提问结成取消：只掐一头的话回合还停在 await 上
     abort: () => {
@@ -125,13 +126,33 @@ function controlsOf(
     clear: () => {
       parts.abort()
       parts.isRunning.value = false
+      parts.failedQuestion.value = null
       parts.edit(() => emptyLog())
     },
     restore: (detail) => {
       if (parts.state.running !== null) return
-      parts.edit(() => replayKnowledgeLog(detail))
+      parts.edit(() => restoreLog(parts, detail))
     },
     answerAsk: asks.answer,
     note: (text) => parts.edit((given) => withSaid(given, 'note', text)),
   }
+}
+
+/** 只把历史末尾的已标记用户提问记为可复用。 */
+function restoreLog(
+  parts: KnowledgeSenderParts,
+  detail: KnowledgeChatSessionDetail,
+) {
+  const log = replayKnowledgeLog(detail)
+  const stored = detail.messages.at(-1)
+  const entry = log.entries.at(-1)
+  const failed =
+    stored?.role === 'user' &&
+    stored.content_json.turn_failed === true &&
+    entry?.role === 'user' &&
+    entry.text === stored.content_json.text
+  parts.failedQuestion.value = failed ? entry : null
+  return failed && detail.last_error !== null
+    ? withSaid(log, 'error', detail.last_error)
+    : log
 }

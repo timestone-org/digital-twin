@@ -7,9 +7,11 @@ SQLAlchemy 的线程安全边界。
 
 import asyncio
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, tzinfo
+from itertools import chain, groupby
+from time import monotonic
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -52,7 +54,6 @@ from platform_server.apps.dataset.services.record_history import (
     load_external_rows,
     load_formula_rows,
     load_history,
-    load_models,
     load_whole_stats,
 )
 
@@ -60,10 +61,9 @@ _logger = get_logger("platform.dataset.compute")
 
 # 一次重算最多改写多少行。触顶时如实上报，不静默截断
 MAX_RECOMPUTE_ROWS = 200_000
-# 每处理这么多行让出一次事件循环。⚠ 不用 `asyncio.to_thread`——线程里改
-# ORM 实例会碰 SQLAlchemy 的线程安全边界。⚠ 宽表一行要毫秒级，攒太多行才让
-# 一次，同进程别的请求读不到库的回包，会被库按语句超时掐掉
+# 便宜行的数量上限与宽窗口的连续求值时间预算
 YIELD_EVERY = 50
+YIELD_BUDGET_S = 0.02
 # `*_ALL` 指向公式列时要多跑几趟才收敛，上限就这么多
 _MAX_PASSES = 3
 
@@ -200,7 +200,14 @@ async def recompute_range(
     targets = fetched[:MAX_RECOMPUTE_ROWS]
     if not targets:
         return RecomputeOutcome(0, 0, is_truncated, MAX_RECOMPUTE_ROWS)
-    failed = await _run_passes(session, scope, table_id, targets)
+    peers = (
+        await _peers_after_cap(session, table_id, targets)
+        if is_truncated
+        and scope.local_windows
+        and fetched[MAX_RECOMPUTE_ROWS].ts == targets[-1].ts
+        else []
+    )
+    failed = await _run_passes(session, scope, table_id, targets, peers)
     return RecomputeOutcome(
         recomputed=len(targets),
         failed=failed,
@@ -209,24 +216,56 @@ async def recompute_range(
     )
 
 
+async def _peers_after_cap(
+    session: AsyncSession, table_id: uuid.UUID, targets: list[DatasetRecord]
+) -> list[DatasetRecord]:
+    """补齐边界同刻组中本次不重写的行。Args: session, table_id, targets。"""
+    moment = targets[-1].ts
+    included = {record.row_id for record in targets if record.ts == moment}
+    rows = await load_formula_rows(
+        session, RecordWindow(table_id=table_id, since=moment, until=moment)
+    )
+    return [row for row in rows if row.row_id not in included]
+
+
+def _same_time_snapshots(
+    targets: list[DatasetRecord], trailing: list[DatasetRecord]
+) -> dict[datetime, list[RowSnapshot]]:
+    """冻结批次起点的同刻行与公式缓存。Args: targets, trailing。"""
+    peers: dict[datetime, list[RowSnapshot]] = {}
+    for moment, records in groupby(
+        chain(targets, trailing), key=lambda record: record.ts
+    ):
+        group = list(records)
+        if len(group) > 1:
+            peers[moment] = [to_snapshot(record) for record in group]
+    return peers
+
+
 async def _run_passes(
     session: AsyncSession,
     scope: ComputeScope,
     table_id: uuid.UUID,
     targets: list[DatasetRecord],
+    trailing: list[DatasetRecord],
 ) -> int:
     """跑到收敛为止，返回出现求值错误的行数。
 
-    Args: session, scope, table_id, targets（按 ts 升序）。
+    Args: session, scope, table_id, targets（按 ts 升序）, trailing。
     """
     span = RowSpan(table_id=table_id, start=targets[0].ts, end=targets[-1].ts)
     batch = _Batch(
         # 重算只写计算值，故 effective 值在整趟里不变，整批取一次
         values=[effective_values(record) for record in targets],
         seeds=await _seed_rows(session, scope, table_id, span.start),
+        peers=(
+            _same_time_snapshots(targets, trailing)
+            if scope.local_windows
+            else {}
+        ),
         externals=await load_external_rows(session, scope, span),
         # ⚠ 模型定义整批装一次：漏了这一处的症状是「单行试算对、全表重算全空」
-        models=await load_models(session, scope),
+        models=scope.models,
     )
     await _collect_predictions(session, scope, targets, batch)
     failed = 0
@@ -294,12 +333,14 @@ class _Batch:
 
     values: list[dict[str, Any]]
     seeds: list[RowSnapshot]
+    peers: dict[datetime, list[RowSnapshot]]
     externals: dict[str, list[RowSnapshot]]
     #: 这一批共用的模型定义。⚠ 整批装一次：漏了这一处的症状是「单行试算对、
     #: 全表重算全空」（docs/MODELING_DESIGN.md §7.2）
     models: dict[str, AnalysisModel | AnalysisUnavailable]
     #: 这一批共用的 `PREDICT` 备忘；没开批量相位时是 `None`
     memo: ModelMemo | None = None
+    yield_deadline_s: float = 0.0
 
 
 async def _one_pass(
@@ -320,12 +361,55 @@ async def _one_pass(
     series = list(batch.seeds)
     # 一趟一份：这一趟的历史串只追加，窗口索引因此能逐行追平而不必重建
     index = WindowIndex()
-    is_collecting = batch.memo is not None and batch.memo.is_collecting
     failed = 0
     has_changed = False
-    for position, record in enumerate(targets):
-        values = batch.values[position]
+    batch.yield_deadline_s = monotonic() + YIELD_BUDGET_S
+    for moment, records in groupby(enumerate(targets), key=_record_time):
         cache = _cache_of(scope, series, whole, batch, index)
+        peers = batch.peers.get(moment)
+        before = len(series)
+        if peers is not None:
+            series.extend(peers)
+        rows, errors, changed = await _evaluate_group(
+            scope,
+            batch,
+            records,
+            cache,
+            before if peers is not None else None,
+        )
+        if peers is not None:
+            del series[before:]
+            index.rewind(series, before)
+        series.extend(rows)
+        failed += errors
+        has_changed = has_changed or changed
+    return failed, has_changed
+
+
+def _record_time(positioned: tuple[int, DatasetRecord]) -> datetime:
+    return positioned[1].ts
+
+
+async def _evaluate_group(
+    scope: ComputeScope,
+    batch: _Batch,
+    records: Iterable[tuple[int, DatasetRecord]],
+    cache: HistoryCache,
+    first_peer: int | None,
+) -> tuple[list[RowSnapshot], int, bool]:
+    """同刻共用前值和同伴快照。
+
+    Args: scope, batch, records, cache, first_peer。
+    """
+    is_collecting = batch.memo is not None and batch.memo.is_collecting
+    rows: list[RowSnapshot] = []
+    failed = 0
+    has_changed = False
+    for offset, (position, record) in enumerate(records):
+        cache.window_excluded = (
+            None if first_peer is None else first_peer + offset
+        )
+        values = batch.values[position]
         computed, errors = evaluate_row(scope, record.ts, values, cache)
         if not is_collecting:
             has_changed = has_changed or computed != (
@@ -334,11 +418,13 @@ async def _one_pass(
             record.computed_json = computed
             record.compute_error = errors or None
             failed += 1 if errors else 0
-        series.append(RowSnapshot(ts=record.ts, values={**values, **computed}))
-        # ⚠ 纯内存的长循环要主动让出：几万行连算会把同进程的 /health 一起卡住
-        if (position + 1) % YIELD_EVERY == 0:
+        rows.append(RowSnapshot(ts=record.ts, values={**values, **computed}))
+        if (
+            position + 1
+        ) % YIELD_EVERY == 0 or monotonic() >= batch.yield_deadline_s:
             await asyncio.sleep(0)
-    return failed, has_changed
+            batch.yield_deadline_s = monotonic() + YIELD_BUDGET_S
+    return rows, failed, has_changed
 
 
 def _cache_of(
@@ -392,14 +478,30 @@ async def _seed_rows(
             window=RecordWindow(table_id=table_id, since=before, before=start),
         )
     missing = scope.max_prev - len(rows)
-    if missing <= 0:
-        return [to_snapshot(row) for row in rows]
-    previous = await record_crud.list_before(
-        session,
-        window=RecordWindow(table_id=table_id, before=before),
-        limit=missing,
-    )
-    return [to_snapshot(row) for row in [*reversed(previous), *rows]]
+    rows.reverse()
+    if missing > 0:
+        rows.extend(
+            await record_crud.list_before(
+                session,
+                window=RecordWindow(table_id=table_id, before=before),
+                limit=missing,
+            )
+        )
+    return await _seed_snapshots(rows)
+
+
+async def _seed_snapshots(
+    newest_first: list[DatasetRecord],
+) -> list[RowSnapshot]:
+    """按升序转换并逐行释放历史 ORM 对象。Args: newest_first。"""
+    snapshots: list[RowSnapshot] = []
+    deadline_s = monotonic() + YIELD_BUDGET_S
+    while newest_first:
+        snapshots.append(to_snapshot(newest_first.pop()))
+        if monotonic() >= deadline_s:
+            await asyncio.sleep(0)
+            deadline_s = monotonic() + YIELD_BUDGET_S
+    return snapshots
 
 
 def _needs_extra_passes(scope: ComputeScope) -> bool:

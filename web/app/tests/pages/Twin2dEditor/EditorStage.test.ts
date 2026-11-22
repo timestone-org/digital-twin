@@ -479,6 +479,31 @@ describe('选中', () => {
 })
 
 describe('拉一条新连线', () => {
+  it('从无端口设备的任意轮廓位置起线并保存两端的周长参数', async () => {
+    const config = normalizeTwin2dConfig({
+      styles: [{ id: 'plain', name: '设备', size: { w: 80, h: 40 } }],
+      nodes: [
+        { id: 'a', styleId: 'plain', x: 100, y: 100, w: 80, h: 40 },
+        { id: 'b', styleId: 'plain', x: 300, y: 100, w: 80, h: 40 },
+      ],
+    })
+    const { wrapper, doc } = mountStage(config)
+
+    await dragBy(
+      nodeAt(wrapper, 'a'),
+      { x: 180, y: 110 },
+      { x: 300, y: 110 },
+      4,
+    )
+
+    const reopened = normalizeTwin2dConfig(doc.config.value)
+    expect(reopened.edges.at(0)).toMatchObject({
+      from: { nodeId: 'a', portId: '', t: 0.313 },
+      to: { nodeId: 'b', portId: '', t: 0.938 },
+      waypoints: [],
+    })
+    expect(reopened.nodes.at(0)).toMatchObject({ x: 100, y: 100 })
+  })
   it('从端口拉到另一个节点上就多出一条', async () => {
     const { wrapper, doc, selection } = mountStage()
     selection.select('nodes', 'n1')

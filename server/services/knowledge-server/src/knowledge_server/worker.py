@@ -13,19 +13,38 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from knowledge_server.apps.knowledge.services.assembly import index_pair
+from knowledge_server.apps.knowledge.services.embedding import (
+    NullEmbedder,
+    SnapshotEmbedder,
+)
+from knowledge_server.apps.knowledge.services.embedding.catalog import (
+    close_embedding,
+)
 from knowledge_server.apps.knowledge.services.ingest_pipeline import (
     IngestDeps,
+)
+from knowledge_server.apps.knowledge.services.ingest_queue import (
+    source_version_group,
 )
 from knowledge_server.apps.knowledge.services.ingest_worker import (
     ConsumerOptions,
     IngestConsumer,
+    IngestStreams,
 )
 from knowledge_server.apps.knowledge.services.parse_pool import RecyclingPool
+from knowledge_server.apps.knowledge.services.reembedding_worker import (
+    ReembeddingConsumer,
+    ReembeddingSteps,
+)
+from knowledge_server.apps.knowledge.services.source_recovery import (
+    SourceVersionRecovery,
+)
 from knowledge_server.container import Container, build_container
 from knowledge_server.schema import read_schema_facts
 from knowledge_server.settings import Settings
 from lib.lifespan import wait_for_termination
 from lib.logging import configure_logging, get_logger
+from lib.stream import StreamGroup
 
 _logger = get_logger("knowledge.worker")
 
@@ -77,16 +96,58 @@ def build_runtime(container: Container, wait: Wait) -> WorkerRuntime:
     Args: container, wait（等停止信号，测试换一个立刻返回的）。
     """
     pool = RecyclingPool()
+    regular = container.ingest_group()
+    version_group = source_version_group(regular)
     return WorkerRuntime(
-        consumers=(_ingest_consumer(container, pool),),
+        consumers=(
+            IngestStreams(
+                _ingest_consumer(container, pool, regular),
+                _ingest_consumer(container, pool, version_group),
+                container.settings.ingest_block_ms,
+            ),
+            _reembedding_consumer(container, version_group),
+        ),
         container=container,
         wait=wait,
         pool=pool,
     )
 
 
+def _refresh_for_reembedding(
+    container: Container,
+) -> Callable[[], Awaitable[object]]:
+    """每次构建批次核对当前目录。Args: container。"""
+
+    async def refresh() -> object:
+        return await container.catalog.confirm_current()
+
+    return refresh
+
+
+def _reembedding_consumer(
+    container: Container, target: StreamGroup
+) -> ReembeddingConsumer:
+    recovery = SourceVersionRecovery(
+        container.database.session,
+        container.stream,
+        target,
+        container.settings.ingest_claim_idle_ms / 1000,
+    )
+    steps = ReembeddingSteps(
+        container.database.session,
+        (
+            container.embedder
+            if isinstance(container.embedder, SnapshotEmbedder)
+            else NullEmbedder()
+        ),
+        _refresh_for_reembedding(container),
+        container.settings.embedding_batch_size,
+    )
+    return ReembeddingConsumer(steps, recover_sources=recovery.run_one)
+
+
 def _ingest_consumer(
-    container: Container, pool: RecyclingPool
+    container: Container, pool: RecyclingPool, target: StreamGroup
 ) -> IngestConsumer:
     """装出摄取消费者。
 
@@ -116,7 +177,7 @@ def _ingest_consumer(
             previewer=container.previewer,
         ),
         options=ConsumerOptions(
-            target=container.ingest_group(),
+            target=target,
             block_ms=settings.ingest_block_ms,
             batch=settings.ingest_batch,
             timeout_s=settings.ingest_timeout_s,
@@ -162,6 +223,7 @@ async def _shutdown(
         # ⚠ 不等在跑的那一个：drain 已经等过一轮了，再等下去只会让编排器的
         # 强杀先到
         runtime.pool.close()
+    await close_embedding(runtime.container.embedder)
     await runtime.container.stream.close()
     await runtime.container.cache.close()
     await runtime.container.database.dispose()

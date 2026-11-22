@@ -30,6 +30,7 @@ from platform_server.apps.modeling.operators.fitting import (
 )
 from platform_server.apps.modeling.operators.frame import (
     DTYPE_NUMBER,
+    ROLE_TARGET,
     CellValue,
     Frame,
     FrameColumn,
@@ -407,6 +408,8 @@ class OneHot(OperatorBase):
     def _fits(self, train: Frame) -> None:
         config = self._config
         for key in config.columns:
+            if train.column_of(key).role == ROLE_TARGET:
+                continue
             ranked = _ranked_categories(train, key)
             self._ranked[key] = ranked
             found = [name for name, _ in ranked]

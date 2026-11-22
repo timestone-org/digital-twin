@@ -146,6 +146,32 @@ function button(wrapper: ReturnType<typeof mount>, text: string) {
   if (!found) throw new Error(`按钮不存在：${text}`)
   return found
 }
+
+it('关闭守卫等待保存时页面已销毁，迟到的失败不会弹出旧草稿确认', async () => {
+  const wrapper = await setup()
+  await wrapper.get('.hierarchy-node').trigger('keydown', { key: 'Enter' })
+  await wrapper
+    .getComponent(HierarchyInspector)
+    .get('textarea')
+    .setValue('新名称')
+  await button(wrapper, '应用修改').trigger('click')
+  let failSave: (error: Error) => void = () => undefined
+  vi.mocked(api.saveProject).mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        failSave = reject
+      }),
+  )
+  const leaving = wrapper.vm.$router.push('/')
+  await flushPromises()
+  expect(api.saveProject).toHaveBeenCalledOnce()
+  wrapper.unmount()
+  failSave(new Error('模拟迟到的保存失败'))
+  await flushPromises()
+  expect(useConfirm().pending.value).toBeNull()
+  await leaving
+})
+
 it('编辑保存、生成、导出、版本恢复和复制可从页面完成', async () => {
   const wrapper = await setup()
   expect(wrapper.text()).toContain('蒸汽计量系统')

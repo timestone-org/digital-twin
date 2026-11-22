@@ -8,6 +8,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from lib.auth import CallerContext
 from platform_server.apps.runtime_params.services import (
     COLLECT_SCOPE,
     RuntimeParamOut,
@@ -35,11 +36,11 @@ async def write_section(
     settings: Settings,
     section: str,
     payload: RuntimeParamWriteIn,
-    actor: str,
+    caller: CallerContext,
 ) -> list[RuntimeParamOut]:
     """改一个分组里的若干项并就地提交。
 
-    Args: session, settings, section, payload, actor。
+    Args: session, settings, section, payload, caller。
     """
     param_service.require_in_scope(section, COLLECT_SCOPE)
     state = await param_service.write_section(
@@ -47,7 +48,7 @@ async def write_section(
         settings=settings,
         section=section,
         payload=payload,
-        actor=actor,
+        caller=caller,
     )
     await session.commit()
     return state

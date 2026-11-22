@@ -44,7 +44,8 @@ import { addNode } from '../scripts/nodeOps'
 import { twin2dDropPoint, twin2dNodeSeed } from '../scripts/paletteDrag'
 import { TWIN_2D_DEFAULT_SNAP } from '../scripts/snapping'
 import type { Twin2dGuideLine, Twin2dSnapBox } from '../scripts/snapping'
-import { edgePolyline } from '../scripts/waypointOps'
+import { screenToDesignPx } from '../scripts/viewportOps'
+import { edgePolyline, grabOutline } from '../scripts/waypointOps'
 import CanvasConnectPreview from './CanvasConnectPreview.vue'
 import CanvasEdgeHandles from './CanvasEdgeHandles.vue'
 import CanvasEdgeLayer from './CanvasEdgeLayer.vue'
@@ -58,6 +59,7 @@ interface PortGrab {
   nodeId: string
   portId: string
   event: PointerEvent
+  t?: number | undefined
 }
 
 const props = withDefaults(
@@ -338,8 +340,13 @@ function endConnect(): void {
  * @param portId 端口
  * @param event 起手的那一下 pointerdown
  */
-function grabPort(nodeId: string, portId: string, event: PointerEvent): void {
-  portGrab.value = { nodeId, portId, event }
+function grabPort(
+  nodeId: string,
+  portId: string,
+  event: PointerEvent,
+  t?: number,
+): void {
+  portGrab.value = { nodeId, portId, event, t }
 }
 
 /**
@@ -393,6 +400,19 @@ function pickMany(
         @insert="insertWaypoints"
       />
       <CanvasNodeLayer
+        :outline-at="
+          (node, style, event) => {
+            const at = api.toDesign(event)
+            return at === null
+              ? null
+              : grabOutline(
+                  node,
+                  style,
+                  at,
+                  screenToDesignPx(5, api.view.scale),
+                )
+          }
+        "
         :nodes="config.nodes"
         :node-styles="nodeStyles"
         :selected-ids="nodeIds"

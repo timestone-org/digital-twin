@@ -20,6 +20,7 @@ from knowledge_server.settings import DB_SCHEMA
 from lib.db import TimestampMixin, UuidPrimaryKeyMixin
 
 ROLE_MAX_LENGTH = 16
+FAILED_QUESTION_KEY = "turn_failed"
 
 
 class ChatMessage(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -42,8 +43,7 @@ class ChatMessage(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     # 这一轮答案真正用到的那几条依据，摊好的一份（形状见
     # `chat/services/citations.py::as_json`）。⚠ 与 `content_json` 分开一列：
-    # 那一列是**模型认的消息体**，回放时要原样喂回给模型，混进只给人看的东西
-    # 会让模型在下一轮读到一坨它没说过的话
+    # 参与模型上下文的消息体要原样回放，引用留在单独一列。
     citations_json: Mapped[list[Any] | None] = mapped_column(
         JSONB, nullable=True
     )

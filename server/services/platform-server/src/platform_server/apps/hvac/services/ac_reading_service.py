@@ -8,8 +8,6 @@ import uuid
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from lib.errors import ValidationFailed
 from lib.utils.timeutils import format_rfc3339
 from lib.web import CursorPage, CursorParams, decode_cursor, encode_cursor
@@ -40,6 +38,7 @@ from platform_server.apps.hvac.services.ac_source_reader import (
     AcSourceReader,
     SourceRow,
 )
+from platform_server.apps.hvac.services.sessions import Sessions
 
 # 表格一次最多看一个月，折线图一次最多看一年——不给一个能拉全表的入口
 MAX_SAMPLES_SPAN = timedelta(days=31)
@@ -88,8 +87,17 @@ def caption_for(name: str, captions: Mapping[str, str]) -> str | None:
     return captions.get(name.rsplit("_", maxsplit=1)[-1])
 
 
+async def _source_object(sessions: Sessions, unit_id: uuid.UUID) -> str:
+    """在短事务内读出这次请求的来源对象。Args: sessions, unit_id。"""
+    async with sessions.session() as session:
+        binding = await require_binding(
+            session, ac_unit_id=unit_id, dataset=DATASET_RAW_MINUTE
+        )
+        return binding.source_object
+
+
 async def list_raw_samples(
-    session: AsyncSession,
+    sessions: Sessions,
     reader: AcSourceReader,
     *,
     ac_unit_id: uuid.UUID,
@@ -98,15 +106,13 @@ async def list_raw_samples(
 ) -> CursorPage[RawSampleOut]:
     """一台空调的原始数据表格，游标翻页。
 
-    Args: session, reader, ac_unit_id, window, cursor。
+    Args: sessions, reader, ac_unit_id, window, cursor。
     """
-    binding = await require_binding(
-        session, ac_unit_id=ac_unit_id, dataset=DATASET_RAW_MINUTE
-    )
+    source_object = await _source_object(sessions, ac_unit_id)
     ensure_window(window, max_span=MAX_SAMPLES_SPAN)
     columns = metric_keys(require_dataset(DATASET_RAW_MINUTE))
     rows = await reader.fetch_samples(
-        source_object=binding.source_object,
+        source_object=source_object,
         columns=columns,
         window=TimeWindow(
             start=anchor_of(cursor.after, window), end=window.end
@@ -118,7 +124,7 @@ async def list_raw_samples(
 
 
 async def list_raw_series(
-    session: AsyncSession,
+    sessions: Sessions,
     reader: AcSourceReader,
     *,
     ac_unit_id: uuid.UUID,
@@ -127,18 +133,16 @@ async def list_raw_series(
 ) -> RawSeriesOut:
     """一台空调的聚合序列，桶宽由服务端按点数上限挑并回显。
 
-    Args: session, reader, ac_unit_id, window, options。
+    Args: sessions, reader, ac_unit_id, window, options。
     """
-    binding = await require_binding(
-        session, ac_unit_id=ac_unit_id, dataset=DATASET_RAW_MINUTE
-    )
+    source_object = await _source_object(sessions, ac_unit_id)
     ensure_window(window, max_span=MAX_SERIES_SPAN)
     metrics = validated_metrics(options.metrics)
     bucket_minutes = choose_bucket_minutes(
         window.end - window.start, options.max_points
     )
     rows = await reader.fetch_buckets(
-        source_object=binding.source_object,
+        source_object=source_object,
         columns=metrics,
         window=window,
         bucket_minutes=bucket_minutes,

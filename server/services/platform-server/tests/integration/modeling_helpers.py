@@ -1,6 +1,7 @@
 """建模面用例共用的 URL、请求体、建资源的捷径，以及「扮演一次 worker」。"""
 
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import httpx
@@ -13,6 +14,7 @@ from platform_server.apps.modeling.services.run_dispatch import (
     DispatchReport,
     execute_run,
 )
+from platform_server.apps.modeling.services.run_pool import NodePool
 from platform_server.apps.modeling.services.workflow_publication import (
     complete_training,
 )
@@ -148,12 +150,19 @@ async def drive_run(
     那两样，而每次都真写会把用例时长变成主要成本。
     Args: sessions, run_id, store。
     """
-    report = await execute_run(
-        sessions,
-        run_id=run_id,
-        options=DispatchOptions(
-            runner=DirectRunner(), tz_offset_minutes=480, store=store
-        ),
-    )
+    pool = NodePool(factory=lambda: ThreadPoolExecutor(max_workers=1))
+    try:
+        report = await execute_run(
+            sessions,
+            run_id=run_id,
+            options=DispatchOptions(
+                runner=DirectRunner(),
+                tz_offset_minutes=480,
+                store=store,
+                pool=pool,
+            ),
+        )
+    finally:
+        pool.shutdown()
     await complete_training(sessions, run_id, store)
     return report

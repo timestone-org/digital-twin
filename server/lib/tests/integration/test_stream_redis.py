@@ -3,6 +3,8 @@
 import asyncio
 import uuid
 
+import pytest
+
 from lib.stream import RedisStream, StreamGroup
 
 
@@ -116,4 +118,34 @@ async def test_deleting_on_ack_never_removes_an_entry_it_does_not_own(
         assert await stream._client.xlen(first.stream) == 1
     finally:
         await stream._client.delete(first.stream)
+        await stream.close()
+
+
+@pytest.mark.parametrize("use_ownership_check", [False, True])
+async def test_ack_preserves_messages_for_another_consumer_group(
+    redis_url: str, use_ownership_check: bool
+) -> None:
+    primary = StreamGroup(f"lib-test:stream:{uuid.uuid4()}", "workers", "a")
+    other = StreamGroup(primary.stream, "other-workers", "b")
+    stream = RedisStream(
+        url=redis_url, timeout_s=2.0, should_delete_on_ack=True
+    )
+    try:
+        await stream.ensure_group(other)
+        entry_id = await _one_delivered(stream, primary)
+        if use_ownership_check:
+            assert await stream.ack_if_owned(primary, entry_id)
+        else:
+            await stream.ack(primary, entry_id)
+
+        assert (
+            await stream._client.xpending_range(
+                primary.stream, primary.group, entry_id, entry_id, 1
+            )
+            == []
+        )
+        received = await stream.read_group(other, count=1, block_ms=10)
+        assert [one.entry_id for one in received] == [entry_id]
+    finally:
+        await stream._client.delete(primary.stream)
         await stream.close()

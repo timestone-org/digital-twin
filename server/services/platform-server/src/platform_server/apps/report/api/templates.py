@@ -1,6 +1,7 @@
 """模板管理、校验与试算 HTTP 面。"""
 
 import uuid
+from dataclasses import replace
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
@@ -58,7 +59,7 @@ async def create_template(
     gate: ManageDep,
     response: Response,
 ) -> ApiResponse[ReportTemplateOut]:
-    result = await gate.run_once(
+    result = await replace(gate, receipt_session=session).run_once(
         endpoint="report-templates:create",
         model=ReportTemplateOut,
         action=lambda: template_service.create_template(

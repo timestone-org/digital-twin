@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, expectTypeOf, it } from 'vitest'
+import type { updateModelDeployment } from '@/api/modeling'
 
 import {
   MODELING_COMMAND_OPERATIONS,
@@ -208,6 +209,38 @@ const COMMANDS_PATH = '/api/v1/platform/modeling-commands'
 const DEPLOYMENT_PATH = '/api/v1/platform/modeling-deployments/{deployment_id}'
 
 describe('建模命令与部署切换契约', () => {
+  it('部署编辑使用 OpenAPI 的可选布尔确认，缺省时不确认', () => {
+    type Patch = Parameters<typeof updateModelDeployment>[1]
+    expectTypeOf<Patch['is_signature_change_confirmed']>().toEqualTypeOf<
+      boolean | undefined
+    >()
+    const body = readAt(SPEC, [
+      'paths',
+      DEPLOYMENT_PATH,
+      'patch',
+      'requestBody',
+      'content',
+      'application/json',
+      'schema',
+      '$ref',
+    ])
+    expect(body).toBe('#/components/schemas/ModelDeploymentUpdateIn')
+    const schema = readAt(SPEC, [
+      'components',
+      'schemas',
+      'ModelDeploymentUpdateIn',
+    ])
+    expect(
+      readAt(schema, ['properties', 'is_signature_change_confirmed']),
+    ).toMatchObject({
+      type: 'boolean',
+      default: false,
+    })
+    expect(readAt(schema, ['required']) ?? []).not.toContain(
+      'is_signature_change_confirmed',
+    )
+  })
+
   it('管理线形和枚举可由 OpenAPI 重复生成', async () => {
     const execute = promisify(execFile)
     await expect(

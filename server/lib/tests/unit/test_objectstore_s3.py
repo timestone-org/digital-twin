@@ -25,6 +25,7 @@ from urllib3.exceptions import ProtocolError as StreamProtocolError
 from urllib3.exceptions import ReadTimeoutError as StreamReadTimeout
 
 from lib.objectstore.base import (
+    ObjectChanged,
     ObjectNotFound,
     ObjectStoreError,
     UploadLimits,
@@ -151,6 +152,82 @@ async def test_stat_strips_the_quotes_around_the_etag() -> None:
     stat = await store(FakeClient()).stat("k")
     assert stat is not None
     assert stat.etag == "abc"
+
+
+async def test_prefix_read_limits_and_closes_the_body() -> None:
+    client = FakeClient()
+    body = BytesIO(b"longer document")
+    client.body = body
+    received = await store(client).read_prefix(
+        "k", max_bytes=4, expected_etag="abc"
+    )
+
+    assert received == b"long"
+    assert body.closed
+    assert client.calls == [
+        (
+            "get_object",
+            {
+                "Bucket": BUCKET,
+                "Key": "k",
+                "Range": "bytes=0-3",
+                "IfMatch": '"abc"',
+            },
+        )
+    ]
+
+
+async def test_copy_guards_the_version_of_its_source() -> None:
+    client = FakeClient()
+    await store(client).copy("source", "target", expected_etag="abc")
+    assert client.calls == [
+        (
+            "copy_object",
+            {
+                "Bucket": BUCKET,
+                "Key": "target",
+                "CopySource": {"Bucket": BUCKET, "Key": "source"},
+                "CopySourceIfMatch": '"abc"',
+            },
+        )
+    ]
+
+
+async def test_put_if_absent_uses_a_create_only_condition() -> None:
+    client = FakeClient()
+    service = store(client)
+    assert await service.put_if_absent(
+        "key", b"first", content_type="text/plain"
+    )
+    assert client.calls[0] == (
+        "put_object",
+        {
+            "Bucket": BUCKET,
+            "Key": "key",
+            "Body": b"first",
+            "ContentType": "text/plain",
+            "IfNoneMatch": "*",
+        },
+    )
+    client.raises = _upstream_error("PreconditionFailed", 412)
+    assert not await service.put_if_absent(
+        "key", b"next", content_type="text/plain"
+    )
+
+
+async def test_prefix_requires_a_positive_limit() -> None:
+    client = FakeClient()
+    with pytest.raises(ValueError, match="长度"):
+        await store(client).read_prefix("k", max_bytes=0, expected_etag="abc")
+    assert client.calls == []
+
+
+async def test_a_version_mismatch_is_not_retryable() -> None:
+    client = FakeClient()
+    client.raises = _upstream_error("PreconditionFailed", 412)
+    with pytest.raises(ObjectChanged) as caught:
+        await store(client).copy("source", "target", expected_etag="abc")
+    assert caught.value.is_retryable is False
 
 
 async def test_delete_on_a_missing_key_is_not_an_error() -> None:

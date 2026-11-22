@@ -401,6 +401,48 @@ async def test_a_failing_formula_only_poisons_its_own_cell(
     assert "算不出" in record["compute_error"]
 
 
+async def test_recomputing_after_the_only_formula_loses_its_source_records_why(
+    app_context: AppContext,
+) -> None:
+    client = app_context.client
+    source = await create_table(client, code="upstream")
+    await create_column(client, source["id"], key="v", name="来源数值")
+    await create_record(client, source["id"], ts=HOURS[0], values={"v": 7})
+    dest = await create_table(client, code="weekly")
+    await create_column(client, dest["id"], key="raw", name="原始项")
+    await create_column(
+        client,
+        dest["id"],
+        key="total",
+        name="合计",
+        source="formula",
+        formula="{upstream.v}+{raw}",
+    )
+    old = await create_record(
+        client, dest["id"], ts=HOURS[1], values={"raw": 3}
+    )
+    assert old["record"]["computed"]["total"] == 10
+
+    removed = await client.delete(
+        f"{TABLES}/{source['id']}", params={"force": True}
+    )
+    assert removed.status_code == 204
+    new = await create_record(
+        client, dest["id"], ts=HOURS[2], values={"raw": 4}
+    )
+    assert new["record"]["values"] == {"raw": 4}
+    assert "upstream" in new["record"]["compute_error"]["total"]
+
+    await run_recompute(app_context, dest["id"])
+    records = data_of(await client.get(f"{TABLES}/{dest['id']}/records"))[
+        "items"
+    ]
+    assert len(records) == 2
+    for record in records:
+        assert record["computed"].get("total") is None
+        assert "upstream" in record["compute_error"]["total"]
+
+
 async def test_a_whole_table_aggregate_over_a_formula_column_converges(
     app_client: httpx.AsyncClient,
 ) -> None:

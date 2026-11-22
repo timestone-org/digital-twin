@@ -19,7 +19,17 @@ from platform_server.apps.modeling.operators import (
     PredictionPostprocess,
     registry,
 )
-from platform_server.apps.modeling.operators.frame import numbers_of
+from platform_server.apps.modeling.operators.anomaly import TASK_ANOMALY
+from platform_server.apps.modeling.operators.frame import (
+    DTYPE_NUMBER,
+    DTYPE_STRING,
+    numbers_of,
+)
+from platform_server.apps.modeling.operators.timefeature import (
+    FITTED_TIMEZONE,
+    TimeFeature,
+    has_legacy_utc_offset,
+)
 from platform_server.apps.modeling.services.input_defaults import (
     leading_input_defaults,
 )
@@ -32,6 +42,11 @@ from platform_server.apps.modeling.services.jsonshape import (
 
 # `serving_json` 的线形版本。发布写的是它，加载期据此分派
 SERVING_FORMAT_VERSION = "2.1"
+SERVING_NAMED_TIMEZONE_VERSION = "2.2"
+SERVING_FROZEN_DEFAULT_FORMATS = (
+    SERVING_FORMAT_VERSION,
+    SERVING_NAMED_TIMEZONE_VERSION,
+)
 SERVING_FORMAT_V2 = "2.0"
 # 头一版：入口契约取 `input_columns`，且每一步的期望列都是同一份特征列。
 # ⚠ 这条加载路径**一行都不许改**：模型版本不可变，历史版本必须按它当初的口径
@@ -49,6 +64,9 @@ _FIELD_FITTED = "fitted"
 _FIELD_EXPECTED = "expected_input_columns"
 # 建模那一步产出的那一列的名字，只在编译出来的链路内部用
 PREDICTION_KEY = "__prediction__"
+
+type PredictionValue = float | str | None
+type PredictionRow = tuple[Sequence[PredictionValue], datetime | None]
 
 
 @runtime_checkable
@@ -112,9 +130,7 @@ class CompiledModel:
         """
         return self.needs_estimator
 
-    def predict_many(
-        self, rows: list[tuple[list[float | None], datetime | None]]
-    ) -> list[float | None]:
+    def predict_many(self, rows: Sequence[PredictionRow]) -> list[float | None]:
         """整批按冻结缺省规则计算，保留输入顺序；Args: rows。"""
         answers: list[float | None] = [None] * len(rows)
         resolved = [(self._arguments(args, at), at) for args, at in rows]
@@ -158,20 +174,22 @@ class CompiledModel:
         return _calculate(self._steps[0], frame)
 
     def _arguments(
-        self, args: list[float | None], at: datetime | None
-    ) -> list[float] | None:
+        self, args: Sequence[PredictionValue], at: datetime | None
+    ) -> list[float | str] | None:
         """按入口顺序应用冻结缺省值，未覆盖缺值不计算；Args: args, at。"""
         self._refuse_bad_shape(args, at)
-        values: list[float] = []
+        values: list[float | str] = []
         for key, value in zip(self._features, args, strict=True):
             resolved = self._input_defaults.get(key) if value is None else value
             if resolved is None:
                 return None
-            values.append(float(resolved))
+            values.append(
+                resolved if isinstance(resolved, str) else float(resolved)
+            )
         return values
 
     def _refuse_bad_shape(
-        self, args: list[float | None], at: datetime | None
+        self, args: Sequence[PredictionValue], at: datetime | None
     ) -> None:
         """实参个数与时刻这两条硬要求。
 
@@ -224,23 +242,47 @@ def compile_model(
     features = _entry_keys_of(serving)
     if not features:
         raise OperatorError("这个模型版本没有输入契约")
+    steps = tuple(_step_of(item) for item in as_list(serving.get(_FIELD_STEPS)))
+    if serving.get(_FIELD_VERSION) == SERVING_NAMED_TIMEZONE_VERSION:
+        _require_frozen_timezone(steps)
     compiled = CompiledModel(
         features=features,
-        steps=tuple(
-            _step_of(item) for item in as_list(serving.get(_FIELD_STEPS))
-        ),
+        steps=steps,
         estimator=estimator,
         input_defaults=(
             leading_input_defaults(
                 [as_dict(item) for item in as_list(serving.get(_FIELD_STEPS))]
             )
-            if serving.get(_FIELD_VERSION) == SERVING_FORMAT_VERSION
+            if (
+                serving.get(_FIELD_VERSION) in SERVING_FROZEN_DEFAULT_FORMATS
+                and serving.get("task") != TASK_ANOMALY
+            )
             else None
         ),
     )
     if compiled.needs_estimator and estimator is None:
         raise OperatorError("这个模型的本体存在二进制产物里，还没有加载进来")
     return compiled
+
+
+def serving_format_for_steps(steps: list[dict[str, Any]]) -> str:
+    """含命名时区的步骤要求新的冻结格式。Args: steps。"""
+    if any(
+        step.get(_FIELD_OPERATOR) == TimeFeature.CODE
+        and FITTED_TIMEZONE in as_dict(step.get(_FIELD_FITTED))
+        for step in steps
+    ):
+        return SERVING_NAMED_TIMEZONE_VERSION
+    return SERVING_FORMAT_VERSION
+
+
+def _require_frozen_timezone(steps: tuple[_Step, ...]) -> None:
+    """2.2 的时间特征必须采用明确冻结的业务时区。Args: steps。"""
+    time_steps = [step for step in steps if step.operator == TimeFeature.CODE]
+    if not time_steps or any(
+        FITTED_TIMEZONE not in step.fitted for step in time_steps
+    ):
+        raise OperatorError("模型版本没有冻结时间特征的业务时区")
 
 
 def _entry_keys_of(serving: dict[str, Any]) -> tuple[str, ...]:
@@ -251,12 +293,22 @@ def _entry_keys_of(serving: dict[str, Any]) -> tuple[str, ...]:
     version = as_text(serving.get(_FIELD_VERSION))
     if version == SERVING_FORMAT_V1:
         return tuple(as_texts(serving.get(_FIELD_INPUTS)))
-    if version in (SERVING_FORMAT_V2, SERVING_FORMAT_VERSION):
+    if version in (SERVING_FORMAT_V2, *SERVING_FROZEN_DEFAULT_FORMATS):
         return tuple(
             as_text(as_dict(item).get(_FIELD_KEY))
             for item in as_list(serving.get(_FIELD_ENTRY))
         )
     raise OperatorError("这个模型版本的可服务表示读不懂")
+
+
+def has_legacy_utc_time_features(serving: dict[str, object]) -> bool:
+    """识别运行时会采用 UTC 缺省值的时间特征步骤。Args: serving。"""
+    steps = (as_dict(raw) for raw in as_list(serving.get(_FIELD_STEPS)))
+    return any(
+        has_legacy_utc_offset(as_dict(step.get(_FIELD_FITTED)))
+        for step in steps
+        if step.get(_FIELD_OPERATOR) == TimeFeature.CODE
+    )
 
 
 def _step_of(raw: Any) -> _Step:
@@ -336,7 +388,7 @@ def _calculate(step: _Step, frame: Frame) -> list[dict[str, object]]:
 
 
 def _one_row(
-    keys: tuple[str, ...], values: list[float], at: datetime | None = None
+    keys: tuple[str, ...], values: list[float | str], at: datetime | None = None
 ) -> Frame:
     """推理时的那一行。带上时刻，时间特征才造得出列。
 
@@ -347,7 +399,7 @@ def _one_row(
 
 def _rows(
     keys: tuple[str, ...],
-    values: Sequence[Sequence[float | None]],
+    values: Sequence[Sequence[PredictionValue]],
     index: tuple[int, ...] | None = None,
 ) -> Frame:
     """推理时的那几行。
@@ -356,9 +408,20 @@ def _rows(
     只改了一半，而两条路算出来的数会从某一天起对不上。
     Args: keys, values, index。
     """
+    text_positions = {
+        index
+        for row in values
+        for index, value in enumerate(row)
+        if isinstance(value, str)
+    }
     return Frame(
         columns=tuple(
-            FrameColumn(key=key, name=key, dtype="number") for key in keys
+            FrameColumn(
+                key=key,
+                name=key,
+                dtype=DTYPE_STRING if index in text_positions else DTYPE_NUMBER,
+            )
+            for index, key in enumerate(keys)
         ),
         rows=tuple(tuple(row) for row in values),
         index=index,

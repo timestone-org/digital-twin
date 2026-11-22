@@ -21,6 +21,7 @@ from platform_server.apps.dataset.services import (
     EffectiveRow,
     EffectiveWindow,
     column_service,
+    parse_boolean,
     record_read,
     table_service,
 )
@@ -216,7 +217,10 @@ def _coerce(value: object, column: ColumnSpec) -> tuple[CellValue, bool]:
     if column.data_type == "number":
         return _as_number(value)
     if column.data_type == "bool":
-        return (bool(value), False)
+        if isinstance(value, float) and not math.isfinite(value):
+            return None, True
+        parsed = parse_boolean(value)
+        return parsed, parsed is None
     return (str(value), False)
 
 

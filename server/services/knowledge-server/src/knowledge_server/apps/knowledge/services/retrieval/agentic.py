@@ -114,19 +114,36 @@ class Agentic:
         """
         seen: dict[str, Hit] = {}
         tried: list[str] = []
+        partial_notes: dict[str, None] = {}
         for rounds in range(1, self.max_rounds + 1):
             before = len(seen)
-            found = await self._round(
+            found, notes = await self._round(
                 session, request, tried, list(seen.values())
             )
+            partial_notes.update(dict.fromkeys(notes))
             for one in found:
                 seen[str(one.chunk_id)] = one
             await released(session)
             if rounds > 1 and len(seen) == before:
-                return (list(seen.values()), rounds, False, _STALLED_NOTE)
+                return (
+                    list(seen.values()),
+                    rounds,
+                    False,
+                    "；".join((*partial_notes, _STALLED_NOTE)),
+                )
             if await self._is_enough(request.query, list(seen.values())):
-                return (list(seen.values()), rounds, True, "")
-        return (list(seen.values()), self.max_rounds, False, _CEILING_NOTE)
+                return (
+                    list(seen.values()),
+                    rounds,
+                    not partial_notes,
+                    "；".join(partial_notes),
+                )
+        return (
+            list(seen.values()),
+            self.max_rounds,
+            False,
+            "；".join((*partial_notes, _CEILING_NOTE)),
+        )
 
     async def _ranked(
         self, request: RetrievalRequest, pool: list[Hit]
@@ -153,7 +170,7 @@ class Agentic:
         request: RetrievalRequest,
         tried: list[str],
         found: list[Hit],
-    ) -> list[Hit]:
+    ) -> tuple[list[Hit], list[str]]:
         """改写一次，把改出来的每条检索式各跑一遍混合召回。
 
         Args: session, request, tried（试过的检索式，本轮的会追加进去）,
@@ -163,6 +180,7 @@ class Agentic:
         queries = await self._rewritten(request.query, tried, found)
         tried.extend(queries)
         made: list[Hit] = []
+        notes: list[str] = []
         for one in queries:
             got = await self.hybrid.retrieve(
                 session,
@@ -171,7 +189,9 @@ class Agentic:
                 ),
             )
             made.extend(got.hits)
-        return made
+            if not got.is_complete:
+                notes.append(got.note or "本轮检索不完整")
+        return made, notes
 
     async def _rewritten(
         self, query: str, tried: list[str], found: list[Hit]

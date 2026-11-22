@@ -71,6 +71,8 @@ export interface RuntimeParamItem {
   overridden: boolean
   /** 未被覆盖过时为 null。 */
   updatedBy: string | null
+  /** 通过签名核验的修改者账号名。 */
+  updatedByName?: string | null
   updatedAt: string | null
   /** 本项此前的有效值，供复盘「从多少改到多少」。 */
   previousValue: number | boolean | null

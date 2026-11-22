@@ -4,10 +4,11 @@ import uuid
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from knowledge_server.apps.knowledge.crud import content_lock
 from knowledge_server.apps.knowledge.models import KnowledgeSource
 
 
@@ -31,13 +32,25 @@ async def insert_source(
 
 
 async def get_source(
-    session: AsyncSession, source_id: uuid.UUID, *, is_locked: bool = False
+    session: AsyncSession,
+    source_id: uuid.UUID,
+    *,
+    is_locked: bool = False,
+    should_include_detached: bool = False,
 ) -> KnowledgeSource | None:
-    """按 id 取一路来源。
+    """按 id 取来源，可为历史原文读取已解绑的来源。
 
-    Args: session, source_id。
+    Args: session, source_id, is_locked, should_include_detached。
     """
-    query = select(KnowledgeSource).where(KnowledgeSource.id == source_id)
+    if is_locked:
+        await content_lock.source(session, source_id)
+    query = (
+        select(KnowledgeSource)
+        .where(KnowledgeSource.id == source_id)
+        .execution_options(populate_existing=True)
+    )
+    if not should_include_detached:
+        query = query.where(KnowledgeSource.detached_at.is_(None))
     found = await session.execute(
         query.with_for_update() if is_locked else query
     )
@@ -56,7 +69,10 @@ async def list_sources(
     """
     rows = await session.execute(
         select(KnowledgeSource)
-        .where(KnowledgeSource.base_id == base_id)
+        .where(
+            KnowledgeSource.base_id == base_id,
+            KnowledgeSource.detached_at.is_(None),
+        )
         .order_by(KnowledgeSource.created_at)
     )
     return list(rows.scalars())
@@ -73,7 +89,10 @@ async def find_source_by_kind(
     """
     found = await session.execute(
         select(KnowledgeSource)
-        .where(KnowledgeSource.base_id == base_id)
+        .where(
+            KnowledgeSource.base_id == base_id,
+            KnowledgeSource.detached_at.is_(None),
+        )
         .where(KnowledgeSource.kind == kind)
         .order_by(KnowledgeSource.created_at)
         .limit(1)
@@ -86,6 +105,7 @@ async def delete_source(session: AsyncSession, source_id: uuid.UUID) -> int:
 
     Args: session, source_id。
     """
+    await content_lock.source(session, source_id)
     done = await session.execute(
         delete(KnowledgeSource).where(KnowledgeSource.id == source_id)
     )
@@ -137,3 +157,22 @@ async def mark_sync_failed(
         .values(last_error=reason)
     )
     return max(0, cast("CursorResult[Any]", done).rowcount)
+
+
+async def imported_sources(
+    session: AsyncSession, source_ids: list[uuid.UUID]
+) -> set[uuid.UUID]:
+    """一次查询这些来源已经登记的文档或稳定记录。Args: session, source_ids。"""
+    if not source_ids:
+        return set()
+    rows = await session.scalars(
+        text("""
+        SELECT requested.id FROM unnest(CAST(:ids AS uuid[])) requested(id)
+        WHERE EXISTS (SELECT FROM knowledge.kb_documents d
+                      WHERE d.source_id=requested.id)
+           OR EXISTS (SELECT FROM knowledge.kb_source_records r
+                      WHERE r.source_id=requested.id)
+    """),
+        {"ids": source_ids},
+    )
+    return set(rows)

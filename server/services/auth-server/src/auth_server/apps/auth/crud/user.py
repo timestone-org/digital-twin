@@ -3,8 +3,9 @@
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.attributes import InstrumentedAttribute
@@ -16,6 +17,7 @@ from auth_server.apps.auth.models import (
     UserPermission,
 )
 from lib.db import CrudBase
+from lib.utils.ids import uuid7
 
 SORTABLE = {
     "username": User.username,
@@ -39,6 +41,26 @@ class EffectivePermissions:
         return self.role_codes | self.direct_codes
 
 
+@dataclass(frozen=True)
+class LoginCredentials:
+    """事务外口令核验所需的账号凭据快照。"""
+
+    user_id: uuid.UUID
+    hashed_password: str
+    refresh_generation: uuid.UUID | None
+    is_active: bool
+
+    @classmethod
+    def from_user(cls, user: User) -> "LoginCredentials":
+        """复制账号当前凭据。Args: user。"""
+        return cls(
+            user.id,
+            user.hashed_password,
+            user.refresh_generation,
+            user.is_active,
+        )
+
+
 class UserCrud(CrudBase[User]):
     """`auth_users` 的数据访问。"""
 
@@ -46,7 +68,11 @@ class UserCrud(CrudBase[User]):
         super().__init__(User)
 
     async def get_with_role(
-        self, session: AsyncSession, user_id: uuid.UUID
+        self,
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        *,
+        should_refresh: bool = False,
     ) -> User | None:
         """按主键取用户并预加载角色，避免序列化时触发惰性加载。
 
@@ -55,14 +81,58 @@ class UserCrud(CrudBase[User]):
         那一次往返乘的是全站请求量。列表面仍用 selectinload（见
         `build_query`）：那里一条 IN 查询就带回整页的角色。
 
-        Args: session, user_id。
+        Args: session, user_id, should_refresh。
         """
         result = await session.execute(
             select(User)
             .options(joinedload(User.role))
             .where(User.id == user_id)
+            .execution_options(populate_existing=should_refresh)
         )
         return result.scalars().one_or_none()
+
+    async def rotate_password(
+        self, session: AsyncSession, user: User, replacement: str
+    ) -> bool:
+        """更新密码并终止旧刷新会话。Args: session, user, replacement。"""
+        statement = (
+            update(User)
+            .where(
+                User.id == user.id, User.hashed_password == user.hashed_password
+            )
+            .values(hashed_password=replacement, refresh_generation=uuid7())
+            .returning(User.id)
+        )
+        return await session.scalar(statement) is not None
+
+    async def record_verified_login(
+        self,
+        session: AsyncSession,
+        credentials: LoginCredentials,
+        at: datetime,
+        upgraded_hash: str | None,
+    ) -> User | None:
+        """登记已核验且仍有效的凭据。
+
+        Args: session, credentials, at, upgraded_hash。
+        """
+        statement = (
+            update(User)
+            .where(
+                User.id == credentials.user_id,
+                User.is_active.is_(True),
+                User.hashed_password == credentials.hashed_password,
+                User.refresh_generation.is_not_distinct_from(
+                    credentials.refresh_generation
+                ),
+            )
+            .values(last_login_at=at)
+        )
+        if upgraded_hash is not None:
+            statement = statement.values(hashed_password=upgraded_hash)
+        return await session.scalar(
+            statement.returning(User).execution_options(populate_existing=True)
+        )
 
     async def get_by_login(
         self, session: AsyncSession, login: str

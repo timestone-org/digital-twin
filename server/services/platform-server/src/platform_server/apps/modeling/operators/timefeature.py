@@ -9,6 +9,7 @@
 
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field
 
@@ -53,6 +54,25 @@ COLUMN_PREFIX = "ts_"
 _SATURDAY = 5
 # 拟合参数里的时区偏移键
 _FITTED_TZ = "tz_offset_minutes"
+FITTED_TIMEZONE = "timezone"
+
+
+def has_legacy_utc_offset(params: dict[str, object]) -> bool:
+    """判断历史步骤是否缺少冻结的业务时区偏移。Args: params。"""
+    return params.get(_FITTED_TZ) is None and FITTED_TIMEZONE not in params
+
+
+def _fitted_timezone(params: dict[str, Any]) -> ZoneInfo | None:
+    """按冻结的名称恢复业务时区。Args: params。"""
+    if FITTED_TIMEZONE not in params:
+        return None
+    key = params[FITTED_TIMEZONE]
+    if not isinstance(key, str) or not key:
+        raise OperatorError("时间特征缺少可用的业务时区名称")
+    try:
+        return ZoneInfo(key)
+    except (ValueError, ZoneInfoNotFoundError) as error:
+        raise OperatorError("时间特征的业务时区不可用") from error
 
 
 class TimeFeatureConfig(OperatorConfig):
@@ -92,6 +112,7 @@ class TimeFeature(OperatorBase):
     def __init__(self, config: OperatorConfig) -> None:
         super().__init__(config)
         self._ran: TimeRun | None = None
+        self._timezone: ZoneInfo | None = None
 
     @property
     def _config(self) -> TimeFeatureConfig:
@@ -125,10 +146,15 @@ class TimeFeature(OperatorBase):
             raise OperatorError(
                 "这份数据没有时刻，造不出时间特征——推理时请在请求里带上时刻"
             )
+        timezone = self.business_timezone
+        if timezone is not None and timezone != "UTC":
+            self._timezone = ZoneInfo(timezone)
         parts = _deduped(list(self._config.parts))
         _refuse_collisions(frame, parts)
         made = [
-            _made_column(part, frame.index, self.tz_offset_minutes)
+            _made_column(
+                part, frame.index, self.tz_offset_minutes, self._timezone
+            )
             for part in parts
         ]
         result = _appended(frame, parts, made)
@@ -136,7 +162,9 @@ class TimeFeature(OperatorBase):
         return {"frame": result}
 
     def dump_fitted(self) -> dict[str, Any] | None:
-        """把造列用的时区偏移冻进可服务表示，推理时按同一个时区造列。"""
+        """把造列用的业务时区冻进可服务表示。"""
+        if self._timezone is not None and self._timezone.key != "UTC":
+            return {FITTED_TIMEZONE: self._timezone.key}
         return {_FITTED_TZ: self.tz_offset_minutes}
 
     def load_fitted(self, params: dict[str, Any]) -> None:
@@ -145,6 +173,8 @@ class TimeFeature(OperatorBase):
         Args: params。
         """
         self.validate_fitted(params)
+        self._timezone = _fitted_timezone(params)
+        self.business_timezone = None
         offset = params.get(_FITTED_TZ)
         if isinstance(offset, int):
             self.tz_offset_minutes = offset
@@ -160,6 +190,7 @@ class TimeFeature(OperatorBase):
             isinstance(offset, bool) or not isinstance(offset, int)
         ):
             raise OperatorError("时间特征的时区偏移必须是整数分钟")
+        _fitted_timezone(params)
 
     def report(self) -> tuple[ReportBlock, ...]:
         """时间特征的三块：新增列、时区口径、各档取值分布。"""
@@ -180,7 +211,7 @@ class TimeFeature(OperatorBase):
             result=result,
             months=(
                 tuple(
-                    _local(moment, self.tz_offset_minutes).month
+                    _local(moment, self.tz_offset_minutes, self._timezone).month
                     for moment in index
                 )
                 if PART_DAYOFYEAR in parts
@@ -188,6 +219,7 @@ class TimeFeature(OperatorBase):
             ),
             tz_offset_minutes=self.tz_offset_minutes,
             span=(min(index), max(index)) if index else None,
+            business_timezone=self._timezone.key if self._timezone else None,
         )
 
 
@@ -229,22 +261,30 @@ def _refuse_collisions(frame: Frame, parts: list[str]) -> None:
 
 
 def _made_column(
-    part: str, index: tuple[int, ...], tz_offset_minutes: int
+    part: str,
+    index: tuple[int, ...],
+    tz_offset_minutes: int,
+    timezone: ZoneInfo | None,
 ) -> list[CellValue]:
     """一档时间成分在每一行上的取值。
 
-    Args: part, index, tz_offset_minutes。
+    Args: part, index, tz_offset_minutes, timezone。
     """
     return [
-        _part_of(part, _local(moment, tz_offset_minutes)) for moment in index
+        _part_of(part, _local(moment, tz_offset_minutes, timezone))
+        for moment in index
     ]
 
 
-def _local(moment: int, tz_offset_minutes: int) -> datetime:
+def _local(
+    moment: int, tz_offset_minutes: int, timezone: ZoneInfo | None
+) -> datetime:
     """把 UTC 毫秒折成业务时区的那个时刻。
 
-    Args: moment, tz_offset_minutes。
+    Args: moment, tz_offset_minutes, timezone。
     """
+    if timezone is not None:
+        return datetime.fromtimestamp(moment / 1000, timezone)
     return datetime.fromtimestamp(moment / 1000, UTC) + timedelta(
         minutes=tz_offset_minutes
     )

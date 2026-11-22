@@ -23,7 +23,7 @@ vi.mock('@dt/three-core', async () => {
         values: Object,
         previewNodes: Array,
         previewAction: Object,
-        previewTarget: Object,
+        preview: Object,
         focusView: Object,
       },
       template: '<div data-test="scene" />',
@@ -243,6 +243,39 @@ it('旧部件的编辑请求不打开当前部件，切换对象清除编辑请�
   wrapper.unmount()
 })
 
+it('切换模拟数据与部件预览内容时复用已挂载的场景', async () => {
+  const wrapper = mount(TwinConfigPreview, {
+    props: {
+      node: null,
+      config,
+      selection: { kind: 'parts', id: 'pump' },
+      animation: null,
+      testMode: 'live',
+      bindings: [],
+      readBinding: () => () => ({ state: 'pending' }),
+    },
+  })
+  await flushPromises()
+  const scene = wrapper.findComponent({ name: 'PreviewScene' })
+  const preview: unknown = scene.props('preview')
+
+  wrapper.findComponent(TwinPreviewData).vm.$emit('update:enabled', true)
+  await flushPromises()
+  const simulated = wrapper.findComponent({ name: 'PreviewScene' })
+  expect(simulated.element).toBe(scene.element)
+  expect(simulated.props('preview')).toEqual(preview)
+
+  wrapper
+    .findComponent(TwinPreviewControls)
+    .vm.$emit('update:partMode', 'click')
+  await flushPromises()
+  const click = wrapper.findComponent({ name: 'PreviewScene' })
+  expect(click.element).toBe(scene.element)
+  expect(click.props('preview')).not.toEqual(preview)
+  expect(click.props('previewNodes')).toBeUndefined()
+  wrapper.unmount()
+})
+
 it('详情预览读取自己的视角，恢复默认时重新取景', async () => {
   const view = { position: [11, 2, 3], target: [10, 0, 0], fov: 50 }
   const config = normalizeTwinConfig({
@@ -266,6 +299,7 @@ it('详情预览读取自己的视角，恢复默认时重新取景', async () =
   await flushPromises()
   const scene = wrapper.findComponent({ name: 'PreviewScene' })
   expect(scene.props('focusView')).toEqual(view)
+  const preview: unknown = scene.props('preview')
   await wrapper.setProps({
     config: normalizeTwinConfig({
       ...config,
@@ -277,7 +311,8 @@ it('详情预览读取自己的视角，恢复默认时重新取景', async () =
   })
   const resetScene = wrapper.findComponent({ name: 'PreviewScene' })
   expect(resetScene.props('focusView')).toBeNull()
-  expect(resetScene.element).not.toBe(scene.element)
+  expect(resetScene.props('preview')).not.toEqual(preview)
+  expect(resetScene.element).toBe(scene.element)
   wrapper.unmount()
 })
 it('默认跟随配置，改变部件与视点后更新预览，关闭后选中对象再次打开', async () => {

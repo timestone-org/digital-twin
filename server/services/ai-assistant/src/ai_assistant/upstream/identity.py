@@ -23,25 +23,12 @@ from collections.abc import Mapping
 from ai_assistant.upstream.auth import AuthClient
 from lib.auth.edge_headers import (
     HEADER_EXPIRES,
-    HEADER_PERMISSIONS,
-    HEADER_ROLE,
-    HEADER_SIGNATURE,
-    HEADER_TRUNCATED,
     HEADER_USER_ID,
-    HEADER_USERNAME,
+    IDENTITY_HEADERS,
 )
 from lib.utils.timeutils import utcnow
 
-# 要转发的那几个。⚠ 少一个就是验签失败，多转无关头没有意义
-FORWARDED = (
-    HEADER_USER_ID,
-    HEADER_USERNAME,
-    HEADER_ROLE,
-    HEADER_PERMISSIONS,
-    HEADER_TRUNCATED,
-    HEADER_EXPIRES,
-    HEADER_SIGNATURE,
-)
+FORWARDED = IDENTITY_HEADERS
 
 
 def caller_headers(given: Mapping[str, str]) -> dict[str, str]:

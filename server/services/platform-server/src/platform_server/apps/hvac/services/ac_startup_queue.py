@@ -19,6 +19,7 @@ _FIELD_BATCH = "batch_id"
 _FIELD_ROOM = "room_id"
 _FIELD_MONTH = "month"
 _FIELD_TRACEPARENT = "traceparent"
+_FIELD_DISPATCH = "dispatch_id"
 
 
 @dataclass(frozen=True)
@@ -33,16 +34,20 @@ class ShardMessage:
     room_id: uuid.UUID
     month: str
     traceparent: str
+    dispatch_id: uuid.UUID | None = None
 
     def to_fields(self) -> dict[str, str]:
         """摊成扁平的字符串字段，便于用 redis-cli 直接看。"""
-        return {
+        fields = {
             _FIELD_VERSION: ENVELOPE_VERSION,
             _FIELD_BATCH: str(self.batch_id),
             _FIELD_ROOM: str(self.room_id),
             _FIELD_MONTH: self.month,
             _FIELD_TRACEPARENT: self.traceparent,
         }
+        if self.dispatch_id is not None:
+            fields[_FIELD_DISPATCH] = str(self.dispatch_id)
+        return fields
 
 
 def decode(fields: Mapping[str, str]) -> ShardMessage | None:
@@ -59,11 +64,16 @@ def decode(fields: Mapping[str, str]) -> ShardMessage | None:
     room_id = _as_uuid(fields.get(_FIELD_ROOM))
     if batch_id is None or room_id is None or not month or not traceparent:
         return None
+    dispatch = fields.get(_FIELD_DISPATCH)
+    dispatch_id = _as_uuid(dispatch)
+    if dispatch is not None and dispatch_id is None:
+        return None
     return ShardMessage(
         batch_id=batch_id,
         room_id=room_id,
         month=month,
         traceparent=traceparent,
+        dispatch_id=dispatch_id,
     )
 
 

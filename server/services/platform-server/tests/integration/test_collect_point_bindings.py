@@ -1,4 +1,4 @@
-"""删点位前的绑定检查：被大屏绑着就 409 并列出那些大屏。
+"""删点位前的引用检查：大屏和台账仍有引用时返回 409。
 
 这条守卫正是配置面必须留在 platform 的理由（ADR-0001 理由一）——绑定表就在
 同一个库里，问一句是进程内调用；配置面跟着采集运行时走就得反向 RPC 回来问。
@@ -26,6 +26,7 @@ from integration.dashboard_helpers import (
     make_project,
     node_body,
 )
+from integration.dataset_helpers import columns_url, create_column, create_table
 from platform_server.apps.dashboard.services import dashboards_binding
 
 pytestmark = pytest.mark.requires_postgres
@@ -329,5 +330,107 @@ async def test_a_forced_batch_removes_bound_points_too(
         },
     )
     assert response.status_code == 204
+    listed = await app_client.get(POINTS, params={"source_id": source["id"]})
+    assert payload(listed)["items"] == []
+
+
+async def test_a_ledger_column_blocks_single_delete_until_forced(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(app_client)
+    point = (await create_points(app_client, source["id"]))["items"][0]
+    table = await create_table(app_client, name="内部台账")
+    column = await create_column(
+        app_client,
+        table["id"],
+        key="内部均温",
+        source="point",
+        node_key=point["node_key"],
+        agg="avg",
+    )
+
+    response = await app_client.delete(f"{POINTS}/{point['id']}")
+    assert response.status_code == 409, response.text
+    body = envelope(response)
+    assert body["code"] == 41105
+    assert "1 个台账列" in body["message"]
+    assert "内部台账" not in response.text
+    assert "内部均温" not in response.text
+    listed = await app_client.get(POINTS, params={"source_id": source["id"]})
+    assert [item["id"] for item in payload(listed)["items"]] == [point["id"]]
+
+    forced = await app_client.delete(
+        f"{POINTS}/{point['id']}", params={"force": "true"}
+    )
+    assert forced.status_code == 204, forced.text
+    listed = await app_client.get(POINTS, params={"source_id": source["id"]})
+    assert payload(listed)["items"] == []
+    columns = await app_client.get(columns_url(table["id"]))
+    assert any(
+        item["id"] == column["id"] and item["node_key"] == point["node_key"]
+        for item in payload(columns)
+    )
+
+
+async def _bind_mixed_references(
+    client: httpx.AsyncClient, ledger_key: str, screen_key: str
+) -> None:
+    """给批删夹具分别建立台账独占引用和大屏加台账的重叠引用。"""
+    table = await create_table(client)
+    for key, point_key in (
+        ("均温", ledger_key),
+        ("峰值", ledger_key),
+        ("看板均温", screen_key),
+    ):
+        await create_column(
+            client,
+            table["id"],
+            key=key,
+            source="point",
+            node_key=point_key,
+            agg="avg",
+        )
+    await bind_point(client, node_key=screen_key, name="测试大屏")
+
+
+async def test_a_mixed_batch_reports_each_bound_point_and_keeps_all_points(
+    app_client: httpx.AsyncClient,
+) -> None:
+    source = await create_source(app_client)
+    ledger, screen, free = (
+        await create_points(
+            app_client,
+            source["id"],
+            point_item("ledger_temp", name="只绑台账"),
+            point_item("screen_temp", name="大屏台账共用"),
+            point_item("free_temp", name="无引用"),
+        )
+    )["items"]
+    await _bind_mixed_references(
+        app_client, ledger["node_key"], screen["node_key"]
+    )
+    request = {"point_ids": [ledger["id"], screen["id"], free["id"]]}
+
+    response = await app_client.post(BATCH_DELETE, json=request)
+    assert response.status_code == 409, response.text
+    body = envelope(response)
+    assert body["code"] == 41105
+    details = {item["field"]: item["message"] for item in body["details"]}
+    assert set(details) == {
+        f"points[{ledger['id']}]",
+        f"points[{screen['id']}]",
+    }
+    assert "2 个台账列" in details[f"points[{ledger['id']}]"]
+    assert "1 张大屏" in details[f"points[{screen['id']}]"]
+    assert "1 个台账列" in details[f"points[{screen['id']}]"]
+    listed = await app_client.get(POINTS, params={"source_id": source["id"]})
+    assert {item["id"] for item in payload(listed)["items"]} == set(
+        request["point_ids"]
+    )
+
+    forced = await app_client.post(
+        BATCH_DELETE, json={**request, "is_forced": True}
+    )
+    assert forced.status_code == 204, forced.text
     listed = await app_client.get(POINTS, params={"source_id": source["id"]})
     assert payload(listed)["items"] == []

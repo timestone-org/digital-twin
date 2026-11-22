@@ -46,9 +46,18 @@ class InMemoryCache:
         self.ttl_s[key] = ttl_s
         return True
 
-    async def renew_if_owner(self, key: str, value: str, *, ttl_s: int) -> bool:
+    async def renew_if_owner(
+        self,
+        key: str,
+        value: str,
+        *,
+        ttl_s: int,
+        replacement: str | None = None,
+    ) -> bool:
         if self.store.get(key) != value:
             return False
+        if replacement is not None:
+            self.store[key] = replacement
         self.ttl_s[key] = ttl_s
         return True
 
@@ -105,7 +114,15 @@ class UnavailableCache:
     async def set_if_absent(self, key: str, value: str, *, ttl_s: int) -> bool:
         raise self._error()
 
-    async def renew_if_owner(self, key: str, value: str, *, ttl_s: int) -> bool:
+    async def renew_if_owner(
+        self,
+        key: str,
+        value: str,
+        *,
+        ttl_s: int,
+        replacement: str | None = None,
+    ) -> bool:
+        del key, value, ttl_s, replacement
         raise self._error()
 
     async def delete_if_owner(

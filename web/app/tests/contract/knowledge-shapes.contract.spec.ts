@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest'
 import type {
   KnowledgeAnswer,
   KnowledgeBase,
+  KnowledgeBaseMetadataPatch,
   KnowledgeCapability,
   KnowledgeChatAdvanceIn,
   KnowledgeChatMessage,
@@ -34,6 +35,8 @@ import type {
   KnowledgeParsingCapability,
   KnowledgeSearchResult,
   KnowledgeSource,
+  KnowledgePlatformSourcePatch,
+  KnowledgeSourceMetadataPatch,
   KnowledgeSyncResult,
   KnowledgeUploadTicket,
 } from '@dt/contracts'
@@ -43,6 +46,7 @@ import {
   KNOWLEDGE_SOURCE_KINDS,
   KNOWLEDGE_STRATEGIES,
   KNOWLEDGE_VECTOR_LANES,
+  KNOWLEDGE_VECTOR_STATUSES,
 } from '@dt/contracts'
 
 interface OpenApiSchema {
@@ -68,6 +72,7 @@ type Keys<T> = Record<keyof T, true>
 
 const SHAPES: Record<string, Record<string, true>> = {
   CapabilityOut: {
+    supports_base_metadata: true,
     is_embedding_enabled: true,
     is_model_enabled: true,
     is_asr_enabled: true,
@@ -98,6 +103,11 @@ const SHAPES: Record<string, Record<string, true>> = {
     reason: true,
   } satisfies Keys<KnowledgeRerankCapability>,
 
+  KnowledgeBaseMetadataIn: {
+    name: true,
+    description: true,
+  } satisfies Keys<KnowledgeBaseMetadataPatch>,
+
   KnowledgeBaseOut: {
     id: true,
     name: true,
@@ -105,13 +115,27 @@ const SHAPES: Record<string, Record<string, true>> = {
     retrieval_strategy: true,
     embedding_model: true,
     dimensions: true,
+    vector_status: true,
     owner_id: true,
     document_count: true,
     created_at: true,
     updated_at: true,
   } satisfies Keys<KnowledgeBase>,
 
+  SourceMetadataIn: {
+    name: true,
+    config: true,
+  } satisfies Keys<KnowledgeSourceMetadataPatch>,
+  PlatformSourcePatch: {
+    path: true,
+    id_field: true,
+    title_field: true,
+    page_param: true,
+    size_param: true,
+  } satisfies Keys<KnowledgePlatformSourcePatch>,
+
   SourceOut: {
+    can_change_identity: true,
     id: true,
     base_id: true,
     kind: true,
@@ -328,5 +352,14 @@ describe('知识库线形与 openapi 一致', () => {
   it('两路索引的档位名互不重复', () => {
     const names = [...KNOWLEDGE_VECTOR_LANES, ...KNOWLEDGE_KEYWORD_LANES]
     expect(new Set(names).size).toBe(names.length)
+  })
+})
+
+it('知识库报告完整的已发布向量状态，各状态与服务 OpenAPI 相符', () => {
+  const fields = schemas['KnowledgeBaseOut']?.properties
+  expect(fields?.['vector_status']).toMatchObject({
+    type: 'string',
+    default: 'unindexed',
+    enum: [...KNOWLEDGE_VECTOR_STATUSES],
   })
 })

@@ -22,6 +22,7 @@ from collectwire import (
     ACTION_BROWSE_SUBTREE,
     ACTION_READ,
     ACTION_WRITE,
+    REASON_WRITE_OUTCOME_UNKNOWN,
     STATUS_ERROR,
     STATUS_OK,
 )
@@ -241,6 +242,24 @@ async def test_write_reaches_the_driver(driver: Any) -> None:
     await consumer.handle_once()
     assert driver.writes == [("setpoint", 22)]
     assert transport.replies[0][1]["status"] == STATUS_OK
+
+
+async def test_a_device_write_that_times_out_reports_an_unconfirmed_outcome(
+    driver: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def accept_then_lose_reply(code: str, value: object) -> None:
+        driver.writes.append((code, value))
+        raise TimeoutError("假设备已写值，回执丢失")
+
+    monkeypatch.setattr(driver, "write", accept_then_lose_reply)
+    transport = FakeTransport(
+        [_request(ACTION_WRITE, point_code="setpoint", value=22)]
+    )
+    consumer = _consumer(transport, {SOURCE_ID: FakeSession(driver)})
+    await consumer.handle_once()
+    assert driver.writes == [("setpoint", 22)]
+    assert transport.replies[0][1]["status"] == STATUS_ERROR
+    assert transport.replies[0][1]["reason"] == REASON_WRITE_OUTCOME_UNKNOWN
 
 
 async def test_write_without_a_point_code_is_refused(driver: Any) -> None:

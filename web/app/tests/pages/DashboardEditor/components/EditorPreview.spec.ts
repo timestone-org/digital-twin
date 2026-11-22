@@ -18,6 +18,7 @@ const PICKER: ModuleManifest = {
   chrome: 'bare',
   emitsInteractions: true,
   interactionEvents: ['select'],
+  initialSelection: (_config, activeValue) => activeValue || 'b',
   defaultSize: { width: 200, height: 48 },
   configSchema: [],
   bindings: [],
@@ -80,10 +81,10 @@ function node(
 const NODES = [node('n-pick', PICKER.type), node('n-panel', PLAIN.type)]
 
 /** 挂上预览；`chromeJson` 就是草稿里那只外观袋，联动规则在它的 interactions 段。 */
-async function open(chromeJson: Record<string, unknown>) {
+async function open(chromeJson: Record<string, unknown>, nodes = NODES) {
   const wrapper = mount(EditorPreview, {
     props: {
-      nodes: NODES,
+      nodes,
       design: { width: 1920, height: 1080 },
       getManifest,
       chromeJson,
@@ -121,6 +122,41 @@ function jumpRule() {
 }
 
 describe('预览里的联动', () => {
+  it('用渲染控件的实际初选重放显隐，进场不跳转', async () => {
+    const wrapper = await open(
+      {
+        interactions: [
+          jumpRule(),
+          {
+            id: 'r-init',
+            source: { nodeId: 'n-pick', event: 'select' },
+            action: {
+              type: 'setActive',
+              groups: [
+                { value: 'a', targets: ['n-panel'] },
+                { value: 'b', targets: ['n-panel'] },
+              ],
+            },
+          },
+        ],
+      },
+      [
+        node('n-pick', PICKER.type),
+        node('n-panel', PLAIN.type, { isVisible: false }),
+      ],
+    )
+    try {
+      await vi.waitFor(() =>
+        expect(wrapper.find('[data-test="plain"]').exists()).toBe(true),
+      )
+      expect(wrapper.find('[data-test="preview-jump-notice"]').exists()).toBe(
+        false,
+      )
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
   it('页内规则当真生效：点一格，被控制的那个节点就没了', async () => {
     const wrapper = await open({ interactions: [hideRule()] })
     expect(wrapper.find('[data-test="plain"]').exists()).toBe(true)

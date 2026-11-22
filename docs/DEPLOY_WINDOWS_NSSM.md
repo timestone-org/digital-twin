@@ -254,12 +254,13 @@ node --version    # v22.x
 
 ```powershell
 cd C:\DigitalTwin\tools\nginx
-.\nginx.exe -V 2>&1 | Select-String auth_request
-# 期望能匹配到 --with-http_auth_request_module
+.\nginx.exe -V 2>&1 | Select-String -Pattern 'http_(auth_request|gzip_static)_module' -AllMatches |
+  ForEach-Object { $_.Matches.Value }
+# 应显示 http_auth_request_module 和 http_gzip_static_module
 ```
 
 ⚠ **匹配不到就换一个构建。** 全站的闸 1（`auth_request /_auth`）就挂在这个模块上，
-它不在的话 nginx 起不来，报 `unknown directive "auth_request"`。
+字体的预压缩传输由 `gzip_static` 提供。缺少任一模块会使相应的站点指令无法加载。
 
 nginx/Windows 的三条限制，配置里已经据此调过（§8）：
 
@@ -533,6 +534,11 @@ cd C:\DigitalTwin\tools\minio
 ```
 
 ⚠ **`staging/` 不许设**：未验证的字节不许有一个本站链接。
+
+素材直传的四条七天到期规则使用[同一套合并与核对流程](../docker/README.md#素材直传暂存到期)。
+在仓库根目录运行脚本，可用 `py -3 docker\minio\merge_staging_lifecycle.py`。
+Windows PowerShell 5.1 可通过 `cmd.exe /c` 使用原生重定向，以保留 `mc.exe` 导出和
+导入文件的 UTF-8 字节；生命周期变更由存储管理员在同一个独占变更窗口完成。
 
 ⚠ **`knowledge/` 也不许设**，理由不同：知识库的原件与插图落在**同一个桶**的
 `knowledge/` 前缀下，里面可能有涉密图纸。它们一律经 knowledge-server 的受管端点
@@ -940,7 +946,7 @@ $py   = 'C:\DigitalTwin\app\server\.venv\Scripts\python.exe'
 | `AppDirectory` = 服务目录 | 进程的 CWD。`.env` 从这里读，`alembic`、`python -m scripts.*` 也按它找自己那份。**设错了不会报错，只是配置全部变成「没配」** |
 | `PYTHONUNBUFFERED=1` | 不设的话 stdout 有缓冲，日志要攒够一块才落盘——**进程崩溃时最后那几行（也就是最有用的几行）永远看不到** |
 | `AppExit Default Restart` + `AppRestartDelay` + `AppThrottle` | Windows 服务依赖只保证「被依赖的服务已启动」，不保证「能应答」。库还没起来时进程会退出，靠这三项自愈；`AppThrottle` 让反复失败的服务退避，不至于把日志刷爆 |
-| `AppStopMethodConsole 25000` | nssm 停服务时先往应用的控制台发 Ctrl+C。**代码在 Windows 上正是靠它优雅关停**（`lib/lifespan.py` 里 `loop.add_signal_handler` 抛 `NotImplementedError` 后退回 `signal.signal`）。25s 要大于 `APP_DRAIN_TIMEOUT_S`（默认 20s）|
+| `AppStopMethodConsole 25000` | nssm 停服务时先往应用的控制台发 Ctrl+C。**代码在 Windows 上正是靠它优雅关停**（`lib/lifespan.py` 里 `loop.add_signal_handler` 抛 `NotImplementedError` 后退回 `signal.signal`）。25s 覆盖 HTTP 默认 2s 摘流及 20s drain。调大服务的 `APP_READINESS_WITHDRAW_S` 或 `APP_DRAIN_TIMEOUT_S` 时同步调大 NSSM 宽限 |
 | **不要设 `AppNoConsole`** | 设了就没有控制台，Ctrl+C 发不出去，nssm 只能一路降级到 `TerminateProcess`——**采集租约不让、在途请求直接断**，重启后要等一个 TTL 才恢复 |
 | `Start SERVICE_DELAYED_AUTO_START` | 延迟自动启动，把开机时的抢跑（Docker 之外最常见的启动失败原因）压下去 |
 

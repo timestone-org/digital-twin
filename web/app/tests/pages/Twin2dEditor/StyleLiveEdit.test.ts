@@ -63,6 +63,7 @@ function mountLayer(nodeStyles: readonly Twin2dNodeStyle[]) {
       selectedIds: ['n1'],
       snap: TWIN_2D_DEFAULT_SNAP,
       scale: 1,
+      outlineAt: () => null,
       startGesture: () => false,
     },
   })

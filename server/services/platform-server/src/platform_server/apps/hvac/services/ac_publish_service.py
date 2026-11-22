@@ -10,12 +10,8 @@
 
 import uuid
 from collections.abc import Sequence
-from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Protocol
-
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.errors import AppError
 from lib.logging import get_logger
@@ -50,6 +46,7 @@ from platform_server.apps.hvac.services.ac_publication_service import (
     PublicationView,
 )
 from platform_server.apps.hvac.services.ac_source_reader import AcSourceReader
+from platform_server.apps.hvac.services.sessions import Sessions
 from platform_server.opcua import (
     NodeWrite,
     NodeWriter,
@@ -58,17 +55,6 @@ from platform_server.opcua import (
 )
 
 _logger = get_logger("platform.hvac.ac_publish")
-
-
-class Sessions(Protocol):
-    """开一个短事务的最小面。
-
-    ⚠ 只认这一个方法而不认 `Database`：下发要开三个互不相干的短事务
-    （读配置、算、记心跳），把它收成一个面，用例才能把那条回滚事务包进来，
-    而不必让被测代码知道自己跑在用例里。
-    """
-
-    def session(self) -> AbstractAsyncContextManager[AsyncSession]: ...
 
 
 # `last_error` 会显示在页面上，太长的原因把整行撑爆

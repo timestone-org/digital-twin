@@ -52,6 +52,7 @@ class RecordingDispatch:
 
     seen: list[uuid.UUID] = field(default_factory=list[uuid.UUID])
     offsets: list[int] = field(default_factory=list[int])
+    zones: list[str | None] = field(default_factory=list[str | None])
     error: Exception | None = None
     outcome: str = "done"
 
@@ -63,6 +64,7 @@ class RecordingDispatch:
         assert isinstance(options.pool, NodePool)
         self.seen.append(run_id)
         self.offsets.append(options.tz_offset_minutes)
+        self.zones.append(options.business_timezone)
         if self.error is not None:
             raise self.error
         return DispatchReport(outcome=self.outcome, status="succeeded")
@@ -168,6 +170,7 @@ async def test_the_business_offset_follows_daylight_saving_per_run(
     await consumer._tick()
     await consumer._tick()
     assert dispatch.offsets == [60, 120]
+    assert dispatch.zones == ["Europe/Berlin", "Europe/Berlin"]
 
 
 async def test_an_unreadable_message_is_dropped_not_retried(

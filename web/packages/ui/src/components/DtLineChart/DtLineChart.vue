@@ -55,7 +55,9 @@ async function attach(): Promise<void> {
   })
   sizeWatcher.observe(el)
   // 颜色在 buildLineOption 里读成定值，换肤不重建 option 就一直是旧配色
-  stopTheme = observeThemeChange(el, scheduleRepaint)
+  stopTheme = observeThemeChange(el, scheduleRepaint, {
+    themeTarget: document.documentElement,
+  })
 }
 
 onMounted(() => {

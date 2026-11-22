@@ -220,6 +220,7 @@ class RunConsumer:
                     tz_offset_minutes=business_offset_minutes(
                         options.business_zone, options.clock()
                     ),
+                    business_timezone=options.business_zone.key,
                     store=options.store,
                     bdm_connection=options.bdm_connection,
                     pool=self._pool,

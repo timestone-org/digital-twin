@@ -36,6 +36,13 @@ KNOWLEDGE_RULES: tuple[RouteRuleSpec, ...] = (
         ),
     ),
     RouteRuleSpec(
+        f"{_K}/knowledge-bases/*/reembeddings*",
+        "*",
+        codes=(KNOWLEDGE_MANAGE,),
+        priority=895,
+        description="预览、启动、查看或取消整库重嵌",
+    ),
+    RouteRuleSpec(
         f"{_K}/knowledge-bases",
         "GET",
         codes=(KNOWLEDGE_USE,),
@@ -58,6 +65,20 @@ KNOWLEDGE_RULES: tuple[RouteRuleSpec, ...] = (
             "建库删库、配来源。⚠ 比读严一档：改嵌入档等于让整库的既有向量"
             "作废，而那件事没有任何运行期迹象"
         ),
+    ),
+    RouteRuleSpec(
+        f"{_K}/sources/*",
+        "PATCH",
+        codes=(KNOWLEDGE_MANAGE,),
+        priority=890,
+        description="编辑平台来源配置",
+    ),
+    RouteRuleSpec(
+        f"{_K}/sources/*",
+        "DELETE",
+        codes=(KNOWLEDGE_MANAGE,),
+        priority=890,
+        description="解绑平台来源并保留本地资料",
     ),
     RouteRuleSpec(
         f"{_K}/sources/*",

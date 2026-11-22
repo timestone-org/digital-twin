@@ -9,9 +9,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { DtToastHost, useConfirm } from '@dt/ui'
-import type { DashboardPublication } from '@dt/contracts'
-
 import * as shareApi from '@/api/dashboardShare'
+import type { DashboardPublicationState } from '@/api/dashboardShareWire'
 import * as clipboard from '@/utils/clipboard'
 import type { DashboardSummary } from '@/api/dashboardWire'
 import ShareDashboardDialog from '@/pages/Home/components/ShareDashboardDialog.vue'
@@ -53,6 +52,12 @@ async function clickText(
 
 beforeEach(() => {
   vi.stubEnv('BASE_URL', '/ai/')
+  vi.spyOn(shareApi, 'getDashboardPublication').mockResolvedValue({
+    dashboardId: 'd1',
+    isPublic: false,
+    publicToken: null,
+    unpublishedTargets: [],
+  })
   vi.spyOn(shareApi, 'publishDashboard').mockResolvedValue({
     dashboardId: 'd1',
     isPublic: true,
@@ -72,6 +77,27 @@ afterEach(() => {
 })
 
 describe('未公开', () => {
+  it('只读取发布态，为尚未发布的跳转目标列出项目和大屏', async () => {
+    vi.spyOn(shareApi, 'getDashboardPublication').mockResolvedValue({
+      dashboardId: 'd1',
+      isPublic: false,
+      publicToken: null,
+      unpublishedTargets: [
+        { dashboardId: 't1', name: '测温总览', projectName: '车间 A' },
+        { dashboardId: 't2', name: '设备明细', projectName: '车间 B' },
+      ],
+    })
+    const wrapper = mountDialog(false)
+    await flushPromises()
+
+    expect(shareApi.getDashboardPublication).toHaveBeenCalledOnce()
+    expect(wrapper.text()).toContain('跳转目标尚未发布')
+    expect(wrapper.text()).toContain('车间 A / 测温总览')
+    expect(wrapper.text()).toContain('车间 B / 设备明细')
+    expect(shareApi.publishDashboard).not.toHaveBeenCalled()
+    expect(wrapper.find('input').exists()).toBe(false)
+  })
+
   it('说清发布后是匿名可读，并且随时能撤回', () => {
     const wrapper = mountDialog(false)
 
@@ -113,6 +139,7 @@ describe('已公开', () => {
       dashboardId: 'd1',
       isPublic: true,
       publicToken: 'tok-old',
+      unpublishedTargets: [],
     })
   })
 
@@ -181,6 +208,7 @@ describe('问确认的过程中弹窗被关掉', () => {
       dashboardId: 'd1',
       isPublic: true,
       publicToken: 'tok-old',
+      unpublishedTargets: [],
     })
   })
 
@@ -213,7 +241,8 @@ describe('取当前链接与发布抢着写', () => {
   it('慢的那次读回来，不许把刚换发的新令牌盖回旧的', async () => {
     // ⚠ 这是「重新发布之后链接又变回旧的」的成因：读是打开弹窗就发的，
     // 发布是后按的，先发的那条后回来，落地的就是换发**之前**那一个
-    let settle: (publication: DashboardPublication) => void = () => undefined
+    let settle: (publication: DashboardPublicationState) => void = () =>
+      undefined
     vi.spyOn(shareApi, 'getDashboardPublication').mockReturnValue(
       new Promise((resolve) => {
         settle = resolve
@@ -224,7 +253,12 @@ describe('取当前链接与发布抢着写', () => {
     await clickText(wrapper, '重新发布')
     useConfirm().resolve(true)
     await flushPromises()
-    settle({ dashboardId: 'd1', isPublic: true, publicToken: 'tok-old' })
+    settle({
+      dashboardId: 'd1',
+      isPublic: true,
+      publicToken: 'tok-old',
+      unpublishedTargets: [],
+    })
     await flushPromises()
 
     expect(wrapper.find('input').element.value).toBe(
@@ -251,6 +285,7 @@ describe('复制链接', () => {
       dashboardId: 'd1',
       isPublic: true,
       publicToken: 'tok-old',
+      unpublishedTargets: [],
     })
   })
 

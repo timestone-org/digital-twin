@@ -1,30 +1,15 @@
 /** @fileoverview 点位快照缓存：同一点位再来一帧画面要跟着变，一帧多点不能每点复制一整份表。 */
 import { mount } from '@vue/test-utils'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { computed, defineComponent, h } from 'vue'
-import type { PointSample } from '@dt/contracts'
+import type { PointSample, PointValueListener } from '@dt/contracts'
 
 import {
   usePointSamples,
   type PointSamples,
 } from '@/composables/usePointSamples'
 
-const provider = vi.hoisted(() => ({
-  onValue: null as ((key: string, sample: PointSample) => void) | null,
-}))
-
-vi.mock('@dt/datasources', () => ({
-  hasProvider: () => true,
-  getProvider: () => ({
-    subscribe: (
-      _keys: readonly string[],
-      onValue: (key: string, sample: PointSample) => void,
-    ) => {
-      provider.onValue = onValue
-      return () => undefined
-    },
-  }),
-}))
+let onValue: PointValueListener | null = null
 
 function sample(value: number): PointSample {
   return { state: 'ok', value, timestampMs: 0, quality: 'good' }
@@ -38,6 +23,10 @@ function host(keys: string[]): PointSamples {
         made = usePointSamples(
           () => keys,
           () => 'screen-1',
+          (_keys, listener) => {
+            onValue = listener
+            return () => undefined
+          },
         )
         return () => h('div')
       },
@@ -48,8 +37,8 @@ function host(keys: string[]): PointSamples {
 }
 
 function push(key: string, value: number): void {
-  if (provider.onValue === null) throw new Error('没订上')
-  provider.onValue(key, sample(value))
+  if (onValue === null) throw new Error('没订上')
+  onValue(key, sample(value))
 }
 
 const NativeMap = globalThis.Map

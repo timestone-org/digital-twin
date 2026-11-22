@@ -6,10 +6,12 @@
 from lib.testing.clock import FrozenClock
 from lib.testing.fake_cache import InMemoryCache, UnavailableCache
 from lib.testing.fake_objectstore import FakeObjectStore
+from lib.testing.transactions import deferred_commit_failure
 
 __all__ = [
     "FakeObjectStore",
     "FrozenClock",
     "InMemoryCache",
     "UnavailableCache",
+    "deferred_commit_failure",
 ]

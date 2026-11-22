@@ -80,3 +80,13 @@ def test_the_fingerprint_is_stable_for_the_same_rules() -> None:
     assert ExtractionRules(cold_off_minutes=45).fingerprint() == (
         ExtractionRules(cold_off_minutes=45).fingerprint()
     )
+
+
+def test_only_the_unassessed_outcome_revision_preserves_the_v3_fingerprint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = DEFAULTS.fingerprint()
+    monkeypatch.setattr(ac_startup_rules, "LOGIC_VERSION", 3)
+    assert DEFAULTS.fingerprint() == current
+    monkeypatch.setattr(ac_startup_rules, "LOGIC_VERSION", 5)
+    assert DEFAULTS.fingerprint() != current

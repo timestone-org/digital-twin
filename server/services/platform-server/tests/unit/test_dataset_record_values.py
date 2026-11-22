@@ -16,6 +16,7 @@ from platform_server.apps.dataset.services.record_values import (
     coerce,
     merge_overrides,
     merge_values,
+    require_filled,
     sanitize,
 )
 
@@ -91,15 +92,18 @@ def test_a_missing_manual_column_falls_back_to_its_default() -> None:
 def test_a_required_manual_column_must_be_filled() -> None:
     columns = [column("产量", is_required=True)]
 
+    values = sanitize({}, columns, actor=ACTOR)
     with pytest.raises(DatasetRecordInvalid):
-        sanitize({}, columns, actor=ACTOR)
+        require_filled(values.values, columns)
 
 
 def test_a_required_point_column_is_not_part_of_that_check() -> None:
     # ⚠ 点位汇总列的值由采集器填，必填校验加在它头上会让每一次人工录入都失败
     columns = [column("温度", source="point", node_key="s:t", is_required=True)]
 
-    assert sanitize({}, columns, actor=ACTOR).values == {}
+    values = sanitize({}, columns, actor=ACTOR)
+    require_filled(values.values, columns)
+    assert values.values == {}
 
 
 def test_a_non_numeric_value_for_a_number_column_is_rejected() -> None:

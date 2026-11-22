@@ -9,7 +9,8 @@
 """
 
 from collections.abc import AsyncIterator, Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
+from functools import partial
 from typing import Annotated
 
 from fastapi import Depends, Header, Request
@@ -17,7 +18,8 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.auth import CallerContext
-from lib.idempotency import IdempotencyStore
+from lib.db import commit_before_receipt
+from lib.idempotency import RESULT_TTL_S, IdempotencyStore
 from lib.objectstore import ObjectStore
 from lib.stream import StreamLike
 from lib.web.authdeps import (
@@ -54,7 +56,7 @@ def get_container(request: Request) -> Container:
     return container
 
 
-async def get_session(
+async def _request_transaction(
     container: Annotated[Container, Depends(get_container)],
 ) -> AsyncIterator[AsyncSession]:
     """一个请求一个事务：正常出块提交，异常回滚。
@@ -63,6 +65,15 @@ async def get_session(
     """
     async with container.database.session() as session:
         yield session
+
+
+async def get_session(
+    session: Annotated[
+        AsyncSession, Depends(_request_transaction, scope="function")
+    ],
+) -> AsyncSession:
+    """在响应发送前完成请求事务。Args: session。"""
+    return session
 
 
 def get_object_store(
@@ -105,6 +116,7 @@ class WriteGate:
     idempotency: IdempotencyStore
     idempotency_key: str | None
     caller: CallerContext
+    receipt_session: AsyncSession | None = field(default=None, kw_only=True)
 
     async def run_once[ResultT: BaseModel](
         self,
@@ -117,13 +129,28 @@ class WriteGate:
 
         Args: endpoint, model, action。
         """
-        return await self.idempotency.run_once(
+        store = self.idempotency
+        session = self.receipt_session
+        if session is not None and self.idempotency_key is not None:
+            store = replace(store, claim_ttl_s=RESULT_TTL_S)
+            action = partial(_run_before_receipt, session, action)
+        return await store.run_once(
             endpoint=endpoint,
             key=self.idempotency_key,
             caller=self.caller.user_id,
             model=model,
             action=action,
         )
+
+
+async def _run_before_receipt[ResultT: BaseModel](
+    session: AsyncSession, action: Callable[[], Awaitable[ResultT]]
+) -> ResultT:
+    """确认落库后才释放可重放结果。Args: session, action。"""
+    result = await action()
+    if session.in_transaction():
+        await commit_before_receipt(session)
+    return result
 
 
 def _signing_secret_of(request: Request) -> str:

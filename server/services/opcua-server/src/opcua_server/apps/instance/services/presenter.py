@@ -8,6 +8,7 @@
 把它存下来反而会长出第三份真相，与库和运行时都可能不一致。
 """
 
+from opcua_server.apps.instance.endpoint import endpoint_url
 from opcua_server.apps.instance.errors import NodeValueRejected
 from opcua_server.apps.instance.models import Instance, Node
 from opcua_server.apps.instance.runtime.addressspace import (
@@ -55,8 +56,8 @@ def endpoint_url_of(
     """
     if running is not None:
         spec = running.spec
-        return f"opc.tcp://{host}:{spec.port}/{spec.endpoint_path}"
-    return f"opc.tcp://{host}:{row.port}{row.endpoint_path}"
+        return endpoint_url(host, spec.port, f"/{spec.endpoint_path}")
+    return endpoint_url(host, row.port, row.endpoint_path)
 
 
 def pending_fields_of(

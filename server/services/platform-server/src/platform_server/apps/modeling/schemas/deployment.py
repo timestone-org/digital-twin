@@ -63,6 +63,7 @@ class ModelDeploymentUpdateIn(InputModel):
     )
     rate_limit_per_minute: int | None = Field(default=None, ge=1, le=6000)
     expected_revision: int | None = Field(default=None, ge=1)
+    is_signature_change_confirmed: bool = False
 
 
 class ModelDeploymentOut(OutputModel):
@@ -141,7 +142,9 @@ class OpenModelPredictIn(InputModel):
 class OpenModelWarningOut(OutputModel):
     """一条告警。有告警不等于算不出来——外推照样给数，只是标注出来。"""
 
-    row: int
+    row: int = Field(
+        description="请求 rows 的下标，从 0 开始。错误正文以 1 作为首行编号。"
+    )
     column: str
     kind: str
     message: str

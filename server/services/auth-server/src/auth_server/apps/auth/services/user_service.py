@@ -235,8 +235,13 @@ async def reset_password(
     """
     target = await _require_identity(session, user_id)
     _assert_can_touch(operation, target, action="重置密码")
-    target.user.hashed_password = await hasher.hash(payload.new_password)
-    await _flush(session)
+    changed = await user_crud.rotate_password(
+        session,
+        target.user,
+        await hasher.hash(payload.new_password),
+    )
+    if not changed:
+        raise Conflict("账号密码已被其他请求更新，请重新确认")
     _audit(session, operation, audit.ACTION_PASSWORD_RESET, target.user)
 
 
