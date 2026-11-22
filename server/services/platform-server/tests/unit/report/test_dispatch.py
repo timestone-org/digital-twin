@@ -196,10 +196,10 @@ def expire_tick_budget(monkeypatch):
     create_timeout = asyncio.timeout_at
     tick_budget: asyncio.Timeout | None = None
 
-    def capture(deadline: float | None) -> asyncio.Timeout:
+    def capture(deadline_s: float | None) -> asyncio.Timeout:
         nonlocal tick_budget
-        assert deadline is not None
-        tick_budget = create_timeout(deadline)
+        assert deadline_s is not None
+        tick_budget = create_timeout(deadline_s)
         return tick_budget
 
     async def expire(*_arguments: object) -> None:
