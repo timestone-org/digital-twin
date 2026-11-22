@@ -54,6 +54,19 @@ def _version(
         feature_keys=["temperature"],
         target_key="energy",
         signature_json=signature,
+        serving_json={
+            "format_version": "1.0",
+            "task": "regression",
+            "input_columns": ["temperature"],
+            "steps": [
+                {
+                    "operator": "linear_regression",
+                    "config": {},
+                    "fitted": {"coef": {"temperature": 1.0}, "intercept": 0.0},
+                    "expected_input_columns": ["temperature"],
+                }
+            ],
+        },
     )
 
 
