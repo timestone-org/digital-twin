@@ -15,6 +15,7 @@ from lib.utils.ids import uuid7
 from platform_server.apps.collect.errors import PointInUse, PointNotFound
 from platform_server.apps.collect.models import CollectPoint, CollectSource
 from platform_server.apps.collect.services import point_service
+from platform_server.apps.collect.services.audit import AuditActor
 from platform_server.apps.dataset.models import DatasetTable
 from platform_server.apps.dataset.schemas import (
     ColumnCreateIn,
@@ -26,6 +27,7 @@ from platform_server.settings import Settings
 from timeseries import compose_node_key
 
 pytestmark = pytest.mark.requires_postgres
+AUDIT_ACTOR = AuditActor(id=uuid.UUID(int=1), source_ip=None, trace_id="1" * 32)
 
 
 @dataclass(frozen=True)
@@ -131,12 +133,14 @@ async def _delete_point(
             session,
             point_ids=[fixture.point_id],
             ledger_references=column_service.count_point_references,
+            actor=AUDIT_ACTOR,
         )
     else:
         await point_service.delete_point(
             session,
             point_id=fixture.point_id,
             ledger_references=column_service.count_point_references,
+            actor=AUDIT_ACTOR,
         )
 
 

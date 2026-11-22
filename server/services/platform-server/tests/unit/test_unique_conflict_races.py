@@ -15,6 +15,7 @@ from platform_server.apps.collect.crud import point_crud, source_crud
 from platform_server.apps.collect.errors import PointCodeTaken, SourceCodeTaken
 from platform_server.apps.collect.schemas import PointCreateIn, SourceCreateIn
 from platform_server.apps.collect.services import point_service, source_service
+from platform_server.apps.collect.services.audit import AuditActor
 from platform_server.apps.llm_providers import crud
 from platform_server.apps.llm_providers.errors import LlmProviderNameTaken
 from platform_server.apps.llm_providers.models import LlmProvider
@@ -26,6 +27,7 @@ from platform_server.apps.llm_providers.services import provider_service
 
 CIPHER = SecretCipher("k" * 32, label="test")
 SOURCE_ID = uuid.UUID("0192f0aa-0000-7000-8000-000000000005")
+AUDIT_ACTOR = AuditActor(id=uuid.UUID(int=1), source_ip=None, trace_id="1" * 32)
 
 
 class UniqueViolation(Exception):
@@ -152,6 +154,7 @@ async def test_racing_source_codes_read_as_taken(
             colliding("uq_collect_sources_code"),
             context,
             payload=source_payload(),
+            actor=AUDIT_ACTOR,
         )
 
 
