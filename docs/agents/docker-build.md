@@ -221,8 +221,8 @@ services:
 前端构建则取 `context: ../web`，两边互不相见。
 普通与 no-ai Compose 均复用 `web/Dockerfile` 的 Node 构建阶段和非 root Nginx
 运行阶段，把前端产物复制进网关镜像；默认不挂载宿主 `dist`。
-需要使用宿主产物的开发场景显式叠加 `docker/compose.web-host.yml`，操作见
-[`docker/README.md`](../../docker/README.md#compose)。
+开发时使用 Vite，把 `VITE_DEV_API_TARGET` 指向边缘网关，操作见
+[`docker/README.md`](../../docker/README.md#手动运行服务)。
 
 ## 5. 验证镜像里到底装了什么
 

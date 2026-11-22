@@ -82,184 +82,155 @@ HTTP/WS 与 HTTPS/WSS 都是受支持的部署形态。
 ⚠ HTTP 下的嵌入 URL 和 API 密钥会以明文经过网络，被动抓包即可复制。永久密钥
 泄漏后不会自动到期，只能人工吊销。HTTPS 仍是推荐部署形态，但不是嵌入的运行时前置。
 
-## compose
+## 选择 Compose 入口
+
+| 文件 | 部署内容 | 环境模板 |
+| --- | --- | --- |
+| [compose.storage.yml](compose.storage.yml) | PostgreSQL、TimescaleDB、pgvector、Redis、MinIO，供手动启动的服务或完整栈使用 | [storage.env.example](storage.env.example) |
+| [compose.yml](compose.yml) | 完整微服务、网关、AI 助手、知识库 API / worker，可选层级图和 MinerU | [根目录 .env.template](../.env.template)，与 [根目录 .env.example](../.env.example) 同步 |
+| [compose.no-ai.yml](compose.no-ai.yml) | 内置 PostgreSQL / TimescaleDB、Redis、MinIO，以及非 AI 服务和网关，可选层级图 | [no-ai.env.example](no-ai.env.example) |
+
+以下命令在仓库根目录执行。首次部署复制对应模板并填写空白必填项，升级时对照模板补齐
+现有环境文件并沿用原项目名、连接和凭据。带 `#` 的可选项按需取消注释。
+模板也标明 Compose 固定的角色、容器端口、schema 和路径。实际密码与密钥填写在私有
+`.env*` 中。含 `$` 或 `#` 的字面值可用单引号包裹。修改环境后用相同的
+`--env-file`、`-f` 和 profile 参数重新执行 `up -d`，构建参数改动需加 `--build`。
+
+### 1. 独立基础设施
 
 ```bash
-cd docker
-cp ../.env.template .env   # 填数据库、Redis、对象存储、外部 EMS 库与几个密钥
-docker compose up -d --build
-
-# 要 MinerU（PDF 与扫描件的解析后端，ADR-0043）才加这个 profile：
-# 镜像 2.4 GB、权重另有 2.4 GB，而没有它整套照样跑得起来，只是不收 PDF
-docker compose --profile mineru up -d --build
+cp docker/storage.env.example docker/.env.storage
+# 填 PostgreSQL、Redis 和 MinIO 凭据，需要时调整宿主端口。
+docker compose --env-file docker/.env.storage -f docker/compose.storage.yml config --quiet
+docker compose --env-file docker/.env.storage -f docker/compose.storage.yml up -d --build
+docker compose --env-file docker/.env.storage -f docker/compose.storage.yml wait minio-init
+docker compose --env-file docker/.env.storage -f docker/compose.storage.yml ps -a
 ```
 
-普通编排与 no-ai 编排共用 `web/Dockerfile`：构建阶段安装锁定的 pnpm 依赖并打包
-前端，运行阶段只把 `app/dist` 复制进 Nginx 镜像。默认网关不再依赖宿主机的
-`web/app/dist`，无需预先在宿主机运行前端构建。普通镜像为
-`digitaltwin/web:${IMAGE_TAG:-dev}`，保留 AI 页面；发布时 `IMAGE_TAG` 使用版本号和
-提交 SHA。Nginx 配置仍由现有只读挂载与环境模板提供，页面、API 和素材路径不变。
+PostgreSQL、Redis、MinIO 健康且 `minio-init` 退出码为 0 后，可启动应用。PostgreSQL
+镜像提供 TimescaleDB、pgvector（向量存储）及 pg_trgm，应用迁移负责按属主安装所需扩展。
+建桶作业仅设置 `models/`、`images/`、`icons/` 的匿名下载策略。素材和知识库的其他
+前缀使用私有访问。
 
-只更新页面时，在 `docker/` 中运行以下命令；它只重建并替换网关：
+宿主默认从 `127.0.0.1` 连接 PostgreSQL `5432`、Redis `6379`、MinIO API `9000`
+与控制台 `9001`，端口可在模板中调整。容器通过 `digitaltwin-storage` 网络上的
+`postgres:5432`、`redis:6379`、`minio:9000` 连接，使用容器端口。
+
+### 2. 完整微服务与 AI
 
 ```bash
-docker compose up -d --build --no-deps edge-gateway
+cp .env.template docker/.env
+# 填数据库、Redis、对象存储、外部 EMS 与必填密钥。
+docker compose --env-file docker/.env -f docker/compose.yml config --quiet
+docker compose --env-file docker/.env -f docker/compose.yml up -d --build
+docker compose --env-file docker/.env -f docker/compose.yml ps -a
 ```
 
-开发时需要直接使用宿主机产物，可显式叠加 `compose.web-host.yml`；默认命令不会
-读取该文件。先在仓库根构建，再执行：
+同机使用上面的独立基础设施时，`docker/.env` 中设置
+`APP_NETWORK_NAME=digitaltwin-storage`、`APP_NETWORK_EXTERNAL=true`、
+`POSTGRES_HOST=postgres`、`REDIS_HOST=redis`、
+`OSS_ENDPOINT=http://minio:9000`、`OSS_UPSTREAM=minio:9000`，数据库名、账号、口令、
+对象存储凭据及桶名与 `.env.storage` 一致。自定义网络名使用 `STORAGE_NETWORK_NAME`
+的实际值。使用现有外部存储时，填写应用容器可访问的地址并保留默认应用网络。
+`OSS_UPSTREAM` 填 `host:port`，`OSS_ENDPOINT` 含 `http://` 或 `https://`。
+应用栈的 `minio-init` 会再次确认桶和公开前缀配置，成功后才执行数据库迁移。
+如由存储管理员预建桶与策略，可设置 `OSS_INIT_BUCKET=false` 跳过建桶和策略配置。
+
+如需 MinerU 解析 PDF 和扫描件，在 `docker/.env` 中设置
+`KNOWLEDGE_MINERU_ENABLED=true`，使用内置 MinerU 时保留容器地址
+`http://mineru:8000`，再给启动命令加 `--profile mineru`。使用外部解析服务时填写其
+地址即可。MinerU 权重会向 `MINERU_MODEL_SOURCE` 指定的来源下载并缓存到独立卷。
+
+模型可在系统管理的模型目录配置，启用前填写共享的 `LLM_PROVIDER_SECRET`。也可按
+模板启用助手/知识库的环境变量模型档。知识库摄取需要可用的嵌入模型，
+`KNOWLEDGE_EMBEDDING_DIMENSIONS` 须与模型输出及数据库列维数一致。外部模型和语音
+服务的参数分组见下文。
+
+### 3. 内置基础设施的无 AI 栈
 
 ```bash
-corepack pnpm@11.21.0 --dir web build
-cd docker
-docker compose -f compose.yml -f compose.web-host.yml up -d --build --no-deps edge-gateway
+cp docker/no-ai.env.example docker/.env.no-ai
+# 填所有空白必填项；IMAGE_TAG 使用版本号与提交 SHA。
+docker compose --env-file docker/.env.no-ai -f docker/compose.no-ai.yml config --quiet
+docker compose --env-file docker/.env.no-ai -f docker/compose.no-ai.yml up -d --build
+docker compose --env-file docker/.env.no-ai -f docker/compose.no-ai.yml ps -a
 ```
 
-该覆盖只增加只读的 HTML 目录挂载，保留原网关镜像、配置和依赖。之后重新构建宿主
-`dist` 即可更新页面；恢复镜像内页面时用不带该覆盖的命令重新创建网关。
+无 AI 编排关闭前端 AI 入口和 Docker 网关的助手、知识库与模型供应商目录 API，
+并从统一迁移作业排除助手和知识库。分析建模、达标预测、采集、报告和大屏照常提供。
+它使用独立项目名及数据卷。PostgreSQL 和 Redis 仅在容器网络内可达，MinIO 控制台默认
+使用 `127.0.0.1:9001`。同机并行部署时为网关、MinIO 控制台和 OPC UA 配置不同端口。
+层级图在两套应用栈均可通过 `--profile hierarchy` 启动。
 
-共享值（`AUTH_EDGE_SERVICE_KEY` 等）的回退链**必须每个服务都写全**：
-少写一处就是非对称失效——发送端有值、接收端没有，一律 403，
-而现象与原因隔得极远。
+### 应用配置与运维
 
-### 内置基础设施、关闭 AI 页面
+- 页面入口为 `http://localhost:8080/ai/`，端口由 `EDGE_HTTP_PORT` 控制。前端由同一份
+  [web/Dockerfile](../web/Dockerfile) 构建，发布时用版本号与提交 SHA 作为 `IMAGE_TAG`。
+  仅更新前端时用对应编排的 `up -d --build --no-deps edge-gateway`。
+- 两套应用栈均需配置现场只读 EMS 的 `ACSOURCE_HOST/USER/PASSWORD/DB` 或对应的
+  `PLATFORM_SQLSERVER_*`。`ACSOURCE_TIMEZONE` 是 EMS 无时区列的解释口径。
+  EMS 暂时不可达时，相关查询返回 503，其他业务仍能启动。
+  [ADR-0009](../docs/adr/0009-空调原始数据由平台直读外部EMS库.md)
+- `AUTH_EDGE_SIGNING_SECRET` 与 `AUTH_EDGE_SERVICE_KEY` 分别用于签名身份头和认证内部
+  请求，每项至少 32 字符，由 Compose 传给所有消费方。`AUTH_JWT_SECRET` 由 auth 与
+  realtime 共用。`COLLECT_CREDENTIAL_SECRET` 用于加密采集凭据，换钥后需重填旧凭据。
+- 停止时用相同 Compose 参数执行 `down`，保留数据卷。独立存储与完整栈共享网络时先停
+  应用栈。单独备份 PostgreSQL、Redis、MinIO 数据卷与应用栈的 `opcua-pki` 卷。
+- 新基础设施使用 PostgreSQL 18.6 / TimescaleDB 2.31.0 与 Redis 8.10.3 的固定镜像摘要。
+  数据库卷挂载 `/var/lib/postgresql`，数据目录是 `/var/lib/postgresql/18/docker`。
+  PostgreSQL 16 / 17 的已有卷应先按主版本升级流程迁移。MinIO 固定官方源码提交
+  `9e49d5e7`，客户端固定 `7394ce0d`，复用已有数据卷时须确保 UID 10001 可写。
+  [PostgreSQL 主版本升级](https://www.postgresql.org/docs/18/upgrading.html)
+- 既有阜阳现场继续从其服务器上的部署副本运行，配置恢复方式见
+  [阜阳远程存储](FUYANG_STORAGE.md)。
 
-使用完整编排 `compose.no-ai.yml` 和 `docker compose` 命令。该文件显式声明全部非 AI
-服务与参数，不依赖或叠加 `compose.yml`。从完整仓库构建时仍需 `server/`、`web/`
-源码、各 Dockerfile、`docker/minio/` 和 `docker/nginx/` 配置；单独复制 YAML 不是完整的离线部署包。
+### 手动运行服务
 
-```bash
-cd docker
-cp no-ai.env.example .env.no-ai
-# 编辑 .env.no-ai，填写所有必填项；IMAGE_TAG 使用版本号-提交SHA-no-ai。
-docker compose --env-file .env.no-ai -f compose.no-ai.yml config --quiet
-docker compose --env-file .env.no-ai -f compose.no-ai.yml up -d --build
-docker compose --env-file .env.no-ai -f compose.no-ai.yml ps -a
-```
+1. 先启动独立存储或准备同等的外部基础设施。进入各服务目录，把 `.env.example`
+   复制为 `.env`，填写部署值。以下模板按实际消费方列出变量。
 
-页面入口为 `http://localhost:8080/ai/`（端口由 `EDGE_HTTP_PORT` 控制）。
-该部署包含 PostgreSQL 18 / TimescaleDB、Redis、MinIO、认证、平台的 API / worker /
-publisher、采集、OPC UA、实时通道和边缘网关。历史归档迁移需要 TimescaleDB，不能
-直接替换为普通 `postgres` 镜像。迁移执行五个核心代码单元及可选层级图的独立迁移链，跳过助手与知识库，
-因此无需 pgvector、嵌入模型或 AI 凭据。初始化作业失败会阻断本次应用启动。
+   | 进程 | 环境模板 |
+   | --- | --- |
+   | 认证 API 与管理员种子 | [auth-server](../server/services/auth-server/.env.example) |
+   | 平台 API、worker、publisher | [platform-server](../server/services/platform-server/.env.example) |
+   | 采集运行时 | [collector-server](../server/services/collector-server/.env.example) |
+   | OPC UA 管理及实例托管 | [opcua-server](../server/services/opcua-server/.env.example) |
+   | 实时通道 | [realtime-hub](../server/services/realtime-hub/.env.example) |
+   | AI 助手 | [ai-assistant](../server/services/ai-assistant/.env.example) |
+   | 知识库 API 与 worker | [knowledge-server](../server/services/knowledge-server/.env.example) |
+   | 层级图 | [hierarchy-server](../server/services/hierarchy-server/.env.example) |
+   | 统一迁移作业 | [deploy/.env.example](../server/deploy/.env.example) |
+   | 前端开发与构建 | [web/app/.env.example](../web/app/.env.example) |
 
-基础设施固定版本如下，数据库和 Redis 镜像同时固定多架构 digest，支持 amd64 / arm64：
-
-| 组件 | 固定版本 |
-|---|---|
-| PostgreSQL / TimescaleDB | 18.6 / 2.31.0（`timescale/timescaledb:2.31.0-pg18`） |
-| Redis | 8.10.3（`redis:8.10.3-alpine`） |
-| MinIO | `RELEASE.2025-10-15T17-29-55Z`，官方提交 `9e49d5e7` |
-| MinIO Client | `RELEASE.2025-08-13T08-35-41Z`，官方提交 `7394ce0d` |
-
-MinIO 与客户端由 `docker/minio/Dockerfile` 构建，不依赖 `minio/minio` 或 `minio/mc`
-公开镜像仓库。构建固定官方 GitHub 提交、校验源码归档 SHA256，使用上游 `go.sum`
-验证依赖；首次构建需要访问 Docker Hub 基础镜像、GitHub、Go 模块代理与 Debian 软件源。
-两者使用具体版本和源码提交作为本地镜像 tag，`pull_policy: build` 保证启动时使用构建流程。
-官方版本依据见 [TimescaleDB 发布](https://github.com/timescale/timescaledb/releases/tag/2.31.0)、
-[Redis 发布](https://github.com/redis/redis/releases/tag/8.10.3)、
-[MinIO 发布](https://github.com/minio/minio/releases/tag/RELEASE.2025-10-15T17-29-55Z)
-与 [mc 发布](https://github.com/minio/mc/releases/tag/RELEASE.2025-08-13T08-35-41Z)。
-
-该数据库配置用于全新 PostgreSQL 18 数据卷，挂载目录是 `/var/lib/postgresql`，
-镜像内部数据目录是 `/var/lib/postgresql/18/docker`。已有 PostgreSQL 16 / 17 数据卷
-须先按 [PostgreSQL 主版本升级流程](https://www.postgresql.org/docs/18/upgrading.html)
-执行备份恢复或 `pg_upgrade`，不能直接换镜像启动。MinIO 以 UID 10001 运行；复用已有
-对象存储卷时须另行确认写权限，编排不会自动修改旧卷归属。
-
-前端由 `web/Dockerfile` 在容器内构建，新入口固定传入 `VITE_AI_ENABLED=false`：
-隐藏各工作面的 AI 助手、知识库和系统模型供应商管理入口，相关页面 URL 返回
-前端 404；分析建模、达标预测、报告等业务页面保留。不启动 `ai-assistant`、
-`knowledge-server`、`knowledge-worker` 或 MinerU。该开关控制界面和路由，
-不替代后端权限校验。原部署的前端默认仍启用这些功能；修改开关后必须重新构建。
-
-现有平台启动配置仍要求 `ACSOURCE_HOST/USER/PASSWORD/DB`，须填写现场只读 EMS
-连接；本编排不部署 EMS。该系统暂时不可达时，仅相关空调数据查询不可用，其他业务
-照常启动。内置数据库、Redis、MinIO 的连接地址按专用模板填写，不沿用外部部署地址。
-`POSTGRES_USER` 同时用于内置库初始化与业务连接；若要分离迁移和业务权限，须另外
-配置数据库角色、授权及 `MIGRATION_POSTGRES_*`。
-
-`no-ai.env.example` 按业务分组列出本编排全部输入变量，包含 BDM、报告 API 连接与定时
-生成、台账聚合与保留期、建模队列与预算、PLC/HTTP 采集允许清单、连接池、迁移账号、
-日志和实时订阅参数。可选项保持代码默认值；带 `#` 的项取消注释后才生效。
-**新部署只读取命令指定的 `.env.no-ai`，不会自动合并旧的 `docker/.env`**。
-已有现场配置需按需迁入该文件；不要直接覆盖整份模板里的内置数据库和对象存储地址。
-
-需要能管取数时，在 `.env.no-ai` 的 BDM 分组配置以下六项；模型算子的
-`PLATFORM_MODELING_NODE_TIMEOUT_S` 默认 300 秒：
-
-```dotenv
-PLATFORM_BDM_ENABLED=true
-PLATFORM_BDM_BASE_URL=https://bdm.example.com
-PLATFORM_BDM_API_KEY=
-PLATFORM_BDM_TIMEZONE=Asia/Shanghai
-PLATFORM_BDM_TIMEOUT_S=10.0
-PLATFORM_BDM_LOAD_TIMEOUT_S=120.0
-```
-
-把示例地址替换为现场 HTTP(S) origin（不带 `/api` 路径、查询参数或账号），填写
-接口方分配的 32–256 个无空白 ASCII 字符 Key。预算须满足
-`BDM_TIMEOUT_S < BDM_LOAD_TIMEOUT_S < MODELING_NODE_TIMEOUT_S`，且受启动校验的
-范围限制。以上配置只传到平台后端各角色，不传给前端构建；关闭 AI 不会关闭 BDM。
-修改后用同一组 `--env-file`、`-f` 参数重新执行 `up -d`，重建容器后才会注入新值。
-
-层级图继续作为非 AI 可选服务提供，默认只建空 schema：
-
-```bash
-docker compose --env-file .env.no-ai -f compose.no-ai.yml --profile hierarchy up -d --build
-```
-
-启用后入口为“工具 → 层级图”；单独恢复该服务不需要 AI 助手或知识库。
-
-新栈默认项目名为 `digitaltwin-no-ai`，命名卷与原栈隔离，前端产物也存于独立镜像。
-同机并行启动时要在 `.env.no-ai` 为 HTTP、MinIO 管理台与 OPC UA 端口池选择空闲端口。
-数据库和 Redis 不发布宿主端口；MinIO 管理台仅可从本机
-`http://127.0.0.1:9001` 访问，对象字节经页面同源 `/oss/` 访问。
-MinIO 初始化只公开 `models/`、`images/`、`icons/`，`staging/` 保持私有。
-
-停止时使用同样的参数执行 `down`（不加 `-v`，保留数据）。备份须包含
-`postgres-data`、`redis-data`、`minio-data` 与 `opcua-pki` 四个命名卷。
-PostgreSQL 的初始化变量只对空数据卷生效，已有数据库的密码须通过数据库另行修改。
-
-### 必配项
-
-密钥与地址类**都没有默认值，缺失即拒绝启动**——进程会在第一秒把缺的变量名逐个
-打到 stderr 并以退出码 2 退出，编排器据此判定启动失败。
-
-| 变量 | 谁读它 | 说明 |
-|---|---|---|
-| `POSTGRES_*` / `REDIS_*` | 全部七个代码单元 | 一库多 schema、一个 Redis 实例同一个 `db` |
-| `AUTH_JWT_SECRET` / `AUTH_EDGE_SIGNING_SECRET` / `AUTH_EDGE_SERVICE_KEY` | auth（后两个 platform ×3 / opcua / realtime / assistant / knowledge ×2 / 边缘也读） | 各 32 字节以上 |
-| `OSS_ENDPOINT` `OSS_ACCESS_KEY` `OSS_SECRET_KEY` | `minio-init` / platform ×3 / knowledge ×2 | 对象存储在本编排之外（ADR-0015）。`OSS_UPSTREAM` 另给边缘，**只能是 `host:port`、不带 scheme**——带了 nginx 直接起不来 |
-| `COLLECT_CREDENTIAL_SECRET` | platform ×3 | 数据源口令的加密密钥（≥32 字符）。换钥后旧密文解不开，界面上重填即恢复 |
-| `LLM_PROVIDER_SECRET` | platform ×3 | 模型供应商目录与凭据的加密密钥（ADR-0041）。留空即目录整个缺席 |
-| `AUTH_SEED_ADMIN_PASSWORD` | `database-migrate` | **绝不给默认值**——弱默认的管理员口令等于没有口令 |
-| `ACSOURCE_HOST` `ACSOURCE_USER` `ACSOURCE_PASSWORD` `ACSOURCE_DB` | platform | 现场 EMS 的 SQL Server，**只读**；compose 把它们转成 `PLATFORM_SQLSERVER_*` |
-| `ACSOURCE_PORT`（默认 1433）`ACSOURCE_TIMEZONE`（默认 `Asia/Shanghai`） | platform | 有默认值，取值差异不是行为差异 |
-
-⚠ `ACSOURCE_TIMEZONE` 是**外库时间列的时区口径**，不是展示时区。外库存的是没有
-时区信息的当地时，对外一律 UTC，填错的表现是整屏数据平移几个小时而不报任何错。
-
-⚠ EMS 不可达**不影响启动，也不影响就绪**：空调数据面返回 503，台账页与空间配置页
-照常工作（[ADR-0009](../docs/adr/0009-空调原始数据由平台直读外部EMS库.md)）。
+2. 从 `server/` 运行 `uv sync --frozen --all-packages`。复制 `deploy/.env.example` 为
+   `deploy/.env` 并填好迁移连接，再运行
+   `uv run --frozen --all-packages --env-file deploy/.env python deploy/migrate.py`。仅部署部分服务时传入
+   一个或多个 `--service <服务名>`。作业从各服务目录读取其 `.env`，统一覆盖迁移用的
+   PostgreSQL 连接。业务进程继续使用自己的数据库账号。
+3. 在每个服务目录运行 `uv run <服务名>`，或将工作目录和环境变量交给进程管理器。
+   platform 的三个进程共用其配置，分别将 `PLATFORM_APP_ROLE` 设为 `api`、
+   `worker`、`publisher`。knowledge 的两个进程分别将 `KNOWLEDGE_APP_ROLE` 设为
+   `api`、`worker`。同机角色使用不同的 `*_APP_INSTANCE`。在 Linux 或 macOS 上把
+   `OPCUA_PKI_DIR` 改为可写的持久目录。知识库的 DOCX 派生预览启用时，将
+   `KNOWLEDGE_OFFICE_PREVIEW_COMMAND` 设为本机 LibreOffice 的可执行文件；暂未安装
+   LibreOffice 时可设 `KNOWLEDGE_OFFICE_PREVIEW_ENABLED=false`。
+4. 部署 Nginx 边缘来发布前端并统一处理鉴权、API 和素材代理。同机手动部署可用
+   [宿主网关配置](nginx/dt-edge.windows.conf) 的回环上游，按部署位置修改监听端口、
+   前端 `dist` 路径、MinIO 地址和桶名，以及服务级密钥占位符。无 AI 时构建前端前
+   设置 `VITE_AI_ENABLED=false`，并将 [AI 路由限制](nginx/disable-ai.conf) 引入
+   站点 `server` 块。前端本地开发可在
+   `web/app/.env` 配置 `VITE_DEV_API_TARGET` 指向边缘后运行 `pnpm --dir web dev`。
+   宿主的进程、前端构建与 Nginx 完整接线见
+   [Windows / NSSM 部署手册](../docs/DEPLOY_WINDOWS_NSSM.md)。
 
 ### 能管取数
 
-使用默认 `compose.yml` 时在 `docker/.env` 中配置；使用 `compose.no-ai.yml` 时在
-`docker/.env.no-ai` 中配置。设置 `PLATFORM_BDM_ENABLED=true`、`PLATFORM_BDM_BASE_URL`
-和 `PLATFORM_BDM_API_KEY`，共用环境段会传给 platform 各角色。时间口径与请求预算
-由 `PLATFORM_BDM_TIMEZONE`、`PLATFORM_BDM_TIMEOUT_S`、
-`PLATFORM_BDM_LOAD_TIMEOUT_S` 配置。Key 仅由后端发送，不写入镜像或前端构建参数。
-
-使用新算子前须更新所有 platform worker，再更新 API 和前端；环境文件改动后须
-重新创建容器才能注入新值。操作与数据边界见 [能管取数](../docs/MODELING_DESIGN.md#能管取数)。
-
-### 迁移与种子
-
-迁移随 `docker compose up` 自动执行，操作方法见下方「迁移与种子（自动）」。
-数据库必须支持 TimescaleDB、pgvector 与 pg_trgm；知识库扩展安装在 `knowledge`
-schema，`KNOWLEDGE_EMBEDDING_DIMENSIONS` 必须与所用嵌入模型维数一致。
-维数变更需要专门迁移及重新解析已有文档，不能仅改环境变量。
+在实际使用的应用环境文件设置 `PLATFORM_BDM_ENABLED=true`、
+`PLATFORM_BDM_BASE_URL`、`PLATFORM_BDM_API_KEY`，按需调整时区与请求预算。
+填写 HTTP(S) origin（不含 `/api` 路径、查询参数或账号）。预算须满足
+`PLATFORM_BDM_TIMEOUT_S < PLATFORM_BDM_LOAD_TIMEOUT_S < PLATFORM_MODELING_NODE_TIMEOUT_S`。
+使用新算子前更新所有 platform worker，再更新 API 和前端。
+[能管取数](../docs/MODELING_DESIGN.md#能管取数)
 
 ### 认证管理审计来源
 
@@ -340,8 +311,7 @@ no-ai 编排固定传入 `VITE_AI_ENABLED=false`，不会从容器运行时环�
 `api` 只做读写与检索；解析、切块、嵌入、来源同步全在 `worker`
 （[ADR-0032](../docs/adr/0032-知识库独立成代码单元且LLM客户端下沉domain.md)）。
 只起 api 的表现是**检索面好好的、传上去的文档永远停在「处理中」**。
-⚠ 两个角色**共用一份 Settings**，所以对象存储那四项每个角色都要给全，
-哪怕 worker 一个字节都不读——`compose.yml` 里那两段是逐条抄齐的，改一处要改两处。
+两个角色使用同一段 Compose 环境配置，包含同一套对象存储与摄取队列参数。
 ⚠ worker **可以多副本**（消费组自动分活），这与 publisher 那种单活租约不是一回事。
 
 **pgvector 是硬依赖。** `database-migrate` 装 `vector` 与 `pg_trgm` 并建三个索引
@@ -367,7 +337,7 @@ worker 把 DOCX 派生为私有 PDF，浏览器优先画 PDF。关掉生成开�
 
 | 开关 | 关着时 |
 |---|---|
-| `KNOWLEDGE_EMBEDDING_ENABLED` | 文档照常摄取，检索**如实**回「这个库还没建索引」——不是返回空表，空表与「确实没有相关内容」长得一模一样 |
+| `KNOWLEDGE_EMBEDDING_ENABLED` | 若模型目录也未分配嵌入模型，摄取任务失败并提示缺少模型 |
 | `KNOWLEDGE_MODEL_ENABLED` | agentic 检索策略**如实不可用**，不悄悄退化成 naive |
 | `KNOWLEDGE_OFFICE_PREVIEW_ENABLED` | 不再生成新的 DOCX PDF；已有派生物仍可读，缺席时退回兼容预览 |
 | `KNOWLEDGE_MINERU_ENABLED` | 不收 PDF：上传面给的是一句点得出名字的错，而不是一份状态 ready 却检索不到的空文档 |
@@ -390,7 +360,7 @@ MinIO 保存原始上传七天，按对象最后修改时间计算。适用前�
 `upload-claims/` 认领是中断恢复的依据，应排除在生命周期规则外。
 `models/`、`images/`、`icons/`、模型历史版本和私有知识库前缀也应排除。
 
-Linux 完整栈与无 AI 栈的 `minio-init` 负责建桶及设置匿名读取策略。生命周期由
+三套 Compose 的 `minio-init` 负责建桶及设置匿名读取策略。生命周期由
 对象存储管理员在独占配置变更窗口执行，避免 MinIO 的整份配置更新与另一个写者互相覆盖。
 在该窗口内用配置好的 `mc` 别名与实际素材桶名替换下面的 `alias/bucket`。
 先将导出文件保留为回滚依据。如果服务明确返回 `NoSuchLifecycleConfiguration`，
@@ -417,9 +387,10 @@ python3 docker/minio/merge_staging_lifecycle.py --check lifecycle.after.json
 
 ## 迁移与种子（自动）
 
-一个 `database-migrate` 作业依次调用八个服务的 Alembic 链，并执行 auth/platform
+完整栈的 `database-migrate` 作业依次调用八个服务的 Alembic 链，无 AI 栈只执行六个非 AI 属主的链。两套均执行 auth/platform
 种子；全部成功后才启动后端角色。各 schema 的版本表与迁移归属保持独立，
 任一步失败立即退出，已经成功的链不会回滚；排除故障后再运行可继续推进。
+以下命令在 `docker/` 中使用完整栈的 `.env`，无 AI 栈按上文追加对应的文件参数。
 设计取舍见 [ADR-0058](../docs/adr/0058-数据库迁移由单一部署作业调度.md)。
 
 专用迁移镜像不安装 Node、LibreOffice 或业务模型工具，运行账号为非 root。

@@ -1,0 +1,88 @@
+# 独立基础设施。应用容器可加入此网络，手动运行的服务使用宿主端口。
+name: digitaltwin-storage
+
+services:
+  # PostgreSQL 同时提供 TimescaleDB、pgvector 与 pg_trgm 扩展。
+  postgres:
+    image: timescale/timescaledb:2.31.0-pg18@sha256:0fcff5761363809d1242f2261a3482197b5a5337407f8b97a976fb174206d579
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?必填}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?必填}
+      POSTGRES_DB: ${POSTGRES_DB:?必填}
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    ports: ['${STORAGE_BIND_ADDRESS:-127.0.0.1}:${STORAGE_POSTGRES_PORT:-5432}:5432']
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.10.3-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?必填}
+    command: ['sh', '-c', 'exec /usr/local/bin/docker-entrypoint.sh redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"']
+    ports: ['${STORAGE_BIND_ADDRESS:-127.0.0.1}:${STORAGE_REDIS_PORT:-6379}:6379']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -qx PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  minio:
+    image: digitaltwin/minio:2025.10.15-9e49d5e7
+    pull_policy: build
+    build:
+      context: ./minio
+      target: server
+    environment:
+      MINIO_ROOT_USER: ${OSS_ACCESS_KEY:?必填}
+      MINIO_ROOT_PASSWORD: ${OSS_SECRET_KEY:?必填}
+    command: ['server', '/data', '--console-address', ':9001']
+    ports:
+      - '${STORAGE_BIND_ADDRESS:-127.0.0.1}:${STORAGE_MINIO_API_PORT:-9000}:9000'
+      - '${STORAGE_BIND_ADDRESS:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://127.0.0.1:9000/minio/health/live']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  # 共享桶的素材暂存到期由存储管理员合并，见 docker/README.md。
+  minio-init:
+    image: digitaltwin/minio-client:2025.08.13-7394ce0d
+    pull_policy: build
+    build:
+      context: ./minio
+      target: client
+    environment:
+      OSS_ENDPOINT: http://minio:9000
+      OSS_BUCKET: ${OSS_BUCKET:-digitaltwin}
+      OSS_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
+      OSS_SECRET_KEY: ${OSS_SECRET_KEY:?必填}
+    entrypoint: ['/bin/sh', '/init-bucket.sh']
+    volumes:
+      - ./minio/init-bucket.sh:/init-bucket.sh:ro
+    depends_on:
+      minio: {condition: service_healthy}
+    restart: 'no'
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:
+
+networks:
+  default:
+    name: ${STORAGE_NETWORK_NAME:-digitaltwin-storage}

@@ -16,8 +16,8 @@
 
 ## 启动
 
-服务器部署目录为 `C:\Users\FUy\fuyang-pv-storage`，使用
-`compose.fuyang-storage.yml` 的部署副本 `compose.yml` 与私有 `.env`：
+服务器部署目录为 `C:\Users\FUy\fuyang-pv-storage`，使用该目录中的
+`compose.yml` 部署副本与私有 `.env`：
 
 ```powershell
 docker compose --project-directory C:\Users\FUy\fuyang-pv-storage up -d --pull never
@@ -25,7 +25,11 @@ docker compose --project-directory C:\Users\FUy\fuyang-pv-storage up -d --pull n
 
 PostgreSQL 与 Redis 使用已校验的镜像摘要。MinIO 使用本仓
 `docker/minio/Dockerfile` 从固定官方源码构建的 amd64 镜像，并保留镜像版本与 SHA；
-镜像已导入服务器。样例变量见 `fuyang-storage.env.example`。
+镜像已导入服务器。需要恢复旧部署文件时，从提交
+`5718db01bc7e28e1f378d42b11bfc1b056178b72` 读取
+`docker/compose.fuyang-storage.yml` 和 `docker/fuyang-storage.env.example`。
+新基础设施使用 [compose.storage.yml](compose.storage.yml)。现有数据库采用原镜像、
+主版本和数据卷挂载路径，升级需单独迁移。
 
 本地使用已更新的私有配置启动同一套应用角色：
 

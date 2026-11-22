@@ -681,7 +681,8 @@ platform-server 已经把 `tzdata` 声明成依赖，`uv sync` 会带上；**若
 ### 5.5 每个服务一份 `.env`
 
 配置的来源是**服务目录下的 `.env`**（进程的 CWD 由 nssm 的 `AppDirectory` 指定，
-见 §7）。七个服务各自带一份 `.env.example`，列全了那个服务的**全部**变量：
+见 §7）。各服务都有自己的 `.env.example`。下例复制默认部署的七份配置，
+启用层级图时将 `hierarchy-server` 加入列表。
 
 ```powershell
 $svc = 'C:\DigitalTwin\app\server\services'
@@ -723,25 +724,26 @@ NSSM 的 `AppEnvironmentExtra` 则直接接收 `KEY=VALUE`，没有 dotenv 的�
 icacls C:\DigitalTwin\app\server\services\*\.env /inheritance:r /grant "SYSTEM:(R)" /grant "Administrators:(F)"
 ```
 
-### 5.6 七份独立 `.env.example`
+### 5.6 服务环境变量模板
 
 每个代码单元一份，覆盖该服务当前 Settings 的全部字段；auth 另含初始化管理员的
 三项配置。模板使用回环地址、独立实例名和 Windows 路径，可按 §5.5 复制。
 数据库用户 `postgres`、库名 `dt_db` 是与本手册一致的示例，按实际部署修改。
 
-| 模板 | 变量数 | 必须填写或确认 |
-|---|---|---|
-| [auth-server](../server/services/auth-server/.env.example) | 44 | 数据库密码、JWT 与两个边缘密钥、首次初始化的管理员密码 |
-| [platform-server](../server/services/platform-server/.env.example) | 120 | 数据库与 EMS 配置、两个边缘密钥、采集口令加密密钥、对象存储凭据；启用模型目录时填写供应商加密密钥 |
-| [collector-server](../server/services/collector-server/.env.example) | 46 | 数据库密码、与平台一致的服务级密钥；按实际需要配置 PLC/HTTP 允许清单 |
-| [opcua-server](../server/services/opcua-server/.env.example) | 35 | 数据库密码、两个边缘密钥、PKI 目录与 opc.tcp 端口段 |
-| [realtime-hub](../server/services/realtime-hub/.env.example) | 39 | 数据库密码、与 auth 一致的 JWT 与两个边缘密钥 |
-| [ai-assistant](../server/services/ai-assistant/.env.example) | 65 | 数据库密码、两个边缘密钥；接模型见 §5.7 |
-| [knowledge-server](../server/services/knowledge-server/.env.example) | 86 | 数据库密码、两个边缘密钥、对象存储凭据、LibreOffice 路径；模型与解析见 §5.8 |
+| 模板 | 必须填写或确认 |
+|---|---|
+| [auth-server](../server/services/auth-server/.env.example) | 数据库密码、JWT 与两个边缘密钥、首次初始化的管理员密码 |
+| [platform-server](../server/services/platform-server/.env.example) | 数据库与 EMS 配置、两个边缘密钥、采集口令加密密钥、对象存储凭据；启用模型目录时填写供应商加密密钥 |
+| [collector-server](../server/services/collector-server/.env.example) | 数据库密码、与平台一致的服务级密钥；按实际需要配置 PLC/HTTP 允许清单 |
+| [opcua-server](../server/services/opcua-server/.env.example) | 数据库密码、两个边缘密钥、PKI 目录与 opc.tcp 端口段 |
+| [realtime-hub](../server/services/realtime-hub/.env.example) | 数据库密码、与 auth 一致的 JWT 与两个边缘密钥 |
+| [ai-assistant](../server/services/ai-assistant/.env.example) | 数据库密码、两个边缘密钥；接模型见 §5.7 |
+| [knowledge-server](../server/services/knowledge-server/.env.example) | 数据库密码、两个边缘密钥、对象存储凭据、LibreOffice 路径；模型与解析见 §5.8 |
+| [hierarchy-server](../server/services/hierarchy-server/.env.example) | 可选层级图使用的数据库密码与两个边缘密钥 |
 
 必填密码与密钥留空，不提供共用的开发密码；按注释逐项填写。可选密钥写 `null`
-表示未配置，启用对应能力时改成真实值。有密码的 Redis 必须把每份
-`*_REDIS_PASSWORD=null` 改为实际密码。
+表示未配置，启用对应能力时取消注释并填入真实值。有密码的 Redis 须在各服务模板中
+启用 `*_REDIS_PASSWORD` 并填入实际值。
 
 `.env.example` 提交进仓，实际 `.env` 被 `.gitignore` 排除；克隆后按 §5.5 创建配置，
 再按 §5.1 生成密钥。升级时保留已有 `.env` 的值，对照模板补配置，并确认编码仍是

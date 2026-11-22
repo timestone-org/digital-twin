@@ -18,9 +18,6 @@ import { umoAssets } from './vite-plugins/umoAssets'
  * 开发期上传与模型加载一律落到 vite 自己身上，得到的是 index.html 而不是 404，
  * 于是错误发生在解析 GLB 的地方，看着像素材坏了。
  */
-const DEV_API_TARGET =
-  process.env.VITE_DEV_API_TARGET ?? 'http://127.0.0.1:8080'
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(
     mode,
@@ -29,6 +26,7 @@ export default defineConfig(({ mode }) => {
   )
   parseLiveCardLimit(env.VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS)
   parseAiEnabled(env.VITE_AI_ENABLED)
+  const devApiTarget = env.VITE_DEV_API_TARGET ?? 'http://127.0.0.1:8080'
   return {
     base: '/ai/',
     worker: { format: 'es' },
@@ -50,8 +48,8 @@ export default defineConfig(({ mode }) => {
         // Upgrade 根本不会转给边缘——它落到 vite 自己那条只认 `vite-hmr` 的
         // 升级处理上，被静默丢掉。表现是开发期握手永远不完成、全部实时推送
         // （大屏 / 采集配置页 / OPC UA 节点值）一起没有值，而 HTTP 面完全正常。
-        '/api': { target: DEV_API_TARGET, changeOrigin: true, ws: true },
-        '/oss': { target: DEV_API_TARGET, changeOrigin: true },
+        '/api': { target: devApiTarget, changeOrigin: true, ws: true },
+        '/oss': { target: devApiTarget, changeOrigin: true },
       },
     },
     build: {
