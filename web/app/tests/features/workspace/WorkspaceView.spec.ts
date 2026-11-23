@@ -489,47 +489,87 @@ function chooseConfirmation(label: string): void {
   button.click()
 }
 
-it('关闭全部必须先确认，取消确认不关闭任何页签', async () => {
+it('批量关闭必须先确认，确认后保留当前页签及草稿', async () => {
   const { wrapper, router } = await setup()
   await router.push('/dashboards/b/edit')
   await flushPromises()
-  await wrapper.get('[aria-label="关闭全部页签"]').trigger('click')
+  await wrapper.get('input').setValue('当前页草稿 B')
+  await wrapper.get('[aria-label="关闭其他页签"]').trigger('click')
   await flushPromises()
-  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
-    '关闭所有已打开的页面',
-  )
   expect(document.querySelector('.dt-modal__backdrop')).toBeNull()
   expect(unmounted).not.toHaveBeenCalled()
   chooseConfirmation('取消')
   await flushPromises()
   expect(wrapper.findAll('nav[aria-label="已打开页面"] a')).toHaveLength(2)
-  await wrapper.get('[aria-label="关闭全部页签"]').trigger('click')
+  await wrapper.get('[aria-label="关闭其他页签"]').trigger('click')
   await flushPromises()
-  chooseConfirmation('关闭全部')
+  chooseConfirmation('关闭其他')
   await flushPromises()
-  expect(router.currentRoute.value.path).toBe('/')
+  expect(router.currentRoute.value.path).toBe('/dashboards/b/edit')
   expect(unmounted).toHaveBeenCalledWith('a')
-  expect(unmounted).toHaveBeenCalledWith('b')
+  expect(unmounted).not.toHaveBeenCalledWith('b')
+  expect(confirmLeave).not.toHaveBeenCalled()
+  expect(wrapper.get('input').element.value).toBe('当前页草稿 B')
+  expect(wrapper.findAll('nav[aria-label="已打开页面"] a')).toHaveLength(1)
   wrapper.unmount()
 })
 
-it('确认关闭全部之后仍保护脏草稿，取消丢弃时停止关闭', async () => {
+it('确认批量关闭之后仍保护后台草稿，取消丢弃时停止关闭', async () => {
   const { wrapper, router } = await setup()
   await wrapper.get('input').setValue('草稿 A')
   await router.push('/dashboards/b/edit')
   await flushPromises()
   confirmLeave.mockResolvedValueOnce(false)
-  await wrapper.get('[aria-label="关闭全部页签"]').trigger('click')
+  await wrapper.get('[aria-label="关闭其他页签"]').trigger('click')
   await flushPromises()
-  chooseConfirmation('关闭全部')
+  chooseConfirmation('关闭其他')
   await flushPromises()
   expect(wrapper.findAll('nav[aria-label="已打开页面"] a')).toHaveLength(2)
   wrapper.unmount()
 })
 
+it('等待关闭确认时切到目标页签会保留该页与草稿', async () => {
+  const { wrapper, router } = await setup()
+  await wrapper.get('input').setValue('后台草稿 A')
+  await router.push('/dashboards/b/edit')
+  await flushPromises()
+  const guard = delayedGuard()
+  confirmLeave.mockReturnValueOnce(guard.result)
+  await wrapper.get('[aria-label="关闭其他页签"]').trigger('click')
+  await flushPromises()
+  chooseConfirmation('关闭其他')
+  await flushPromises()
+  expect(confirmLeave).toHaveBeenCalledOnce()
+
+  await router.push('/dashboards/a/edit')
+  guard.finish(true)
+  await flushPromises()
+  expect(router.currentRoute.value.path).toBe('/dashboards/a/edit')
+  expect(wrapper.get('input').element.value).toBe('后台草稿 A')
+  expect(unmounted).not.toHaveBeenCalled()
+  wrapper.unmount()
+})
+
+it('只有当前页与固定工作台时禁用批量关闭', async () => {
+  const { wrapper, router } = await setup()
+  expect(
+    wrapper.get('[aria-label="关闭其他页签"]').attributes('disabled'),
+  ).toBeDefined()
+  await router.push('/')
+  await router.push('/dashboards/a/edit')
+  await flushPromises()
+  expect(wrapper.findAll('nav[aria-label="已打开页面"] a')).toHaveLength(2)
+  expect(
+    wrapper.get('[aria-label="关闭其他页签"]').attributes('disabled'),
+  ).toBeDefined()
+  wrapper.unmount()
+})
+
 it('离开当前页或再次点触发按钮会取消气泡确认', async () => {
   const { wrapper, router } = await setup()
-  const trigger = wrapper.get('[aria-label="关闭全部页签"]')
+  await router.push('/dashboards/b/edit')
+  await flushPromises()
+  const trigger = wrapper.get('[aria-label="关闭其他页签"]')
   await trigger.trigger('click')
   await flushPromises()
   expect(document.querySelector('.dt-confirm-bubble')).not.toBeNull()
