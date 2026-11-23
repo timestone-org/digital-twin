@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** @fileoverview 顶栏与内容交界处的居中页签，超宽滚动及关闭全部确认。 */
+/** @fileoverview 顶栏与内容交界处的居中页签，超宽滚动及批量关闭确认。 */
 import {
   computed,
   onActivated,
@@ -21,7 +21,11 @@ const strip = ref<HTMLElement | null>(null)
 const isConfirming = ref(false)
 const confirmAnchor = shallowRef<HTMLElement | null>(null)
 const items = computed(() => workspace?.tabs.value ?? [])
-const canCloseAll = computed(() => items.value.some((tab) => tab.key !== '/'))
+const canCloseOthers = computed(() =>
+  items.value.some(
+    (tab) => tab.key !== '/' && tab.key !== workspace?.activeKey.value,
+  ),
+)
 
 function revealActive(): void {
   strip.value
@@ -37,8 +41,9 @@ function scrollTabs(event: WheelEvent): void {
   event.preventDefault()
 }
 
-async function closeAll(event: MouseEvent): Promise<void> {
-  if (workspace === null || workspace.closing.value) return
+async function closeOthers(event: MouseEvent): Promise<void> {
+  if (workspace === null || workspace.closing.value || !canCloseOthers.value)
+    return
   if (isConfirming.value) {
     cancelOwnConfirmation()
     return
@@ -49,15 +54,15 @@ async function closeAll(event: MouseEvent): Promise<void> {
   try {
     const accepted = await confirm.ask(
       {
-        title: '关闭全部页签',
-        message: '关闭所有已打开的页面并返回工作台。未保存的改动会另行确认。',
-        confirmText: '关闭全部',
+        title: '关闭其他页签',
+        message: '保留当前页面，关闭其他页签。未保存的改动会另行确认。',
+        confirmText: '关闭其他',
         cancelText: '取消',
         danger: true,
       },
       confirmAnchor.value ?? undefined,
     )
-    if (accepted) await workspace.closeAll()
+    if (accepted) await workspace.closeOthers()
   } finally {
     isConfirming.value = false
     confirmAnchor.value = null
@@ -131,13 +136,13 @@ watch(() => workspace?.activeKey.value, revealActive, { flush: 'post' })
         variant="ghost"
         size="sm"
         intent="neutral"
-        class="workspace-tabs__close-all"
-        aria-label="关闭全部页签"
-        title="关闭全部页签"
-        :disabled="!canCloseAll || workspace.closing.value"
+        class="workspace-tabs__close-others"
+        aria-label="关闭其他页签"
+        title="关闭其他页签"
+        :disabled="!canCloseOthers || workspace.closing.value"
         aria-haspopup="dialog"
         :aria-expanded="isConfirming"
-        @click="void closeAll($event)"
+        @click="void closeOthers($event)"
       />
     </div>
   </div>
@@ -302,7 +307,7 @@ watch(() => workspace?.activeKey.value, revealActive, { flush: 'post' })
 @media (prefers-reduced-motion: reduce) {
   .workspace-tabs__item,
   .workspace-tabs__close,
-  .workspace-tabs__close-all {
+  .workspace-tabs__close-others {
     transition: none;
   }
 }

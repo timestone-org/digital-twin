@@ -89,11 +89,11 @@ export class WorkspaceTabs implements Workspace {
     return this.closeKeys([key])
   }
 
-  closeAll(): Promise<void> {
+  closeOthers(): Promise<void> {
     const otherKeys = this.tabs.value
-      .filter((tab) => tab.key !== this.activeKey.value)
+      .filter((tab) => tab.key !== '/' && tab.key !== this.activeKey.value)
       .map((tab) => tab.key)
-    return this.closeKeys([...otherKeys, this.activeKey.value])
+    return this.closeKeys(otherKeys, true)
   }
 
   confirmLogout(): Promise<boolean> {
@@ -189,10 +189,11 @@ export class WorkspaceTabs implements Workspace {
     )
   }
 
-  private async remove(key: string): Promise<boolean> {
+  private async remove(key: string, preserveActive: boolean): Promise<boolean> {
     const tab = this.tabs.value.find((entry) => entry.key === key)
     if (tab === undefined || key === '/') return true
     if (!(await this.approveClose(tab))) return false
+    if (preserveActive && this.activeKey.value === key) return true
     this.approvedClose.add(tab.generation)
     try {
       if (this.activeKey.value === key && !(await this.leaveCurrent(key)))
@@ -209,10 +210,14 @@ export class WorkspaceTabs implements Workspace {
     return true
   }
 
-  private async closeKeys(keys: readonly string[]): Promise<void> {
+  private async closeKeys(
+    keys: readonly string[],
+    preserveActive = false,
+  ): Promise<void> {
     await this.runClosing('close', async () => {
       for (const key of keys) {
-        if (!(await this.remove(key))) return false
+        if (preserveActive && this.activeKey.value === key) continue
+        if (!(await this.remove(key, preserveActive))) return false
       }
       return true
     })

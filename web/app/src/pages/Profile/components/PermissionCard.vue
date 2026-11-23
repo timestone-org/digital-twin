@@ -1,8 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 工作台的「我的权限」卡：计数、角色来源、码清单。
- * 只做展示，取数在页面里。
- */
+/** @fileoverview 个人资料页的权限计数、角色来源与权限码清单。 */
 import { DtCard, DtTag } from '@dt/ui'
 
 defineProps<{
@@ -14,27 +11,34 @@ defineProps<{
 </script>
 
 <template>
-  <DtCard title="我的权限" icon="key-round" corners>
-    <dl class="mb-4 grid grid-cols-3 gap-3" aria-label="权限计数">
-      <div
-        v-for="stat in stats"
-        :key="stat.key"
-        class="rounded-md border border-border-subtle bg-surface-sunken px-3 py-2"
-      >
+  <DtCard title="我的权限" icon="key-round">
+    <dl
+      class="m-0 mb-3 grid grid-cols-3 gap-3 border-b border-border-subtle pb-3"
+      aria-label="权限计数"
+    >
+      <div v-for="stat in stats" :key="stat.key">
+        <dt class="m-0 text-2xs text-text-disabled">{{ stat.label }}</dt>
         <dd
-          class="font-display m-0 text-xl font-semibold text-accent-secondary"
+          class="m-0 mt-0.5 text-lg font-semibold text-text-title tabular-nums"
         >
           {{ stat.value }}
         </dd>
-        <dt class="m-0 text-2xs text-text-disabled">{{ stat.label }}</dt>
       </div>
     </dl>
 
-    <p class="m-0 mb-2 text-[13px] leading-relaxed text-text-secondary">
-      角色权限来自
-      <strong class="font-medium text-text-primary">{{ roleName }}</strong>
-      ，单独授予的直权叠加在它之上。
-    </p>
+    <div
+      class="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-text-secondary"
+    >
+      <span
+        >角色权限来自
+        <strong class="font-medium text-text-primary">{{
+          roleName
+        }}</strong></span
+      >
+      <span v-if="directCodes.length" class="text-2xs text-text-disabled"
+        >高亮标签为单独授予的权限</span
+      >
+    </div>
 
     <div class="flex flex-wrap gap-1.5">
       <DtTag v-for="code in roleCodes" :key="`role-${code}`" mono>
@@ -55,9 +59,5 @@ defineProps<{
         当前账号没有任何权限码
       </span>
     </div>
-
-    <p v-if="directCodes.length" class="m-0 mt-3 text-2xs text-text-disabled">
-      高亮的是直权：它绕过角色单独授予，改派角色也带不走。
-    </p>
   </DtCard>
 </template>
