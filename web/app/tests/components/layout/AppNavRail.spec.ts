@@ -39,7 +39,7 @@ it('菜单形态显示完整导航且不改变桌面折叠偏好', () => {
   wrapper.unmount()
 })
 
-function signIn(codes: string[], fullName = '管理员'): void {
+function signIn(codes: string[], fullName: string | null = '管理员'): void {
   const auth = useAuthStore()
   auth.user = {
     username: 'admin',
@@ -310,9 +310,21 @@ describe('AppNavRail · 品牌与账号', () => {
     expect(mount(AppNavRail).text()).toContain('?')
   })
 
-  it('展开态里头像旁写出账号与角色', () => {
-    expect(render([]).text()).toContain('管理员 · admin')
-  })
+  it.each([
+    { fullName: '管理员', expected: '管理员' },
+    { fullName: '', expected: 'admin' },
+    { fullName: null, expected: 'admin' },
+  ])(
+    '展开态的账号显示名为 $expected（姓名 $fullName）',
+    ({ fullName, expected }) => {
+      signIn([], fullName)
+      const avatar = mount(AppNavRail).get('a[href="/profile"]')
+      expect(avatar.attributes('title')).toBe(expected)
+      expect(avatar.element.nextElementSibling?.textContent?.trim()).toBe(
+        expected,
+      )
+    },
+  )
 
   it('登出后跳登录页', async () => {
     vi.spyOn(authApi, 'revokeSession').mockResolvedValue()

@@ -52,15 +52,9 @@ function isActive(to: string | undefined): boolean {
 }
 
 const userInitial = computed(() =>
-  (auth.user?.full_name || auth.user?.username || '?')
-    .slice(0, 1)
-    .toUpperCase(),
+  (auth.displayName || '?').slice(0, 1).toUpperCase(),
 )
-const userTitle = computed(() => {
-  const name = auth.user?.full_name || auth.user?.username || '未登录'
-  const role = auth.user?.role?.name
-  return role ? `${name} · ${role}` : name
-})
+const userTitle = computed(() => auth.displayName || '未登录')
 
 const toggleLabel = computed(() =>
   isCollapsed.value ? '展开侧栏' : '折叠侧栏',

@@ -173,21 +173,14 @@ async function onChangePassword(): Promise<void> {
 <template>
   <AppShell title="个人资料" subtitle="身份、权限与账号设置">
     <!-- main 不滚了，这一页自己吃满高度并在内部滚 -->
-    <div class="flex h-full min-h-0 flex-col gap-5 overflow-y-auto pr-1">
+    <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto pr-1">
       <IdentityCard :user="auth.user" />
 
-      <PermissionCard
-        :stats="permissionStats"
-        :role-name="auth.user?.role?.name ?? '—'"
-        :role-codes="roleCodes"
-        :direct-codes="directCodes"
-      />
-
-      <div class="grid gap-5 lg:grid-cols-2">
-        <DtCard title="个人资料" icon="user" corners>
+      <div class="grid gap-4 lg:grid-cols-2">
+        <DtCard title="编辑资料" icon="user" class="flex min-w-0 flex-col">
           <!-- novalidate：邮箱格式交给服务端判，回中文原因；浏览器自带的英文气泡不一致 -->
           <form
-            class="flex flex-col items-stretch gap-4"
+            class="flex flex-1 flex-col gap-4"
             novalidate
             @submit.prevent="onSaveProfile"
           >
@@ -202,7 +195,8 @@ async function onChangePassword(): Promise<void> {
             <DtInput v-model="profile.phone" label="手机号" size="sm" />
             <DtButton
               type="submit"
-              class="self-start"
+              size="sm"
+              class="mt-auto self-start"
               :loading="profileState.busy"
             >
               保存
@@ -216,9 +210,9 @@ async function onChangePassword(): Promise<void> {
           </form>
         </DtCard>
 
-        <DtCard title="修改密码" icon="key-round" corners>
+        <DtCard title="修改密码" icon="key-round" class="flex min-w-0 flex-col">
           <form
-            class="flex flex-col items-stretch gap-4"
+            class="flex flex-1 flex-col gap-4"
             @submit.prevent="onChangePassword"
           >
             <DtInput
@@ -245,7 +239,8 @@ async function onChangePassword(): Promise<void> {
             />
             <DtButton
               type="submit"
-              class="self-start"
+              size="sm"
+              class="mt-auto self-start"
               :loading="passwordState.busy"
             >
               修改密码
@@ -259,6 +254,13 @@ async function onChangePassword(): Promise<void> {
           </form>
         </DtCard>
       </div>
+
+      <PermissionCard
+        :stats="permissionStats"
+        :role-name="auth.user?.role?.name ?? '—'"
+        :role-codes="roleCodes"
+        :direct-codes="directCodes"
+      />
     </div>
   </AppShell>
 </template>

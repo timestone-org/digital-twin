@@ -38,6 +38,18 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+it('使用标准卡片，账号设置排在权限清单之前', async () => {
+  vi.spyOn(authApi, 'fetchMe').mockResolvedValue(user('old@x.com'))
+  const wrapper = mount(ProfilePage)
+  await flushPromises()
+
+  expect(wrapper.findAll('.dt-card')).toHaveLength(4)
+  expect(wrapper.find('.dt-card__corner').exists()).toBe(false)
+  expect(
+    wrapper.findAll('.dt-card__title').map((title) => title.text()),
+  ).toEqual(['编辑资料', '修改密码', '我的权限'])
+})
+
 describe('个人资料表单回填', () => {
   it('对齐到新邮箱后表单跟着换，保存时提交的是新值', async () => {
     vi.spyOn(authApi, 'fetchMe').mockResolvedValue(user('new@x.com'))
