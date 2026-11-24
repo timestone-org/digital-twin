@@ -1,11 +1,11 @@
 {
   "table": {
-    "code": "fuyang_compressed_air_minute",
-    "name": "阜阳空压站分钟台账",
+    "code": "fuyang_air_minute_live",
+    "name": "阜阳空压系统分钟台账",
     "collect_mode": "aggregate",
     "collect_interval_ms": 60000,
     "is_enabled": true,
-    "description": "累计表相邻分钟差分与同分钟电功率核算。只有 2# 和 3# 已核验累计量。"
+    "description": "空压系统大屏所需的现场功率、排气压力、气电比及产气估算。"
   },
   "columns": [
     {
@@ -81,42 +81,6 @@
       "decimals": 3
     },
     {
-      "key": "volume_2",
-      "name": "2# 累计末值",
-      "source": "point",
-      "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_CO2_KYJ2_FT_LJ",
-      "agg": "last",
-      "unit": null,
-      "decimals": 3
-    },
-    {
-      "key": "rpm_2",
-      "name": "2# 平均实际转速",
-      "source": "point",
-      "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_CO_KYJ2_JDAS",
-      "agg": "avg",
-      "unit": "r/min",
-      "decimals": 3
-    },
-    {
-      "key": "volume_3",
-      "name": "3# 累计末值",
-      "source": "point",
-      "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_CO2_KYJ3_FT_LJ",
-      "agg": "last",
-      "unit": null,
-      "decimals": 3
-    },
-    {
-      "key": "rpm_3",
-      "name": "3# 平均实际转速",
-      "source": "point",
-      "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_CO2_KYJ3_JDAS",
-      "agg": "avg",
-      "unit": "r/min",
-      "decimals": 3
-    },
-    {
       "key": "aux_1",
       "name": "冷却辅机 1 功率",
       "source": "point",
@@ -132,46 +96,6 @@
       "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA212_5_P",
       "agg": "avg",
       "unit": "kW",
-      "decimals": 3
-    },
-    {
-      "key": "flow_2",
-      "name": "2# 分钟产气量",
-      "source": "formula",
-      "formula": "IF(AND(COUNT_OVER({volume_2}, '2m') == 2, {volume_2} >= PREV({volume_2})), {volume_2} - PREV({volume_2}), None)",
-      "unit": "m³/min",
-      "decimals": 3
-    },
-    {
-      "key": "eta_2",
-      "name": "2# 分钟气电比",
-      "source": "formula",
-      "formula": "IF({power_2} >= 1, 60 * {flow_2} / {power_2}, None)",
-      "unit": "m³/kWh",
-      "decimals": 3
-    },
-    {
-      "key": "flow_3",
-      "name": "3# 分钟产气量",
-      "source": "formula",
-      "formula": "IF(AND(COUNT_OVER({volume_3}, '2m') == 2, {volume_3} >= PREV({volume_3})), {volume_3} - PREV({volume_3}), None)",
-      "unit": "m³/min",
-      "decimals": 3
-    },
-    {
-      "key": "eta_3",
-      "name": "3# 分钟气电比",
-      "source": "formula",
-      "formula": "IF({power_3} >= 1, 60 * {flow_3} / {power_3}, None)",
-      "unit": "m³/kWh",
-      "decimals": 3
-    },
-    {
-      "key": "flow_metered",
-      "name": "2# 与 3# 计量产气量",
-      "source": "formula",
-      "formula": "{flow_2} + {flow_3}",
-      "unit": "m³/min",
       "decimals": 3
     },
     {
@@ -191,195 +115,67 @@
       "decimals": 3
     },
     {
-      "key": "q_2_band_1",
-      "name": "2# 档1 产气样本",
+      "key": "site_qdb_1",
+      "name": "1# 现场气电比均值",
+      "source": "point",
+      "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_KYJ1_QDB",
+      "agg": "avg",
+      "decimals": 3
+    },
+    {
+      "key": "site_qdb_2",
+      "name": "2# 现场气电比均值",
+      "source": "point",
+      "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_KYJ2_QDB",
+      "agg": "avg",
+      "decimals": 3
+    },
+    {
+      "key": "site_qdb_3",
+      "name": "3# 现场气电比均值",
+      "source": "point",
+      "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_KYJ3_QDB",
+      "agg": "avg",
+      "decimals": 3
+    },
+    {
+      "key": "site_qdb_4",
+      "name": "4# 现场气电比均值",
+      "source": "point",
+      "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_KYJ4_QDB",
+      "agg": "avg",
+      "decimals": 3
+    },
+    {
+      "key": "flow_est_1",
+      "name": "1# 估算产气（分钟均值口径）",
       "source": "formula",
-      "formula": "IF(AND({rpm_2} > 0, {rpm_2} < 1400, {pressure_2} >= 0.630, {pressure_2} <= 0.660, {power_2} >= 20, {flow_2} >= 2), {flow_2}, None)",
+      "formula": "{power_1} * {site_qdb_1} / 60",
       "unit": "m³/min",
       "decimals": 3
     },
     {
-      "key": "w_2_band_1",
-      "name": "2# 档1 功率样本",
+      "key": "flow_est_2",
+      "name": "2# 估算产气（分钟均值口径）",
       "source": "formula",
-      "formula": "IF(AND({rpm_2} > 0, {rpm_2} < 1400, {pressure_2} >= 0.630, {pressure_2} <= 0.660, {power_2} >= 20, {flow_2} >= 2), {power_2}, None)",
-      "unit": "kW",
-      "decimals": 3
-    },
-    {
-      "key": "eta_2_band_1",
-      "name": "2# 档1 三日气电比",
-      "source": "formula",
-      "formula": "IF(COUNT_OVER({q_2_band_1}, '3d') >= 5, 60 * SUM_OVER({q_2_band_1}, '3d') / SUM_OVER({w_2_band_1}, '3d'), None)",
-      "unit": "m³/kWh",
-      "decimals": 3
-    },
-    {
-      "key": "q_2_band_2",
-      "name": "2# 档2 产气样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_2} >= 1400, {rpm_2} < 1900, {pressure_2} >= 0.630, {pressure_2} <= 0.660, {power_2} >= 20, {flow_2} >= 2), {flow_2}, None)",
+      "formula": "{power_2} * {site_qdb_2} / 60",
       "unit": "m³/min",
       "decimals": 3
     },
     {
-      "key": "w_2_band_2",
-      "name": "2# 档2 功率样本",
+      "key": "flow_est_3",
+      "name": "3# 估算产气（分钟均值口径）",
       "source": "formula",
-      "formula": "IF(AND({rpm_2} >= 1400, {rpm_2} < 1900, {pressure_2} >= 0.630, {pressure_2} <= 0.660, {power_2} >= 20, {flow_2} >= 2), {power_2}, None)",
-      "unit": "kW",
-      "decimals": 3
-    },
-    {
-      "key": "eta_2_band_2",
-      "name": "2# 档2 三日气电比",
-      "source": "formula",
-      "formula": "IF(COUNT_OVER({q_2_band_2}, '3d') >= 5, 60 * SUM_OVER({q_2_band_2}, '3d') / SUM_OVER({w_2_band_2}, '3d'), None)",
-      "unit": "m³/kWh",
-      "decimals": 3
-    },
-    {
-      "key": "q_2_band_3",
-      "name": "2# 档3 产气样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_2} >= 1900, {rpm_2} < 2400, {pressure_2} >= 0.630, {pressure_2} <= 0.660, {power_2} >= 20, {flow_2} >= 2), {flow_2}, None)",
+      "formula": "{power_3} * {site_qdb_3} / 60",
       "unit": "m³/min",
       "decimals": 3
     },
     {
-      "key": "w_2_band_3",
-      "name": "2# 档3 功率样本",
+      "key": "flow_est_4",
+      "name": "4# 估算产气（分钟均值口径）",
       "source": "formula",
-      "formula": "IF(AND({rpm_2} >= 1900, {rpm_2} < 2400, {pressure_2} >= 0.630, {pressure_2} <= 0.660, {power_2} >= 20, {flow_2} >= 2), {power_2}, None)",
-      "unit": "kW",
-      "decimals": 3
-    },
-    {
-      "key": "eta_2_band_3",
-      "name": "2# 档3 三日气电比",
-      "source": "formula",
-      "formula": "IF(COUNT_OVER({q_2_band_3}, '3d') >= 5, 60 * SUM_OVER({q_2_band_3}, '3d') / SUM_OVER({w_2_band_3}, '3d'), None)",
-      "unit": "m³/kWh",
-      "decimals": 3
-    },
-    {
-      "key": "q_2_band_4",
-      "name": "2# 档4 产气样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_2} >= 2400, {pressure_2} >= 0.630, {pressure_2} <= 0.660, {power_2} >= 20, {flow_2} >= 2), {flow_2}, None)",
+      "formula": "{power_4} * {site_qdb_4} / 60",
       "unit": "m³/min",
-      "decimals": 3
-    },
-    {
-      "key": "w_2_band_4",
-      "name": "2# 档4 功率样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_2} >= 2400, {pressure_2} >= 0.630, {pressure_2} <= 0.660, {power_2} >= 20, {flow_2} >= 2), {power_2}, None)",
-      "unit": "kW",
-      "decimals": 3
-    },
-    {
-      "key": "eta_2_band_4",
-      "name": "2# 档4 三日气电比",
-      "source": "formula",
-      "formula": "IF(COUNT_OVER({q_2_band_4}, '3d') >= 5, 60 * SUM_OVER({q_2_band_4}, '3d') / SUM_OVER({w_2_band_4}, '3d'), None)",
-      "unit": "m³/kWh",
-      "decimals": 3
-    },
-    {
-      "key": "q_3_band_1",
-      "name": "3# 档1 产气样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_3} > 0, {rpm_3} < 1900, {pressure_3} >= 0.630, {pressure_3} <= 0.660, {power_3} >= 20, {flow_3} >= 2), {flow_3}, None)",
-      "unit": "m³/min",
-      "decimals": 3
-    },
-    {
-      "key": "w_3_band_1",
-      "name": "3# 档1 功率样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_3} > 0, {rpm_3} < 1900, {pressure_3} >= 0.630, {pressure_3} <= 0.660, {power_3} >= 20, {flow_3} >= 2), {power_3}, None)",
-      "unit": "kW",
-      "decimals": 3
-    },
-    {
-      "key": "eta_3_band_1",
-      "name": "3# 档1 三日气电比",
-      "source": "formula",
-      "formula": "IF(COUNT_OVER({q_3_band_1}, '3d') >= 5, 60 * SUM_OVER({q_3_band_1}, '3d') / SUM_OVER({w_3_band_1}, '3d'), None)",
-      "unit": "m³/kWh",
-      "decimals": 3
-    },
-    {
-      "key": "q_3_band_2",
-      "name": "3# 档2 产气样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_3} >= 1900, {rpm_3} < 2800, {pressure_3} >= 0.630, {pressure_3} <= 0.660, {power_3} >= 20, {flow_3} >= 2), {flow_3}, None)",
-      "unit": "m³/min",
-      "decimals": 3
-    },
-    {
-      "key": "w_3_band_2",
-      "name": "3# 档2 功率样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_3} >= 1900, {rpm_3} < 2800, {pressure_3} >= 0.630, {pressure_3} <= 0.660, {power_3} >= 20, {flow_3} >= 2), {power_3}, None)",
-      "unit": "kW",
-      "decimals": 3
-    },
-    {
-      "key": "eta_3_band_2",
-      "name": "3# 档2 三日气电比",
-      "source": "formula",
-      "formula": "IF(COUNT_OVER({q_3_band_2}, '3d') >= 5, 60 * SUM_OVER({q_3_band_2}, '3d') / SUM_OVER({w_3_band_2}, '3d'), None)",
-      "unit": "m³/kWh",
-      "decimals": 3
-    },
-    {
-      "key": "q_3_band_3",
-      "name": "3# 档3 产气样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_3} >= 2800, {rpm_3} < 3700, {pressure_3} >= 0.630, {pressure_3} <= 0.660, {power_3} >= 20, {flow_3} >= 2), {flow_3}, None)",
-      "unit": "m³/min",
-      "decimals": 3
-    },
-    {
-      "key": "w_3_band_3",
-      "name": "3# 档3 功率样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_3} >= 2800, {rpm_3} < 3700, {pressure_3} >= 0.630, {pressure_3} <= 0.660, {power_3} >= 20, {flow_3} >= 2), {power_3}, None)",
-      "unit": "kW",
-      "decimals": 3
-    },
-    {
-      "key": "eta_3_band_3",
-      "name": "3# 档3 三日气电比",
-      "source": "formula",
-      "formula": "IF(COUNT_OVER({q_3_band_3}, '3d') >= 5, 60 * SUM_OVER({q_3_band_3}, '3d') / SUM_OVER({w_3_band_3}, '3d'), None)",
-      "unit": "m³/kWh",
-      "decimals": 3
-    },
-    {
-      "key": "q_3_band_4",
-      "name": "3# 档4 产气样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_3} >= 3700, {pressure_3} >= 0.630, {pressure_3} <= 0.660, {power_3} >= 20, {flow_3} >= 2), {flow_3}, None)",
-      "unit": "m³/min",
-      "decimals": 3
-    },
-    {
-      "key": "w_3_band_4",
-      "name": "3# 档4 功率样本",
-      "source": "formula",
-      "formula": "IF(AND({rpm_3} >= 3700, {pressure_3} >= 0.630, {pressure_3} <= 0.660, {power_3} >= 20, {flow_3} >= 2), {power_3}, None)",
-      "unit": "kW",
-      "decimals": 3
-    },
-    {
-      "key": "eta_3_band_4",
-      "name": "3# 档4 三日气电比",
-      "source": "formula",
-      "formula": "IF(COUNT_OVER({q_3_band_4}, '3d') >= 5, 60 * SUM_OVER({q_3_band_4}, '3d') / SUM_OVER({w_3_band_4}, '3d'), None)",
-      "unit": "m³/kWh",
       "decimals": 3
     }
   ]

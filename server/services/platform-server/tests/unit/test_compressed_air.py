@@ -3,6 +3,9 @@
 from collections.abc import Sequence
 from uuid import UUID
 
+import pytest
+from pydantic import ValidationError
+
 from platform_server.apps.collect.services.snapshot_source import PointReading
 from platform_server.apps.compressed_air.config import (
     CompressedAirConfig,
@@ -111,5 +114,129 @@ async def test_publication_writes_four_booleans_in_order() -> None:
     assert [[item.value for item in items] for _, items in nodes.writes] == [
         [True, True, False, False],
         [False, False, False, False],
+    ]
+    assert all(nodes.keys)
+
+
+def _estimated_config() -> CompressedAirConfig:
+    return CompressedAirConfig.model_validate(
+        _config().model_dump()
+        | {
+            "demand_node_key": None,
+            "estimated_flow_points": [
+                {"power": f"{SOURCE}:p{i}", "site_qdb": f"{SOURCE}:eta{i}"}
+                for i in range(1, 5)
+            ],
+            "calibration_table_id": UUID(int=82),
+            "machines": (None, None, None, None),
+            "recommendation_status_node_id": UUID(int=5),
+        }
+    )
+
+
+def _estimated_readings() -> dict[str, PointReading]:
+    values = {
+        "p1": 120,
+        "eta1": 10,
+        "p2": 90,
+        "eta2": 10,
+        "p3": 120,
+        "eta3": 7.5,
+        "p4": 0,
+        "eta4": 4,
+    }
+    return {
+        f"{SOURCE}:{key}": PointReading(value, 1, "good")
+        for key, value in values.items()
+    }
+
+
+def test_recommendation_uses_total_estimated_flow_of_all_four_machines() -> (
+    None
+):
+    config = _estimated_config()
+    readings = _estimated_readings()
+    assert set(config.input_keys) == set(readings)
+    assert recommended_machines(config, readings, _curves()) == (1, 2)
+    assert recommended_machines(config, readings, {1: _curves()[1]}) == ()
+
+
+@pytest.mark.parametrize(
+    "reading",
+    [
+        None,
+        PointReading(4, 1, "bad"),
+        PointReading(4, 1, "uncertain"),
+        PointReading(4, 1, "good", is_current=False),
+        PointReading(float("nan"), 1, "good"),
+        PointReading(float("inf"), 1, "good"),
+        PointReading(True, 1, "good"),
+        PointReading("4", 1, "good"),
+        PointReading(-1, 1, "good"),
+    ],
+)
+def test_bad_input_of_off_machine_prevents_partial_total(
+    reading: PointReading | None,
+) -> None:
+    config = _estimated_config()
+    readings = _estimated_readings()
+    if reading is None:
+        readings.pop(f"{SOURCE}:eta4")
+    else:
+        readings[f"{SOURCE}:eta4"] = reading
+    assert recommended_machines(config, readings, _curves()) == ()
+
+
+@pytest.mark.parametrize(
+    ("replacement", "message"),
+    [
+        ({"demand_node_key": DEMAND}, "需气量输入"),
+        ({"estimated_flow_points": None}, "需气量输入"),
+        ({"available_node_keys": (f"{SOURCE}:p1", None, None, None)}, "重复"),
+        ({"recommendation_status_node_id": UUID(int=2)}, "输出节点"),
+        (
+            {"machines": (_machine(1, is_fixed=True), None, None, None)},
+            "标定来源",
+        ),
+    ],
+)
+def test_estimated_configuration_rejects_ambiguous_bindings(
+    replacement: dict[str, object],
+    message: str,
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        CompressedAirConfig.model_validate(
+            _estimated_config().model_dump() | replacement
+        )
+
+
+async def test_publication_writes_total_flow_and_clears_invalid_outputs() -> (
+    None
+):
+    config = _estimated_config()
+    nodes = FakeNodeWriter()
+    for node_id in config.recommendation_node_ids:
+        nodes.add(config.opcua_instance_id, node_id, data_type="boolean")
+    status_id = config.recommendation_status_node_id
+    assert status_id is not None
+    nodes.add(config.opcua_instance_id, status_id, data_type="string")
+    readings = FakeSnapshotSource(readings=_estimated_readings())
+    publisher = CompressedAirPublisher(
+        config,
+        PublicationSources(readings, _Online(), _calibration),
+        nodes,
+        FakeLease(),
+    )
+    await publisher.tick()
+    for i in range(1, 5):
+        readings.readings[f"{SOURCE}:p{i}"] = PointReading(0, 1, "good")
+    await publisher.tick()
+    readings.readings.pop(f"{SOURCE}:p4")
+    await publisher.tick()
+    values = [[item.value for item in batch] for _, batch in nodes.writes]
+    assert values == [
+        [True, True, False, False, "50.0 m³/min"],
+        [False, False, False, False, "0.0 m³/min · 当前无产气"],
+        [False, False, False, False, "等待四台机组有效采集"],
     ]
     assert all(nodes.keys)

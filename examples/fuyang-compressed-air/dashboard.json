@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "name": "阜阳空压站 · 能效监控",
-  "description": "使用现有大屏模块与分钟台账。2#、3# 已绑累计量，1# 和母管需气量待核验，4# 流量、转速和气电比暂留空。",
+  "name": "空压系统",
+  "description": "各台机组现场气电比和估算产气，附储气母管压力与主辅机功率趋势。",
   "design_width": 1920,
   "design_height": 1080,
   "theme_json": {
@@ -52,7 +52,7 @@
       "is_visible": true,
       "config_json": {
         "glow": true,
-        "text": "阜阳空压站 · 能效监控",
+        "text": "空压系统",
         "align": "center",
         "vAlign": "center",
         "padding": 0,
@@ -90,170 +90,11 @@
       "bindings": []
     },
     {
-      "client_key": "station-kpi-1",
-      "module_type": "info-card",
-      "x": 24,
-      "y": 93,
-      "w": 302,
-      "h": 105,
-      "config_json": {
-        "gapX": 0,
-        "gapY": 0,
-        "icon": {
-          "gap": 10,
-          "bgTo": "",
-          "glow": 8,
-          "mode": "badge",
-          "size": 40,
-          "shape": "circle",
-          "bgFrom": "",
-          "bgAngle": 135,
-          "opacity": 1,
-          "fontSize": 18,
-          "position": "left",
-          "borderColor": ""
-        },
-        "padX": 0,
-        "padY": 0,
-        "unit": {
-          "size": 12,
-          "tone": "primary",
-          "place": "baseline",
-          "opacity": 0.5
-        },
-        "align": "left",
-        "hover": "none",
-        "items": [
-          {
-            "label": "母管需气量",
-            "unit": "m³/min",
-            "precision": 1
-          }
-        ],
-        "layout": "grid",
-        "columns": "1",
-        "compare": {
-          "mode": "percent",
-          "show": false,
-          "label": "",
-          "invertTrend": false
-        },
-        "cellPadX": 12,
-        "cellPadY": 5,
-        "cellShell": "card",
-        "labelSize": 13,
-        "labelTone": "title",
-        "statusDot": "none",
-        "thousands": false,
-        "valueFill": "solid",
-        "valueFont": "digit",
-        "valueGlow": 6,
-        "valueSize": 28,
-        "labelPlace": "above",
-        "valueColor": "var(--accent-primary)",
-        "__cardStyle": {
-          "borderStyle": "none"
-        },
-        "labelOpacity": 0.6,
-        "fixedDecimals": false,
-        "gradientAngle": 0,
-        "valueGradient": [],
-        "textPlainFallback": true,
-        "title": "",
-        "emptyText": "—"
-      },
-      "bindings": []
-    },
-    {
-      "client_key": "station-kpi-2",
-      "module_type": "info-card",
-      "x": 338,
-      "y": 93,
-      "w": 302,
-      "h": 105,
-      "config_json": {
-        "gapX": 0,
-        "gapY": 0,
-        "icon": {
-          "gap": 10,
-          "bgTo": "",
-          "glow": 8,
-          "mode": "badge",
-          "size": 40,
-          "shape": "circle",
-          "bgFrom": "",
-          "bgAngle": 135,
-          "opacity": 1,
-          "fontSize": 18,
-          "position": "left",
-          "borderColor": ""
-        },
-        "padX": 0,
-        "padY": 0,
-        "unit": {
-          "size": 12,
-          "tone": "primary",
-          "place": "baseline",
-          "opacity": 0.5
-        },
-        "align": "left",
-        "hover": "none",
-        "items": [
-          {
-            "label": "计量产气（2#＋3#）",
-            "unit": "m³/min",
-            "precision": 1
-          }
-        ],
-        "layout": "grid",
-        "columns": "1",
-        "compare": {
-          "mode": "percent",
-          "show": false,
-          "label": "",
-          "invertTrend": false
-        },
-        "cellPadX": 12,
-        "cellPadY": 5,
-        "cellShell": "card",
-        "labelSize": 13,
-        "labelTone": "title",
-        "statusDot": "none",
-        "thousands": false,
-        "valueFill": "solid",
-        "valueFont": "digit",
-        "valueGlow": 6,
-        "valueSize": 28,
-        "labelPlace": "above",
-        "valueColor": "var(--accent-primary)",
-        "__cardStyle": {
-          "borderStyle": "none"
-        },
-        "labelOpacity": 0.6,
-        "fixedDecimals": false,
-        "gradientAngle": 0,
-        "valueGradient": [],
-        "textPlainFallback": true,
-        "title": "",
-        "emptyText": "—"
-      },
-      "bindings": [
-        {
-          "field_key": "cardValues[0].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:flow_metered",
-            "range": {}
-          }
-        }
-      ]
-    },
-    {
       "client_key": "station-kpi-3",
       "module_type": "info-card",
-      "x": 652,
+      "x": 496,
       "y": 93,
-      "w": 302,
+      "w": 456,
       "h": 105,
       "config_json": {
         "gapX": 0,
@@ -332,9 +173,9 @@
     {
       "client_key": "station-kpi-4",
       "module_type": "info-card",
-      "x": 966,
+      "x": 968,
       "y": 93,
-      "w": 302,
+      "w": 456,
       "h": 105,
       "config_json": {
         "gapX": 0,
@@ -407,7 +248,7 @@
           "field_key": "cardValues[0].value",
           "source_kind": "dataset",
           "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:power_all",
+            "dataset_key": "ds:fuyang_air_minute_live:power_all",
             "range": {}
           }
         }
@@ -416,9 +257,9 @@
     {
       "client_key": "station-kpi-5",
       "module_type": "info-card",
-      "x": 1280,
+      "x": 1440,
       "y": 93,
-      "w": 302,
+      "w": 456,
       "h": 105,
       "config_json": {
         "gapX": 0,
@@ -491,18 +332,206 @@
           "field_key": "cardValues[0].value",
           "source_kind": "dataset",
           "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:power_cooling",
+            "dataset_key": "ds:fuyang_air_minute_live:power_cooling",
             "range": {}
           }
         }
       ]
     },
     {
-      "client_key": "station-kpi-6",
+      "client_key": "station-recommendations",
       "module_type": "info-card",
-      "x": 1594,
+      "x": 24,
+      "y": 214,
+      "w": 1872,
+      "h": 100,
+      "config_json": {
+        "gapX": 20,
+        "gapY": 2,
+        "icon": {
+          "gap": 10,
+          "bgTo": "",
+          "glow": 8,
+          "mode": "badge",
+          "size": 40,
+          "shape": "circle",
+          "bgFrom": "",
+          "bgAngle": 135,
+          "opacity": 1,
+          "fontSize": 18,
+          "position": "left",
+          "borderColor": ""
+        },
+        "padX": 14,
+        "padY": 0,
+        "unit": {
+          "size": 12,
+          "tone": "primary",
+          "place": "baseline",
+          "opacity": 0.5
+        },
+        "align": "left",
+        "hover": "none",
+        "items": [
+          {
+            "label": "1# 当前",
+            "valueKind": "boolean",
+            "trueText": "●",
+            "falseText": "●",
+            "color": "var(--text-primary)"
+          },
+          {
+            "label": "2# 当前",
+            "valueKind": "boolean",
+            "trueText": "●",
+            "falseText": "●",
+            "color": "var(--text-primary)"
+          },
+          {
+            "label": "3# 当前",
+            "valueKind": "boolean",
+            "trueText": "●",
+            "falseText": "●",
+            "color": "var(--text-primary)"
+          },
+          {
+            "label": "4# 当前",
+            "valueKind": "boolean",
+            "trueText": "●",
+            "falseText": "●",
+            "color": "var(--text-primary)"
+          },
+          {
+            "label": "1# 推荐",
+            "valueKind": "boolean",
+            "trueText": "●",
+            "falseText": "●",
+            "color": "var(--text-primary)"
+          },
+          {
+            "label": "2# 推荐",
+            "valueKind": "boolean",
+            "trueText": "●",
+            "falseText": "●",
+            "color": "var(--text-primary)"
+          },
+          {
+            "label": "3# 推荐",
+            "valueKind": "boolean",
+            "trueText": "●",
+            "falseText": "●",
+            "color": "var(--text-primary)"
+          },
+          {
+            "label": "4# 推荐",
+            "valueKind": "boolean",
+            "trueText": "●",
+            "falseText": "●",
+            "color": "var(--text-primary)"
+          }
+        ],
+        "title": "当前开机与推荐对照",
+        "layout": "grid",
+        "columns": "4",
+        "compare": {
+          "mode": "percent",
+          "show": false,
+          "label": "",
+          "invertTrend": false
+        },
+        "cellPadX": 12,
+        "cellPadY": 1,
+        "cellShell": "plain",
+        "labelSize": 16,
+        "labelTone": "title",
+        "statusDot": "none",
+        "thousands": false,
+        "valueFill": "solid",
+        "valueFont": "body",
+        "valueGlow": 0,
+        "valueSize": 22,
+        "labelPlace": "left",
+        "valueColor": "var(--accent-primary)",
+        "labelOpacity": 0.68,
+        "fixedDecimals": false,
+        "gradientAngle": 0,
+        "valueGradient": [],
+        "textPlainFallback": true,
+        "emptyText": "○",
+        "booleanColors": {
+          "trueColor": "var(--state-success)",
+          "falseColor": "var(--state-danger)"
+        }
+      },
+      "bindings": [
+        {
+          "field_key": "cardValues[0].aux",
+          "source_kind": "static",
+          "static_value_json": 0
+        },
+        {
+          "field_key": "cardValues[0].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_DI_KYJ1_RUN"
+        },
+        {
+          "field_key": "cardValues[1].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_DI_KYJ2_RUN"
+        },
+        {
+          "field_key": "cardValues[2].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_DI_KYJ3_RUN"
+        },
+        {
+          "field_key": "cardValues[3].aux",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA111_4_P"
+        },
+        {
+          "field_key": "cardValues[3].value",
+          "source_kind": "computed",
+          "compute_json": {
+            "op": "max",
+            "inputs": [
+              "cardValues[3].aux",
+              "cardValues[0].aux"
+            ]
+          },
+          "transform_json": {
+            "scale": 0.25,
+            "round": 0
+          }
+        },
+        {
+          "field_key": "cardValues[4].value",
+          "source_kind": "opcua",
+          "node_key": "01a20b2b-dfe6-7c60-b277-2ba92dfcbce0:RECOMMEND_KYJ1"
+        },
+        {
+          "field_key": "cardValues[5].value",
+          "source_kind": "opcua",
+          "node_key": "01a20b2b-dfe6-7c60-b277-2ba92dfcbce0:RECOMMEND_KYJ2"
+        },
+        {
+          "field_key": "cardValues[6].value",
+          "source_kind": "opcua",
+          "node_key": "01a20b2b-dfe6-7c60-b277-2ba92dfcbce0:RECOMMEND_KYJ3"
+        },
+        {
+          "field_key": "cardValues[7].value",
+          "source_kind": "opcua",
+          "node_key": "01a20b2b-dfe6-7c60-b277-2ba92dfcbce0:RECOMMEND_KYJ4"
+        }
+      ]
+    },
+    {
+      "client_key": "station-kpi-flow",
+      "module_type": "info-card",
+      "x": 24,
       "y": 93,
-      "w": 302,
+      "w": 456,
       "h": 105,
       "config_json": {
         "gapX": 0,
@@ -533,9 +562,8 @@
         "hover": "none",
         "items": [
           {
-            "label": "系统气电比",
-            "unit": "m³/kWh",
-            "precision": 2
+            "label": "当前总产气量（估算）",
+            "valueKind": "text"
           }
         ],
         "layout": "grid",
@@ -554,9 +582,9 @@
         "statusDot": "none",
         "thousands": false,
         "valueFill": "solid",
-        "valueFont": "digit",
-        "valueGlow": 6,
-        "valueSize": 28,
+        "valueFont": "body",
+        "valueGlow": 0,
+        "valueSize": 25,
         "labelPlace": "above",
         "valueColor": "var(--accent-primary)",
         "__cardStyle": {
@@ -573,1004 +601,67 @@
       "bindings": []
     },
     {
-      "client_key": "machine-1",
-      "module_type": "info-card",
-      "x": 24,
-      "y": 215,
-      "w": 456,
-      "h": 203,
+      "client_key": "station-trends-label",
+      "module_type": "text-block",
+      "x": 26,
+      "y": 328,
+      "w": 175,
+      "h": 46,
       "config_json": {
-        "gapX": 12,
-        "gapY": 4,
-        "icon": {
-          "gap": 10,
-          "bgTo": "",
-          "glow": 8,
-          "mode": "badge",
-          "size": 40,
-          "shape": "circle",
-          "bgFrom": "",
-          "bgAngle": 135,
-          "opacity": 1,
-          "fontSize": 18,
-          "position": "left",
-          "borderColor": ""
-        },
-        "padX": 10,
-        "padY": 5,
-        "unit": {
-          "size": 12,
-          "tone": "primary",
-          "place": "baseline",
-          "opacity": 0.5
-        },
-        "align": "left",
-        "hover": "none",
+        "text": "历史趋势",
+        "fontSize": 21,
+        "weight": 600,
+        "vAlign": "center",
+        "padding": 0,
+        "__cardStyle": {
+          "borderStyle": "none",
+          "corners": false
+        }
+      }
+    },
+    {
+      "client_key": "machine-selector",
+      "module_type": "nav-tabs",
+      "x": 208,
+      "y": 329,
+      "w": 1688,
+      "h": 46,
+      "config_json": {
         "items": [
           {
-            "label": "分钟产气",
-            "unit": "m³/min",
-            "precision": 1
+            "label": "空压系统总览",
+            "emitValue": "station"
           },
           {
-            "label": "分钟气电比",
-            "unit": "m³/kWh",
-            "precision": 2
+            "label": "1# 空压机",
+            "emitValue": "1"
           },
           {
-            "label": "有功功率",
-            "unit": "kW",
-            "precision": 1
+            "label": "2# 空压机",
+            "emitValue": "2"
           },
           {
-            "label": "排气压力",
-            "unit": "MPa",
-            "precision": 3
+            "label": "3# 空压机",
+            "emitValue": "3"
           },
           {
-            "label": "实际转速",
-            "unit": "r/min",
-            "precision": 0
-          },
-          {
-            "label": "OPC UA 建议",
-            "unit": "",
-            "precision": 1,
-            "valueKind": "boolean",
-            "trueText": "推荐",
-            "falseText": "未推荐"
+            "label": "4# 空压机",
+            "emitValue": "4"
           }
         ],
-        "title": "1# 空压机 · 定频",
-        "layout": "grid",
-        "columns": "3",
-        "compare": {
-          "mode": "percent",
-          "show": false,
-          "label": "",
-          "invertTrend": false
-        },
-        "cellPadX": 10,
-        "cellPadY": 5,
-        "cellShell": "plain",
-        "labelSize": 14,
-        "labelTone": "title",
-        "statusDot": "none",
-        "thousands": false,
-        "valueFill": "solid",
-        "valueFont": "digit",
-        "valueGlow": 5,
-        "valueSize": 21,
-        "labelPlace": "above",
-        "valueColor": "var(--accent-primary)",
-        "labelOpacity": 0.68,
-        "fixedDecimals": false,
-        "gradientAngle": 0,
-        "valueGradient": [],
-        "textPlainFallback": true,
-        "emptyText": "—"
-      },
-      "bindings": [
-        {
-          "field_key": "cardValues[2].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA211_3_P"
-        },
-        {
-          "field_key": "cardValues[3].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_KYJ1_CQ_PT"
-        },
-        {
-          "field_key": "cardValues[5].value",
-          "source_kind": "opcua",
-          "node_key": "01a20b2b-dfe6-7c60-b277-2ba92dfcbce0:RECOMMEND_KYJ1"
-        }
-      ]
-    },
-    {
-      "client_key": "machine-2",
-      "module_type": "info-card",
-      "x": 496,
-      "y": 215,
-      "w": 456,
-      "h": 203,
-      "config_json": {
-        "gapX": 12,
-        "gapY": 4,
-        "icon": {
-          "gap": 10,
-          "bgTo": "",
-          "glow": 8,
-          "mode": "badge",
-          "size": 40,
-          "shape": "circle",
-          "bgFrom": "",
-          "bgAngle": 135,
-          "opacity": 1,
-          "fontSize": 18,
-          "position": "left",
-          "borderColor": ""
-        },
-        "padX": 10,
-        "padY": 5,
-        "unit": {
-          "size": 12,
-          "tone": "primary",
-          "place": "baseline",
-          "opacity": 0.5
-        },
-        "align": "left",
-        "hover": "none",
-        "items": [
-          {
-            "label": "分钟产气",
-            "unit": "m³/min",
-            "precision": 1
-          },
-          {
-            "label": "分钟气电比",
-            "unit": "m³/kWh",
-            "precision": 2
-          },
-          {
-            "label": "有功功率",
-            "unit": "kW",
-            "precision": 1
-          },
-          {
-            "label": "排气压力",
-            "unit": "MPa",
-            "precision": 3
-          },
-          {
-            "label": "实际转速",
-            "unit": "r/min",
-            "precision": 0
-          },
-          {
-            "label": "OPC UA 建议",
-            "unit": "",
-            "precision": 1,
-            "valueKind": "boolean",
-            "trueText": "推荐",
-            "falseText": "未推荐"
-          }
-        ],
-        "title": "2# 空压机 · 变频",
-        "layout": "grid",
-        "columns": "3",
-        "compare": {
-          "mode": "percent",
-          "show": false,
-          "label": "",
-          "invertTrend": false
-        },
-        "cellPadX": 10,
-        "cellPadY": 5,
-        "cellShell": "plain",
-        "labelSize": 14,
-        "labelTone": "title",
-        "statusDot": "none",
-        "thousands": false,
-        "valueFill": "solid",
-        "valueFont": "digit",
-        "valueGlow": 5,
-        "valueSize": 21,
-        "labelPlace": "above",
-        "valueColor": "var(--accent-primary)",
-        "labelOpacity": 0.68,
-        "fixedDecimals": false,
-        "gradientAngle": 0,
-        "valueGradient": [],
-        "textPlainFallback": true,
-        "emptyText": "—"
-      },
-      "bindings": [
-        {
-          "field_key": "cardValues[2].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA112_1_P"
-        },
-        {
-          "field_key": "cardValues[3].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_KYJ2_CQ_PT"
-        },
-        {
-          "field_key": "cardValues[5].value",
-          "source_kind": "opcua",
-          "node_key": "01a20b2b-dfe6-7c60-b277-2ba92dfcbce0:RECOMMEND_KYJ2"
-        },
-        {
-          "field_key": "cardValues[0].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:flow_2",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "cardValues[1].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_2",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "cardValues[4].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_CO_KYJ2_JDAS"
-        }
-      ]
-    },
-    {
-      "client_key": "machine-3",
-      "module_type": "info-card",
-      "x": 968,
-      "y": 215,
-      "w": 456,
-      "h": 203,
-      "config_json": {
-        "gapX": 12,
-        "gapY": 4,
-        "icon": {
-          "gap": 10,
-          "bgTo": "",
-          "glow": 8,
-          "mode": "badge",
-          "size": 40,
-          "shape": "circle",
-          "bgFrom": "",
-          "bgAngle": 135,
-          "opacity": 1,
-          "fontSize": 18,
-          "position": "left",
-          "borderColor": ""
-        },
-        "padX": 10,
-        "padY": 5,
-        "unit": {
-          "size": 12,
-          "tone": "primary",
-          "place": "baseline",
-          "opacity": 0.5
-        },
-        "align": "left",
-        "hover": "none",
-        "items": [
-          {
-            "label": "分钟产气",
-            "unit": "m³/min",
-            "precision": 1
-          },
-          {
-            "label": "分钟气电比",
-            "unit": "m³/kWh",
-            "precision": 2
-          },
-          {
-            "label": "有功功率",
-            "unit": "kW",
-            "precision": 1
-          },
-          {
-            "label": "排气压力",
-            "unit": "MPa",
-            "precision": 3
-          },
-          {
-            "label": "实际转速",
-            "unit": "r/min",
-            "precision": 0
-          },
-          {
-            "label": "OPC UA 建议",
-            "unit": "",
-            "precision": 1,
-            "valueKind": "boolean",
-            "trueText": "推荐",
-            "falseText": "未推荐"
-          }
-        ],
-        "title": "3# 空压机 · 变频",
-        "layout": "grid",
-        "columns": "3",
-        "compare": {
-          "mode": "percent",
-          "show": false,
-          "label": "",
-          "invertTrend": false
-        },
-        "cellPadX": 10,
-        "cellPadY": 5,
-        "cellShell": "plain",
-        "labelSize": 14,
-        "labelTone": "title",
-        "statusDot": "none",
-        "thousands": false,
-        "valueFill": "solid",
-        "valueFont": "digit",
-        "valueGlow": 5,
-        "valueSize": 21,
-        "labelPlace": "above",
-        "valueColor": "var(--accent-primary)",
-        "labelOpacity": 0.68,
-        "fixedDecimals": false,
-        "gradientAngle": 0,
-        "valueGradient": [],
-        "textPlainFallback": true,
-        "emptyText": "—"
-      },
-      "bindings": [
-        {
-          "field_key": "cardValues[2].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA113_6_P"
-        },
-        {
-          "field_key": "cardValues[3].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_KYJ3_CQ_PT"
-        },
-        {
-          "field_key": "cardValues[5].value",
-          "source_kind": "opcua",
-          "node_key": "01a20b2b-dfe6-7c60-b277-2ba92dfcbce0:RECOMMEND_KYJ3"
-        },
-        {
-          "field_key": "cardValues[0].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:flow_3",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "cardValues[1].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_3",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "cardValues[4].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_CO2_KYJ3_JDAS"
-        }
-      ]
-    },
-    {
-      "client_key": "machine-4",
-      "module_type": "info-card",
-      "x": 1440,
-      "y": 215,
-      "w": 456,
-      "h": 203,
-      "config_json": {
-        "gapX": 12,
-        "gapY": 4,
-        "icon": {
-          "gap": 10,
-          "bgTo": "",
-          "glow": 8,
-          "mode": "badge",
-          "size": 40,
-          "shape": "circle",
-          "bgFrom": "",
-          "bgAngle": 135,
-          "opacity": 1,
-          "fontSize": 18,
-          "position": "left",
-          "borderColor": ""
-        },
-        "padX": 10,
-        "padY": 5,
-        "unit": {
-          "size": 12,
-          "tone": "primary",
-          "place": "baseline",
-          "opacity": 0.5
-        },
-        "align": "left",
-        "hover": "none",
-        "items": [
-          {
-            "label": "分钟产气",
-            "unit": "m³/min",
-            "precision": 1
-          },
-          {
-            "label": "分钟气电比",
-            "unit": "m³/kWh",
-            "precision": 2
-          },
-          {
-            "label": "有功功率",
-            "unit": "kW",
-            "precision": 1
-          },
-          {
-            "label": "排气压力",
-            "unit": "MPa",
-            "precision": 3
-          },
-          {
-            "label": "实际转速",
-            "unit": "r/min",
-            "precision": 0
-          },
-          {
-            "label": "OPC UA 建议",
-            "unit": "",
-            "precision": 1,
-            "valueKind": "boolean",
-            "trueText": "推荐",
-            "falseText": "未推荐"
-          }
-        ],
-        "title": "4# 空压机 · 变频",
-        "layout": "grid",
-        "columns": "3",
-        "compare": {
-          "mode": "percent",
-          "show": false,
-          "label": "",
-          "invertTrend": false
-        },
-        "cellPadX": 10,
-        "cellPadY": 5,
-        "cellShell": "plain",
-        "labelSize": 14,
-        "labelTone": "title",
-        "statusDot": "none",
-        "thousands": false,
-        "valueFill": "solid",
-        "valueFont": "digit",
-        "valueGlow": 5,
-        "valueSize": 21,
-        "labelPlace": "above",
-        "valueColor": "var(--accent-primary)",
-        "labelOpacity": 0.68,
-        "fixedDecimals": false,
-        "gradientAngle": 0,
-        "valueGradient": [],
-        "textPlainFallback": true,
-        "emptyText": "—"
-      },
-      "bindings": [
-        {
-          "field_key": "cardValues[2].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA111_4_P"
-        },
-        {
-          "field_key": "cardValues[3].value",
-          "source_kind": "opcua",
-          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_KYJ4_CQ_PT"
-        },
-        {
-          "field_key": "cardValues[5].value",
-          "source_kind": "opcua",
-          "node_key": "01a20b2b-dfe6-7c60-b277-2ba92dfcbce0:RECOMMEND_KYJ4"
-        }
-      ]
-    },
-    {
-      "client_key": "station-flow",
-      "module_type": "trend-chart",
-      "x": 24,
-      "y": 435,
-      "w": 936,
-      "h": 284,
-      "config_json": {
-        "unit": "m³/min",
-        "title": "分机及合计产气 · 最近 24 小时",
-        "series": [
-          {
-            "name": "2#",
-            "unit": "m³/min",
-            "color": "var(--accent-primary)",
-            "axis": "left"
-          },
-          {
-            "name": "3#",
-            "unit": "m³/min",
-            "color": "var(--state-success)",
-            "axis": "left"
-          },
-          {
-            "name": "已计量合计",
-            "unit": "m³/min",
-            "color": "var(--state-warning)",
-            "axis": "left"
-          }
-        ],
-        "yScale": false,
-        "palette": [],
-        "animation": false,
-        "precision": 2,
-        "yAxisName": "m³/min",
-        "chartStyle": "area",
-        "showLegend": true,
-        "showSymbol": false,
-        "symbolSize": 6,
-        "areaOpacity": 0.14,
-        "boundaryGap": false,
-        "showTooltip": true,
-        "areaGradient": false,
-        "areaTopAlpha": 0.35,
-        "showDataZoom": true,
-        "rightAxisName": "",
-        "areaGradientTo": "",
-        "showValueLabel": false,
-        "animationDuration": 600,
-        "emptyText": "所选窗口暂无有效归档"
-      },
-      "bindings": [
-        {
-          "field_key": "seriesValues[0].series",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:flow_2",
-            "range": {
-              "last_window": "24h"
-            }
-          }
-        },
-        {
-          "field_key": "seriesValues[1].series",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:flow_3",
-            "range": {
-              "last_window": "24h"
-            }
-          }
-        },
-        {
-          "field_key": "seriesValues[2].series",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:flow_metered",
-            "range": {
-              "last_window": "24h"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "client_key": "station-eta",
-      "module_type": "trend-chart",
-      "x": 976,
-      "y": 435,
-      "w": 920,
-      "h": 284,
-      "config_json": {
-        "unit": "m³/kWh",
-        "title": "气电比与转速 · 最近 24 小时",
-        "series": [
-          {
-            "name": "2# 气电比",
-            "unit": "m³/kWh",
-            "color": "var(--accent-primary)",
-            "axis": "left"
-          },
-          {
-            "name": "3# 气电比",
-            "unit": "m³/kWh",
-            "color": "var(--state-success)",
-            "axis": "left"
-          },
-          {
-            "name": "2# 转速",
-            "unit": "r/min",
-            "color": "var(--state-warning)",
-            "axis": "right"
-          },
-          {
-            "name": "3# 转速",
-            "unit": "r/min",
-            "color": "var(--state-danger)",
-            "axis": "right"
-          }
-        ],
-        "yScale": false,
-        "palette": [],
-        "animation": false,
-        "precision": 2,
-        "yAxisName": "m³/kWh",
-        "chartStyle": "area",
-        "showLegend": true,
-        "showSymbol": false,
-        "symbolSize": 6,
-        "areaOpacity": 0.14,
-        "boundaryGap": false,
-        "showTooltip": true,
-        "areaGradient": false,
-        "areaTopAlpha": 0.35,
-        "showDataZoom": true,
-        "rightAxisName": "r/min",
-        "areaGradientTo": "",
-        "showValueLabel": false,
-        "animationDuration": 600,
-        "emptyText": "所选窗口暂无有效归档"
-      },
-      "bindings": [
-        {
-          "field_key": "seriesValues[0].series",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_2",
-            "range": {
-              "last_window": "24h"
-            }
-          }
-        },
-        {
-          "field_key": "seriesValues[1].series",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_3",
-            "range": {
-              "last_window": "24h"
-            }
-          }
-        },
-        {
-          "field_key": "seriesValues[2].series",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:rpm_2",
-            "range": {
-              "last_window": "24h"
-            }
-          }
-        },
-        {
-          "field_key": "seriesValues[3].series",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:rpm_3",
-            "range": {
-              "last_window": "24h"
-            }
-          }
-        }
-      ]
-    },
-    {
-      "client_key": "station-power",
-      "module_type": "trend-chart",
-      "x": 24,
-      "y": 735,
-      "w": 728,
-      "h": 300,
-      "config_json": {
-        "unit": "kW",
-        "title": "主机功率 · 最近 24 小时",
-        "series": [
-          {
-            "name": "1#",
-            "unit": "kW",
-            "color": "var(--accent-primary)",
-            "axis": "left"
-          },
-          {
-            "name": "2#",
-            "unit": "kW",
-            "color": "var(--state-success)",
-            "axis": "left"
-          },
-          {
-            "name": "3#",
-            "unit": "kW",
-            "color": "var(--state-warning)",
-            "axis": "left"
-          },
-          {
-            "name": "4#",
-            "unit": "kW",
-            "color": "var(--state-danger)",
-            "axis": "left"
-          }
-        ],
-        "yScale": false,
-        "palette": [],
-        "animation": false,
-        "precision": 2,
-        "yAxisName": "kW",
-        "chartStyle": "area",
-        "showLegend": true,
-        "showSymbol": false,
-        "symbolSize": 6,
-        "areaOpacity": 0.14,
-        "boundaryGap": false,
-        "showTooltip": true,
-        "areaGradient": false,
-        "areaTopAlpha": 0.35,
-        "showDataZoom": true,
-        "rightAxisName": "",
-        "areaGradientTo": "",
-        "showValueLabel": false,
-        "animationDuration": 600,
-        "emptyText": "所选窗口暂无有效归档"
-      },
-      "bindings": [
-        {
-          "field_key": "seriesValues[0].series",
-          "source_kind": "archive",
-          "detail_json": {
-            "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA211_3_P",
-            "range": {
-              "last_window": "24h"
-            },
-            "interval": "5m",
-            "aggregate": "avg",
-            "timezone": "Asia/Shanghai"
-          }
-        },
-        {
-          "field_key": "seriesValues[1].series",
-          "source_kind": "archive",
-          "detail_json": {
-            "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA112_1_P",
-            "range": {
-              "last_window": "24h"
-            },
-            "interval": "5m",
-            "aggregate": "avg",
-            "timezone": "Asia/Shanghai"
-          }
-        },
-        {
-          "field_key": "seriesValues[2].series",
-          "source_kind": "archive",
-          "detail_json": {
-            "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA113_6_P",
-            "range": {
-              "last_window": "24h"
-            },
-            "interval": "5m",
-            "aggregate": "avg",
-            "timezone": "Asia/Shanghai"
-          }
-        },
-        {
-          "field_key": "seriesValues[3].series",
-          "source_kind": "archive",
-          "detail_json": {
-            "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA111_4_P",
-            "range": {
-              "last_window": "24h"
-            },
-            "interval": "5m",
-            "aggregate": "avg",
-            "timezone": "Asia/Shanghai"
-          }
-        }
-      ]
-    },
-    {
-      "client_key": "machine-2-speed-bands",
-      "module_type": "bar-chart",
-      "x": 768,
-      "y": 735,
-      "w": 556,
-      "h": 300,
-      "config_json": {
-        "unit": "m³/kWh",
-        "items": [
-          {
-            "name": "< 1400",
-            "unit": "m³/kWh",
-            "color": "var(--accent-primary)",
-            "axis": "left"
-          },
-          {
-            "name": "1400–1899",
-            "unit": "m³/kWh",
-            "color": "var(--accent-primary)",
-            "axis": "left"
-          },
-          {
-            "name": "1900–2399",
-            "unit": "m³/kWh",
-            "color": "var(--accent-primary)",
-            "axis": "left"
-          },
-          {
-            "name": "≥ 2400",
-            "unit": "m³/kWh",
-            "color": "var(--accent-primary)",
-            "axis": "left"
-          }
-        ],
-        "title": "2# 转速分档气电比 · 近 3 天",
-        "yScale": false,
-        "palette": [],
-        "barWidth": 38,
-        "animation": false,
-        "barRadius": 2,
-        "precision": 2,
-        "barOpacity": 1,
-        "chartStyle": "grouped",
-        "labelColor": "",
-        "showLegend": false,
-        "barGradient": false,
-        "barTopAlpha": 0.45,
-        "boundaryGap": true,
-        "showTooltip": true,
-        "showDataZoom": false,
-        "barGradientTo": "",
-        "labelFontSize": 11,
-        "legendFontSize": 11,
-        "showValueLabel": true,
-        "xLabelInterval": "0",
-        "tooltipFontSize": 12,
-        "axisNameFontSize": 11,
-        "animationDuration": 600,
-        "axisLabelFontSize": 11,
-        "valueSource": "live",
-        "xAxisName": "r/min",
-        "emptyText": "各档至少需要 5 个同压力带运行分钟"
-      },
-      "bindings": [
-        {
-          "field_key": "barValues[0].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_2_band_1",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "barValues[1].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_2_band_2",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "barValues[2].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_2_band_3",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "barValues[3].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_2_band_4",
-            "range": {}
-          }
-        }
-      ]
-    },
-    {
-      "client_key": "machine-3-speed-bands",
-      "module_type": "bar-chart",
-      "x": 1340,
-      "y": 735,
-      "w": 556,
-      "h": 300,
-      "config_json": {
-        "unit": "m³/kWh",
-        "items": [
-          {
-            "name": "< 1900",
-            "unit": "m³/kWh",
-            "color": "var(--state-success)",
-            "axis": "left"
-          },
-          {
-            "name": "1900–2799",
-            "unit": "m³/kWh",
-            "color": "var(--state-success)",
-            "axis": "left"
-          },
-          {
-            "name": "2800–3699",
-            "unit": "m³/kWh",
-            "color": "var(--state-success)",
-            "axis": "left"
-          },
-          {
-            "name": "≥ 3700",
-            "unit": "m³/kWh",
-            "color": "var(--state-success)",
-            "axis": "left"
-          }
-        ],
-        "title": "3# 转速分档气电比 · 近 3 天",
-        "yScale": false,
-        "palette": [],
-        "barWidth": 38,
-        "animation": false,
-        "barRadius": 2,
-        "precision": 2,
-        "barOpacity": 1,
-        "chartStyle": "grouped",
-        "labelColor": "",
-        "showLegend": false,
-        "barGradient": false,
-        "barTopAlpha": 0.45,
-        "boundaryGap": true,
-        "showTooltip": true,
-        "showDataZoom": false,
-        "barGradientTo": "",
-        "labelFontSize": 11,
-        "legendFontSize": 11,
-        "showValueLabel": true,
-        "xLabelInterval": "0",
-        "tooltipFontSize": 12,
-        "axisNameFontSize": 11,
-        "animationDuration": 600,
-        "axisLabelFontSize": 11,
-        "valueSource": "live",
-        "xAxisName": "r/min",
-        "emptyText": "各档至少需要 5 个同压力带运行分钟"
-      },
-      "bindings": [
-        {
-          "field_key": "barValues[0].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_3_band_1",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "barValues[1].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_3_band_2",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "barValues[2].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_3_band_3",
-            "range": {}
-          }
-        },
-        {
-          "field_key": "barValues[3].value",
-          "source_kind": "dataset",
-          "detail_json": {
-            "dataset_key": "ds:fuyang_compressed_air_minute:eta_3_band_4",
-            "range": {}
-          }
-        }
-      ]
+        "activeIndex": 3,
+        "variant": "track",
+        "tone": "primary",
+        "shape": "rounded",
+        "sizing": "fill",
+        "stretch": true,
+        "trackPadding": 3,
+        "itemRadius": 6,
+        "trackRadius": 8,
+        "indicator": "bar",
+        "fontSize": 17,
+        "activeFontWeight": 600
+      }
     },
     {
       "client_key": "station-footer",
@@ -1587,7 +678,11 @@
           "pad": 0
         },
         "dividerWidth": 1,
-        "sweepOpacity": 0.3
+        "sweepOpacity": 0.3,
+        "__cardStyle": {
+          "borderStyle": "none",
+          "corners": false
+        }
       },
       "bindings": []
     },
@@ -1602,7 +697,7 @@
       "z_index": 1,
       "is_visible": true,
       "config_json": {
-        "text": "计量范围  2#、3# 按累计量分钟差分  ·  1# 累计量和母管需气待核验  ·  4# 流量与效率留空  ·  8–10 月已归档数据可在采集历史回看",
+        "text": "估算产气按气电比 × 有功功率 ÷ 60 换算 · 气电比暂按 m³/kWh · 推荐仅供运行参考",
         "align": "left",
         "vAlign": "center",
         "opacity": 0.55,
@@ -1613,6 +708,1488 @@
         }
       },
       "bindings": []
+    },
+    {
+      "client_key": "station-power",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 717,
+      "w": 928,
+      "h": 315,
+      "config_json": {
+        "unit": "kW",
+        "title": "主机总功率趋势",
+        "series": [
+          {
+            "name": "主机总功率趋势",
+            "unit": "kW",
+            "color": "var(--state-warning)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "kW",
+        "chartStyle": "line",
+        "showLegend": true,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:power_all",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "station-pressure",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 391,
+      "w": 1872,
+      "h": 309,
+      "config_json": {
+        "unit": "MPa",
+        "title": "储气母管压力趋势",
+        "series": [
+          {
+            "name": "储气母管压力趋势",
+            "unit": "MPa",
+            "color": "var(--accent-primary)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 3,
+        "yAxisName": "MPa",
+        "chartStyle": "line",
+        "showLegend": true,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "archive",
+          "detail_json": {
+            "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_FQG1_PT",
+            "range": {
+              "last_window": "24h"
+            },
+            "interval": "5m",
+            "aggregate": "avg",
+            "timezone": "Asia/Shanghai"
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "station-cooling",
+      "module_type": "trend-chart",
+      "x": 968,
+      "y": 717,
+      "w": 928,
+      "h": 315,
+      "config_json": {
+        "unit": "kW",
+        "title": "冷却辅机功率趋势",
+        "series": [
+          {
+            "name": "冷却辅机功率趋势",
+            "unit": "kW",
+            "color": "var(--state-success)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "kW",
+        "chartStyle": "line",
+        "showLegend": true,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:power_cooling",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-1",
+      "module_type": "info-card",
+      "x": 24,
+      "y": 392,
+      "w": 1872,
+      "h": 108,
+      "config_json": {
+        "gapX": 12,
+        "gapY": 4,
+        "icon": {
+          "gap": 10,
+          "bgTo": "",
+          "glow": 8,
+          "mode": "badge",
+          "size": 40,
+          "shape": "circle",
+          "bgFrom": "",
+          "bgAngle": 135,
+          "opacity": 1,
+          "fontSize": 18,
+          "position": "left",
+          "borderColor": ""
+        },
+        "padX": 10,
+        "padY": 5,
+        "unit": {
+          "size": 12,
+          "tone": "primary",
+          "place": "baseline",
+          "opacity": 0.5
+        },
+        "align": "left",
+        "hover": "none",
+        "items": [
+          {
+            "label": "有功功率",
+            "unit": "kW",
+            "precision": 1
+          },
+          {
+            "label": "排气压力",
+            "unit": "MPa",
+            "precision": 3
+          },
+          {
+            "label": "现场气电比",
+            "unit": "",
+            "precision": 2
+          },
+          {
+            "label": "估算瞬时产气",
+            "unit": "m³/min",
+            "precision": 1
+          }
+        ],
+        "title": "1# 空压机 · 定频",
+        "layout": "grid",
+        "columns": "4",
+        "compare": {
+          "mode": "percent",
+          "show": false,
+          "label": "",
+          "invertTrend": false
+        },
+        "cellPadX": 10,
+        "cellPadY": 5,
+        "cellShell": "plain",
+        "labelSize": 14,
+        "labelTone": "title",
+        "statusDot": "none",
+        "thousands": false,
+        "valueFill": "solid",
+        "valueFont": "digit",
+        "valueGlow": 5,
+        "valueSize": 26,
+        "labelPlace": "above",
+        "valueColor": "var(--accent-primary)",
+        "labelOpacity": 0.68,
+        "fixedDecimals": false,
+        "gradientAngle": 0,
+        "valueGradient": [],
+        "textPlainFallback": true,
+        "emptyText": "—"
+      },
+      "bindings": [
+        {
+          "field_key": "cardValues[0].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA211_3_P"
+        },
+        {
+          "field_key": "cardValues[1].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_KYJ1_CQ_PT"
+        },
+        {
+          "field_key": "cardValues[2].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_KYJ1_QDB"
+        },
+        {
+          "field_key": "cardValues[3].value",
+          "source_kind": "computed",
+          "compute_json": {
+            "op": "product",
+            "inputs": [
+              "cardValues[0].value",
+              "cardValues[2].value"
+            ]
+          },
+          "transform_json": {
+            "scale": 0.016666666666666666
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-1-power",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 518,
+      "w": 928,
+      "h": 247,
+      "config_json": {
+        "unit": "kW",
+        "title": "1# 有功功率趋势",
+        "series": [
+          {
+            "name": "有功功率",
+            "unit": "kW",
+            "color": "var(--state-warning)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 1,
+        "yAxisName": "kW",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:power_1",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-1-pressure",
+      "module_type": "trend-chart",
+      "x": 968,
+      "y": 518,
+      "w": 928,
+      "h": 247,
+      "config_json": {
+        "unit": "MPa",
+        "title": "1# 排气压力趋势",
+        "series": [
+          {
+            "name": "排气压力",
+            "unit": "MPa",
+            "color": "var(--accent-primary)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 3,
+        "yAxisName": "MPa",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:pressure_1",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-1-site-eta",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 782,
+      "w": 928,
+      "h": 250,
+      "config_json": {
+        "unit": "",
+        "title": "1# 现场气电比趋势",
+        "series": [
+          {
+            "name": "现场气电比",
+            "unit": "",
+            "color": "var(--state-success)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "点位值",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:site_qdb_1",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-1-flow",
+      "module_type": "trend-chart",
+      "is_visible": false,
+      "x": 968,
+      "y": 782,
+      "w": 928,
+      "h": 250,
+      "config_json": {
+        "unit": "m³/min",
+        "title": "1# 估算产气趋势",
+        "series": [
+          {
+            "name": "估算产气",
+            "unit": "m³/min",
+            "color": "var(--accent-primary)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "m³/min",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:flow_est_1",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "client_key": "machine-2",
+      "module_type": "info-card",
+      "x": 24,
+      "y": 392,
+      "w": 1872,
+      "h": 108,
+      "config_json": {
+        "gapX": 12,
+        "gapY": 4,
+        "icon": {
+          "gap": 10,
+          "bgTo": "",
+          "glow": 8,
+          "mode": "badge",
+          "size": 40,
+          "shape": "circle",
+          "bgFrom": "",
+          "bgAngle": 135,
+          "opacity": 1,
+          "fontSize": 18,
+          "position": "left",
+          "borderColor": ""
+        },
+        "padX": 10,
+        "padY": 5,
+        "unit": {
+          "size": 12,
+          "tone": "primary",
+          "place": "baseline",
+          "opacity": 0.5
+        },
+        "align": "left",
+        "hover": "none",
+        "items": [
+          {
+            "label": "有功功率",
+            "unit": "kW",
+            "precision": 1
+          },
+          {
+            "label": "排气压力",
+            "unit": "MPa",
+            "precision": 3
+          },
+          {
+            "label": "现场气电比",
+            "unit": "",
+            "precision": 2
+          },
+          {
+            "label": "估算瞬时产气",
+            "unit": "m³/min",
+            "precision": 1
+          }
+        ],
+        "title": "2# 空压机 · 变频",
+        "layout": "grid",
+        "columns": "4",
+        "compare": {
+          "mode": "percent",
+          "show": false,
+          "label": "",
+          "invertTrend": false
+        },
+        "cellPadX": 10,
+        "cellPadY": 5,
+        "cellShell": "plain",
+        "labelSize": 14,
+        "labelTone": "title",
+        "statusDot": "none",
+        "thousands": false,
+        "valueFill": "solid",
+        "valueFont": "digit",
+        "valueGlow": 5,
+        "valueSize": 26,
+        "labelPlace": "above",
+        "valueColor": "var(--accent-primary)",
+        "labelOpacity": 0.68,
+        "fixedDecimals": false,
+        "gradientAngle": 0,
+        "valueGradient": [],
+        "textPlainFallback": true,
+        "emptyText": "—"
+      },
+      "bindings": [
+        {
+          "field_key": "cardValues[0].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA112_1_P"
+        },
+        {
+          "field_key": "cardValues[1].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_KYJ2_CQ_PT"
+        },
+        {
+          "field_key": "cardValues[2].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_KYJ2_QDB"
+        },
+        {
+          "field_key": "cardValues[3].value",
+          "source_kind": "computed",
+          "compute_json": {
+            "op": "product",
+            "inputs": [
+              "cardValues[0].value",
+              "cardValues[2].value"
+            ]
+          },
+          "transform_json": {
+            "scale": 0.016666666666666666
+          }
+        }
+      ],
+      "is_visible": true
+    },
+    {
+      "client_key": "machine-2-power",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 518,
+      "w": 928,
+      "h": 247,
+      "config_json": {
+        "unit": "kW",
+        "title": "2# 有功功率趋势",
+        "series": [
+          {
+            "name": "有功功率",
+            "unit": "kW",
+            "color": "var(--state-warning)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 1,
+        "yAxisName": "kW",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:power_2",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": true
+    },
+    {
+      "client_key": "machine-2-pressure",
+      "module_type": "trend-chart",
+      "is_visible": true,
+      "x": 968,
+      "y": 518,
+      "w": 928,
+      "h": 247,
+      "config_json": {
+        "unit": "MPa",
+        "title": "2# 排气压力趋势",
+        "series": [
+          {
+            "name": "排气压力",
+            "unit": "MPa",
+            "color": "var(--accent-primary)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 3,
+        "yAxisName": "MPa",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:pressure_2",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "client_key": "machine-2-eta",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 782,
+      "w": 928,
+      "h": 250,
+      "config_json": {
+        "unit": "",
+        "title": "2# 现场气电比趋势",
+        "series": [
+          {
+            "name": "现场气电比",
+            "unit": "",
+            "color": "var(--state-success)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "点位值",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:site_qdb_2",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": true
+    },
+    {
+      "client_key": "machine-2-flow",
+      "module_type": "trend-chart",
+      "x": 968,
+      "y": 782,
+      "w": 928,
+      "h": 250,
+      "config_json": {
+        "unit": "m³/min",
+        "title": "2# 估算产气趋势",
+        "series": [
+          {
+            "name": "估算产气",
+            "unit": "m³/min",
+            "color": "var(--accent-primary)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "m³/min",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:flow_est_2",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": true
+    },
+    {
+      "client_key": "machine-3",
+      "module_type": "info-card",
+      "x": 24,
+      "y": 392,
+      "w": 1872,
+      "h": 108,
+      "config_json": {
+        "gapX": 12,
+        "gapY": 4,
+        "icon": {
+          "gap": 10,
+          "bgTo": "",
+          "glow": 8,
+          "mode": "badge",
+          "size": 40,
+          "shape": "circle",
+          "bgFrom": "",
+          "bgAngle": 135,
+          "opacity": 1,
+          "fontSize": 18,
+          "position": "left",
+          "borderColor": ""
+        },
+        "padX": 10,
+        "padY": 5,
+        "unit": {
+          "size": 12,
+          "tone": "primary",
+          "place": "baseline",
+          "opacity": 0.5
+        },
+        "align": "left",
+        "hover": "none",
+        "items": [
+          {
+            "label": "有功功率",
+            "unit": "kW",
+            "precision": 1
+          },
+          {
+            "label": "排气压力",
+            "unit": "MPa",
+            "precision": 3
+          },
+          {
+            "label": "现场气电比",
+            "unit": "",
+            "precision": 2
+          },
+          {
+            "label": "估算瞬时产气",
+            "unit": "m³/min",
+            "precision": 1
+          }
+        ],
+        "title": "3# 空压机 · 变频",
+        "layout": "grid",
+        "columns": "4",
+        "compare": {
+          "mode": "percent",
+          "show": false,
+          "label": "",
+          "invertTrend": false
+        },
+        "cellPadX": 10,
+        "cellPadY": 5,
+        "cellShell": "plain",
+        "labelSize": 14,
+        "labelTone": "title",
+        "statusDot": "none",
+        "thousands": false,
+        "valueFill": "solid",
+        "valueFont": "digit",
+        "valueGlow": 5,
+        "valueSize": 26,
+        "labelPlace": "above",
+        "valueColor": "var(--accent-primary)",
+        "labelOpacity": 0.68,
+        "fixedDecimals": false,
+        "gradientAngle": 0,
+        "valueGradient": [],
+        "textPlainFallback": true,
+        "emptyText": "—"
+      },
+      "bindings": [
+        {
+          "field_key": "cardValues[0].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA113_6_P"
+        },
+        {
+          "field_key": "cardValues[1].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_KYJ3_CQ_PT"
+        },
+        {
+          "field_key": "cardValues[2].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_KYJ3_QDB"
+        },
+        {
+          "field_key": "cardValues[3].value",
+          "source_kind": "computed",
+          "compute_json": {
+            "op": "product",
+            "inputs": [
+              "cardValues[0].value",
+              "cardValues[2].value"
+            ]
+          },
+          "transform_json": {
+            "scale": 0.016666666666666666
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-3-power",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 518,
+      "w": 928,
+      "h": 247,
+      "config_json": {
+        "unit": "kW",
+        "title": "3# 有功功率趋势",
+        "series": [
+          {
+            "name": "有功功率",
+            "unit": "kW",
+            "color": "var(--state-warning)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 1,
+        "yAxisName": "kW",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:power_3",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-3-pressure",
+      "module_type": "trend-chart",
+      "is_visible": false,
+      "x": 968,
+      "y": 518,
+      "w": 928,
+      "h": 247,
+      "config_json": {
+        "unit": "MPa",
+        "title": "3# 排气压力趋势",
+        "series": [
+          {
+            "name": "排气压力",
+            "unit": "MPa",
+            "color": "var(--accent-primary)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 3,
+        "yAxisName": "MPa",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:pressure_3",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "client_key": "machine-3-eta",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 782,
+      "w": 928,
+      "h": 250,
+      "config_json": {
+        "unit": "",
+        "title": "3# 现场气电比趋势",
+        "series": [
+          {
+            "name": "现场气电比",
+            "unit": "",
+            "color": "var(--state-success)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "点位值",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:site_qdb_3",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-3-flow",
+      "module_type": "trend-chart",
+      "x": 968,
+      "y": 782,
+      "w": 928,
+      "h": 250,
+      "config_json": {
+        "unit": "m³/min",
+        "title": "3# 估算产气趋势",
+        "series": [
+          {
+            "name": "估算产气",
+            "unit": "m³/min",
+            "color": "var(--accent-primary)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "m³/min",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:flow_est_3",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-4",
+      "module_type": "info-card",
+      "x": 24,
+      "y": 392,
+      "w": 1872,
+      "h": 108,
+      "config_json": {
+        "gapX": 12,
+        "gapY": 4,
+        "icon": {
+          "gap": 10,
+          "bgTo": "",
+          "glow": 8,
+          "mode": "badge",
+          "size": 40,
+          "shape": "circle",
+          "bgFrom": "",
+          "bgAngle": 135,
+          "opacity": 1,
+          "fontSize": 18,
+          "position": "left",
+          "borderColor": ""
+        },
+        "padX": 10,
+        "padY": 5,
+        "unit": {
+          "size": 12,
+          "tone": "primary",
+          "place": "baseline",
+          "opacity": 0.5
+        },
+        "align": "left",
+        "hover": "none",
+        "items": [
+          {
+            "label": "有功功率",
+            "unit": "kW",
+            "precision": 1
+          },
+          {
+            "label": "排气压力",
+            "unit": "MPa",
+            "precision": 3
+          },
+          {
+            "label": "现场气电比",
+            "unit": "",
+            "precision": 2
+          },
+          {
+            "label": "估算瞬时产气",
+            "unit": "m³/min",
+            "precision": 1
+          }
+        ],
+        "title": "4# 空压机 · 变频",
+        "layout": "grid",
+        "columns": "4",
+        "compare": {
+          "mode": "percent",
+          "show": false,
+          "label": "",
+          "invertTrend": false
+        },
+        "cellPadX": 10,
+        "cellPadY": 5,
+        "cellShell": "plain",
+        "labelSize": 14,
+        "labelTone": "title",
+        "statusDot": "none",
+        "thousands": false,
+        "valueFill": "solid",
+        "valueFont": "digit",
+        "valueGlow": 5,
+        "valueSize": 26,
+        "labelPlace": "above",
+        "valueColor": "var(--accent-primary)",
+        "labelOpacity": 0.68,
+        "fixedDecimals": false,
+        "gradientAngle": 0,
+        "valueGradient": [],
+        "textPlainFallback": true,
+        "emptyText": "—"
+      },
+      "bindings": [
+        {
+          "field_key": "cardValues[0].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:DA111_4_P"
+        },
+        {
+          "field_key": "cardValues[1].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_KYJ4_CQ_PT"
+        },
+        {
+          "field_key": "cardValues[2].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_KYJ4_QDB"
+        },
+        {
+          "field_key": "cardValues[3].value",
+          "source_kind": "computed",
+          "compute_json": {
+            "op": "product",
+            "inputs": [
+              "cardValues[0].value",
+              "cardValues[2].value"
+            ]
+          },
+          "transform_json": {
+            "scale": 0.016666666666666666
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-4-power",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 518,
+      "w": 928,
+      "h": 247,
+      "config_json": {
+        "unit": "kW",
+        "title": "4# 有功功率趋势",
+        "series": [
+          {
+            "name": "有功功率",
+            "unit": "kW",
+            "color": "var(--state-warning)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 1,
+        "yAxisName": "kW",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:power_4",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-4-pressure",
+      "module_type": "trend-chart",
+      "x": 968,
+      "y": 518,
+      "w": 928,
+      "h": 247,
+      "config_json": {
+        "unit": "MPa",
+        "title": "4# 排气压力趋势",
+        "series": [
+          {
+            "name": "排气压力",
+            "unit": "MPa",
+            "color": "var(--accent-primary)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 3,
+        "yAxisName": "MPa",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:pressure_4",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-4-site-eta",
+      "module_type": "trend-chart",
+      "x": 24,
+      "y": 782,
+      "w": 928,
+      "h": 250,
+      "config_json": {
+        "unit": "",
+        "title": "4# 现场气电比趋势",
+        "series": [
+          {
+            "name": "现场气电比",
+            "unit": "",
+            "color": "var(--state-success)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "点位值",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:site_qdb_4",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "is_visible": false
+    },
+    {
+      "client_key": "machine-4-flow",
+      "module_type": "trend-chart",
+      "is_visible": false,
+      "x": 968,
+      "y": 782,
+      "w": 928,
+      "h": 250,
+      "config_json": {
+        "unit": "m³/min",
+        "title": "4# 估算产气趋势",
+        "series": [
+          {
+            "name": "估算产气",
+            "unit": "m³/min",
+            "color": "var(--accent-primary)",
+            "axis": "left"
+          }
+        ],
+        "yScale": false,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "m³/min",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:flow_est_4",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ]
     }
   ],
   "chrome_json": {
@@ -1657,6 +2234,116 @@
         "enabled": true
       },
       "units": "px"
-    }
+    },
+    "interactions": [
+      {
+        "id": "air-machine-tab",
+        "source": {
+          "nodeId": {
+            "client_key": "machine-selector"
+          },
+          "event": "select"
+        },
+        "action": {
+          "type": "setActive",
+          "groups": [
+            {
+              "value": "station",
+              "targets": [
+                {
+                  "client_key": "station-pressure"
+                },
+                {
+                  "client_key": "station-power"
+                },
+                {
+                  "client_key": "station-cooling"
+                }
+              ]
+            },
+            {
+              "value": "1",
+              "targets": [
+                {
+                  "client_key": "machine-1"
+                },
+                {
+                  "client_key": "machine-1-power"
+                },
+                {
+                  "client_key": "machine-1-pressure"
+                },
+                {
+                  "client_key": "machine-1-site-eta"
+                },
+                {
+                  "client_key": "machine-1-flow"
+                }
+              ]
+            },
+            {
+              "value": "2",
+              "targets": [
+                {
+                  "client_key": "machine-2"
+                },
+                {
+                  "client_key": "machine-2-power"
+                },
+                {
+                  "client_key": "machine-2-pressure"
+                },
+                {
+                  "client_key": "machine-2-eta"
+                },
+                {
+                  "client_key": "machine-2-flow"
+                }
+              ]
+            },
+            {
+              "value": "3",
+              "targets": [
+                {
+                  "client_key": "machine-3"
+                },
+                {
+                  "client_key": "machine-3-power"
+                },
+                {
+                  "client_key": "machine-3-pressure"
+                },
+                {
+                  "client_key": "machine-3-eta"
+                },
+                {
+                  "client_key": "machine-3-flow"
+                }
+              ]
+            },
+            {
+              "value": "4",
+              "targets": [
+                {
+                  "client_key": "machine-4"
+                },
+                {
+                  "client_key": "machine-4-power"
+                },
+                {
+                  "client_key": "machine-4-pressure"
+                },
+                {
+                  "client_key": "machine-4-site-eta"
+                },
+                {
+                  "client_key": "machine-4-flow"
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
   }
 }

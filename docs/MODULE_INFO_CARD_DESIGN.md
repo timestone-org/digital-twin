@@ -37,14 +37,14 @@
 
 | type id | displayName | category | icon | chrome | 默认尺寸 | 顶层字段 | 行内字段 |
 |---|---|---|---|---|---|---|---|
-| `info-card` | 信息卡片 | 数据 | `layout-grid` | `card`（缺省） | 420×220，min 120×64 | 33 | 10 |
+| `info-card` | 信息卡片 | 数据 | `layout-grid` | `card`（缺省） | 420×220，min 120×64 | 34 | 10 |
 | `info-list` | 信息列表 | 数据 | `table` | `card`（缺省） | 360×420，min 160×96 | 35 | 10 |
 | `info-feed` | 信息流 | 数据 | `activity` | `card`（缺省） | 400×260，min 160×96 | 18 | 0（行全来自绑定） |
 | `gauge-card` | 仪表卡片 | 数据 | `gauge` | `card`（缺省） | 320×220，min 120×96 | 30 | 8 |
 
 对照已落地的三个：`action-button` 30 个顶层字段、`metric-card` 13 个（行内 11）、
 `header` 18 个（含 `SCAN_FIELDS` 展开的 4 个）。**35 是这个仓里的上限，不是舒适区**——
-`info-list` 恰好 35、零余量，`info-card` 33 与 `gauge-card` 30 也贴着上限，靠预设让绝大多数
+`info-list` 恰好 35、零余量，`info-card` 34 与 `gauge-card` 30 也贴着上限，靠预设让绝大多数
 用户一次都不用碰。`info-feed` 只有 18，它是唯一不贴上限的一个：行全部来自绑定，行结构、
 行外壳与 hover、分组、副读数、进度件、告警规则这六段它一段都没有（它只有一个
 `rowBorderStyle` 管行间分隔线，不是 `info-list` 那整段行外壳）。
@@ -502,7 +502,7 @@ N 次调用的代价可以忽略。
 
 ### 5.2 四个模块的顶层字段
 
-**`info-card`（33）**
+**`info-card`（34）**
 
 | 分段 | 字段 |
 |---|---|
@@ -510,11 +510,13 @@ N 次调用的代价可以忽略。
 | 排布 6 | `layout`(auto/single/grid) · `columns`(auto/1…6) · `gapX`(0…40,10) · `gapY`(0…40,10) · `padX`(0…40,10) · `padY`(0…40,6) |
 | 外壳 4 | `cellShell`(plain/card/accent) · `cellPadX`(12) · `cellPadY`(8) · `hover`(none/tint/lift) |
 | 标签 5 | `align`(left/center) · `labelPlace`(above/below/left/hidden) · `labelSize`(8…48,12) · `labelTone`(secondary/primary/title/muted) · `labelOpacity`(0.2…1,1) |
-| 数值 8 | `valueSize`(0…200，**0 = 跟容器自适应**) · `valueColor` · `valueFill`(solid/gradient) · `valueGradient`(array `{color}`) · `gradientAngle`(0…360 step 5) · `valueGlow`(0…24) · `valueFont`(digit/body) · `textPlainFallback` |
+| 数值 9 | `valueSize`(0…200，**0 = 跟容器自适应**) · `valueColor` · `booleanColors`(object · `trueColor`、`falseColor`) · `valueFill`(solid/gradient) · `valueGradient`(array `{color}`) · `gradientAngle`(0…360 step 5) · `valueGlow`(0…24) · `valueFont`(digit/body) · `textPlainFallback` |
 | 单位 1 | `unit`(object · 4 子：`place`(baseline/attached/joined) · `size`(8…32,12) · `tone`(secondary/muted/primary/accent) · `opacity`(0.2…1)) |
 | 格式 2 | `thousands` · `fixedDecimals` |
 | 簇 2 | `icon`(object · 12 子) · `compare`(object · 4 子) |
 | 告警 2 | `rules`(带 color 的规则表) · `statusDot`(none/auto) |
+
+`booleanColors` 按开关量的真假给当前有效读数着色。留空时沿用原有颜色。外观预设保留这项配置。
 
 `icon` 簇缺省（整块写在字段身上）：
 `{ mode:'none', position:'left', size:20, shape:'circle', bgFrom:'', bgTo:'', bgAngle:135,
@@ -924,7 +926,7 @@ bindings: [{
 ```
 web/packages/modules/src/modules/info-card/          ≈ 2950 行
   manifest.ts     ~180  身份 · 拼 schema · bindings · presets · 派生行数行名 · preview
-  schema.ts       ~480  33 个顶层字段（按分段一个函数）
+  schema.ts       ~480  34 个顶层字段（按分段一个函数）
   itemSchema.ts   ~120  行内 10 字段
   presets.ts      ~200  5 个 configPresets
   options.ts      ~160  全部枚举取值表 + valuesOf() 推 readEnum 白名单

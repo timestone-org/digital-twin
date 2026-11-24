@@ -37,9 +37,10 @@ function slotCell(
   slot: ModuleSlotMeta | undefined,
   raw: Record<string, unknown> | undefined = undefined,
   item: Record<string, unknown> = { label: '一号机', unit: 'kW' },
+  config: Record<string, unknown> = {},
 ): CardCell {
   const [cell] = buildCardCells({
-    config: { [CARD_ITEMS_KEY]: [item] },
+    config: { ...config, [CARD_ITEMS_KEY]: [item] },
     rows: raw === undefined ? [] : [raw],
     slots: slot === undefined ? {} : { [cardFieldKey(0, 'value')]: slot },
   })
@@ -228,6 +229,60 @@ describe('三种值类型', () => {
   it('占位符可配，留空回落全平台那一个', () => {
     expect(cellOf({}, {}, { emptyText: '无' }).text).toBe('无')
     expect(cellOf({}, {}, { emptyText: '   ' }).text).toBe('—')
+  })
+})
+
+describe('开关量颜色', () => {
+  const item = { valueKind: 'boolean' }
+  const colors = {
+    booleanColors: {
+      trueColor: 'var(--state-success)',
+      falseColor: 'var(--state-danger)',
+    },
+  }
+
+  it.each([
+    [true, colors.booleanColors.trueColor],
+    [false, colors.booleanColors.falseColor],
+    [2, colors.booleanColors.trueColor],
+    [0, colors.booleanColors.falseColor],
+  ])('开关量 %s 遵循相同的真假取色口径', (value, color) => {
+    const cell = cellOf(item, { value }, colors)
+
+    expect(cell.vars['--ic-cell-color']).toBe(color)
+  })
+
+  it.each<ModuleSlotMeta>([
+    { state: 'ok', isStale: true },
+    { state: 'error' },
+    { state: 'pending' },
+  ])('质量不可用时不套用开关量颜色', (slot) => {
+    const cell = slotCell(slot, { value: true }, item, colors)
+
+    expect(cell.vars['--ic-cell-color']).toBeUndefined()
+  })
+
+  it('非开关档和不认识的读数不套用开关量颜色', () => {
+    for (const [valueKind, value] of [
+      ['text', true],
+      ['number', 1],
+      ['boolean', '检修'],
+    ]) {
+      expect(
+        cellOf({ valueKind }, { value }, colors).vars['--ic-cell-color'],
+      ).toBeUndefined()
+    }
+  })
+
+  it('未配置的开关量颜色沿用格自身颜色', () => {
+    const color = 'var(--accent-secondary)'
+    const cell = cellOf(
+      { ...item, color },
+      { value: false },
+      { booleanColors: { trueColor: colors.booleanColors.trueColor } },
+    )
+
+    expect(cell.vars['--ic-cell-color']).toBe(color)
   })
 })
 

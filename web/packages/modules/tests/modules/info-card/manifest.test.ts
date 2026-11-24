@@ -1,5 +1,5 @@
 /**
- * @fileoverview 守信息卡片清单的声明：字段预算（顶层 33 / 行内 10）、每个簇都有整块缺省
+ * @fileoverview 守信息卡片清单的声明：字段预算（顶层 34 / 行内 10）、每个簇都有整块缺省
  * 且子键顺序就是预设的基准、没有第三层容器字段、枚举档位取自本模块那张取值表而不是手抄、
  * 两个绑定子槽逐字对上、行钉在配置里的格上、四档状态由模块自己交代。
  *
@@ -111,12 +111,12 @@ describe('信息卡片清单的身份', () => {
 })
 
 describe('信息卡片的字段预算', () => {
-  it('顶层三十三个字段，键唯一', () => {
-    expect(SCHEMA).toHaveLength(33)
-    expect(TOP_KEYS.size).toBe(33)
+  it('顶层三十四个字段，键唯一', () => {
+    expect(SCHEMA).toHaveLength(34)
+    expect(TOP_KEYS.size).toBe(34)
   })
 
-  it('三十三个字段分段摆开，每一段的字段数就是设计里的那份预算', () => {
+  it('各分段字段数符合设计预算', () => {
     const counts = new Map<string, number>()
     for (const item of SCHEMA) {
       const group = item.group ?? ''
@@ -128,7 +128,7 @@ describe('信息卡片的字段预算', () => {
       ['排布', 6],
       ['外壳', 4],
       ['标签', 5],
-      ['数值', 8],
+      ['数值', 9],
       ['单位', 1],
       ['格式', 2],
       ['图标', 1],
@@ -200,11 +200,19 @@ describe('信息卡片的缺省', () => {
       .filter((row) => row.onField.join() !== row.onFields.join())
 
     expect(objectFields().map((item) => item.key)).toEqual([
+      'booleanColors',
       'unit',
       'icon',
       'compare',
     ])
     expect(drift).toEqual([])
+  })
+
+  it('开关量颜色各自留空时沿用原有颜色', () => {
+    expect(field('booleanColors')?.default).toEqual({
+      trueColor: '',
+      falseColor: '',
+    })
   })
 
   it('图标那一簇十二个子键，角标与图标容器共用同一套旋钮', () => {

@@ -5,9 +5,10 @@ from collections.abc import Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from math import isfinite
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import UUID
 
+from lib.errors import DependencyUnavailable
 from lib.logging import (
     bind_log_context,
     get_logger,
@@ -54,6 +55,38 @@ class PublicationSources:
     snapshots: SnapshotSource
     states: OnlineSources
     calibration: CalibrationSource
+
+
+type Outcome = Literal[
+    "input_unavailable",
+    "idle",
+    "machines_unavailable",
+    "curves_unavailable",
+    "out_of_range",
+    "recommended",
+]
+
+
+@dataclass(frozen=True)
+class Decision:
+    """一次推荐的目标流量、组合与结果。"""
+
+    demand: float | None
+    outcome: Outcome
+    machines: tuple[int, ...] = ()
+
+    def status_text(self, *, is_estimated: bool) -> str:
+        """生成大屏上的推荐依据。Args: is_estimated。"""
+        if self.demand is None:
+            return "等待四台机组有效采集" if is_estimated else "等待有效需气量"
+        total = f"{self.demand:.1f} m³/min"
+        suffix = {
+            "idle": " · 当前无产气",
+            "machines_unavailable": " · 无可用机组",
+            "curves_unavailable": " · 标定曲线未就绪",
+            "out_of_range": " · 无可行组合",
+        }.get(self.outcome, "")
+        return total + suffix
 
 
 class CompressedAirPublisher:
@@ -120,16 +153,11 @@ class CompressedAirPublisher:
         return self._is_leader
 
     async def _publish(self) -> None:
-        """读取并校验四个目标，再写一批明确的 True/False。"""
+        """读取并校验推荐目标，再写入本轮组合与状态。"""
         config = self._config
-        readings = await self._read_inputs()
-        proposed = recommended_machines(
-            config, readings, await self._latest_curves()
-        )
-        writes = tuple(
-            NodeWrite(node_id, index in proposed)
-            for index, node_id in enumerate(config.recommendation_node_ids, 1)
-        )
+        curves = await self._latest_curves()
+        decision = _decide(config, await self._read_inputs(), curves)
+        writes = _write_items(config, decision)
         if not await self._targets_ready() or not await self._hold_lease():
             return
         receipts = await self._nodes.write(
@@ -141,17 +169,21 @@ class CompressedAirPublisher:
             item.id: item.value for item in receipts if item.is_written
         }
         if len(receipts) != len(writes) or not all(
-            confirmed.get(item.id) is item.value for item in writes
+            type(confirmed.get(item.id)) is type(item.value)
+            and confirmed[item.id] == item.value
+            for item in writes
         ):
             _logger.warning(
-                "compressed_air_publish_unconfirmed", "四个推荐点位未全部确认"
+                "compressed_air_publish_unconfirmed", "推荐输出未全部确认"
             )
             return
         _logger.info(
             "compressed_air_published",
             "发布空压站推荐点位",
-            has_recommendation=bool(proposed),
-            machine_count=len(proposed),
+            has_recommendation=bool(decision.machines),
+            machine_count=len(decision.machines),
+            demand_m3_min=decision.demand,
+            outcome=decision.outcome,
         )
 
     async def _latest_curves(self) -> Curves:
@@ -181,27 +213,34 @@ class CompressedAirPublisher:
             online = await self._sources.states.online_ids(
                 list(set(owners.values()))
             )
-        except TimeoutError:
+            return await self._sources.snapshots.read(
+                [key for key in keys if owners[key] in online]
+            )
+        except (DependencyUnavailable, TimeoutError) as error:
+            _logger.warning(
+                "compressed_air_inputs_unavailable",
+                "空压站当前读数暂不可用",
+                error_type=type(error).__name__,
+            )
             return {}
-        return await self._sources.snapshots.read(
-            [key for key in keys if owners[key] in online]
-        )
 
     async def _targets_ready(self) -> bool:
-        """全部确认是可写的布尔节点才发包。"""
+        """确认每个目标可写并且类型匹配。"""
         config = self._config
+        expected = dict.fromkeys(config.recommendation_node_ids, "boolean")
+        status = config.recommendation_status_node_id
+        if status is not None:
+            expected[status] = "string"
         targets = await self._nodes.resolve(
             instance_id=config.opcua_instance_id,
-            node_ids=config.recommendation_node_ids,
+            node_ids=config.output_node_ids,
         )
         ready = {
-            item.id
+            item.id: item.data_type
             for item in targets
-            if item.is_found
-            and item.is_writable
-            and item.data_type == "boolean"
+            if item.is_found and item.is_writable
         }
-        if ready == set(config.recommendation_node_ids):
+        if len(targets) == len(expected) and ready == expected:
             return True
         _logger.warning(
             "compressed_air_targets_invalid", "空压站推荐点位缺失或类型不匹配"
@@ -234,24 +273,84 @@ def _current(reading: PointReading | None) -> object:
     return None
 
 
+def _nonnegative(reading: PointReading | None) -> float | None:
+    """读取当前有效的非负数。Args: reading。"""
+    value = _current(reading)
+    if isinstance(value, bool) or not isinstance(value, (float, int)):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    return number if isfinite(number) and number >= 0 else None
+
+
+def current_demand(
+    config: CompressedAirConfig, readings: Mapping[str, PointReading]
+) -> float | None:
+    """读取单点目标或由四台机组估算当前产气总量。Args: config, readings。"""
+    if config.demand_node_key is not None:
+        return _nonnegative(readings.get(config.demand_node_key))
+    if config.estimated_flow_points is None:
+        return None
+    total = 0.0
+    for points in config.estimated_flow_points:
+        power = _nonnegative(readings.get(points.power))
+        ratio = _nonnegative(readings.get(points.site_qdb))
+        if power is None or ratio is None:
+            return None
+        total += power * ratio / 60
+    return total if isfinite(total) else None
+
+
+def _decide(
+    config: CompressedAirConfig,
+    readings: Mapping[str, PointReading],
+    curves: Curves,
+) -> Decision:
+    """从当前流量与已标定曲线构造推荐。Args: config, readings, curves。"""
+    demand = current_demand(config, readings)
+    if demand is None:
+        return Decision(demand, "input_unavailable")
+    if demand == 0:
+        return Decision(demand, "idle")
+    available = tuple(
+        index
+        for index in config.candidate_machines
+        if (key := config.available_node_keys[index - 1]) is None
+        or _current(readings.get(key)) is True
+    )
+    if not available:
+        return Decision(demand, "machines_unavailable")
+    if any(not curves.get(index) for index in available):
+        return Decision(demand, "curves_unavailable")
+    recommendation = recommend(demand, available, curves)
+    if recommendation is None:
+        return Decision(demand, "out_of_range")
+    return Decision(demand, "recommended", recommendation.machines)
+
+
+def _write_items(
+    config: CompressedAirConfig, decision: Decision
+) -> tuple[NodeWrite, ...]:
+    """将推荐组合及可选状态转换为写入值。Args: config, decision。"""
+    writes = tuple(
+        NodeWrite(node_id, index in decision.machines)
+        for index, node_id in enumerate(config.recommendation_node_ids, 1)
+    )
+    status = config.recommendation_status_node_id
+    if status is None:
+        return writes
+    text = decision.status_text(
+        is_estimated=config.estimated_flow_points is not None
+    )
+    return (*writes, NodeWrite(status, text))
+
+
 def recommended_machines(
     config: CompressedAirConfig,
     readings: Mapping[str, PointReading],
     curves: Curves,
 ) -> tuple[int, ...]:
     """无有效需求或可行解时撤销推荐。Args: config, readings, curves。"""
-    demand = _current(readings.get(config.demand_node_key))
-    if isinstance(demand, bool) or not isinstance(demand, (float, int)):
-        return ()
-    if not isfinite(demand):
-        return ()
-    available = [
-        i
-        for i, key in enumerate(config.available_node_keys, 1)
-        if config.machines[i - 1] is not None
-        and (key is None or _current(readings.get(key)) is True)
-    ]
-    if any(i not in curves for i in available):
-        return ()
-    recommendation = recommend(demand, available, curves)
-    return () if recommendation is None else recommendation.machines
+    return _decide(config, readings, curves).machines

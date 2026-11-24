@@ -15,13 +15,15 @@ import { INFO_CARD_PRESETS } from '../../../src/modules/info-card/presets'
 
 const SCHEMA = manifest.configSchema
 const TOP_KEYS = new Set(SCHEMA.map((field) => field.key))
-const OBJECT_FIELDS = SCHEMA.filter((field) => field.type === 'object')
 
 /**
  * 内容键的真源在清单上（`ModuleManifest.contentKeys`），这里只取来用。
  * 预设换的是观感，这几个键写了就会抹掉用户配好的格与他自己配的阈值。
  */
 const CONTENT_KEYS = manifest.contentKeys ?? []
+const APPEARANCE_OBJECT_FIELDS = SCHEMA.filter(
+  (field) => field.type === 'object' && !CONTENT_KEYS.includes(field.key),
+)
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -127,7 +129,7 @@ describe('预设写的键', () => {
     expect(Object.keys(INFO_CARD_PRESETS[0]?.config ?? {})).toHaveLength(29)
   })
 
-  it('观感键一个不落：顶层字段里除去四个内容键，全在预设里', () => {
+  it('顶层观感字段全部由预设覆盖', () => {
     const wrote = new Set(Object.keys(INFO_CARD_PRESETS[0]?.config ?? {}))
     const missing = [...TOP_KEYS].filter(
       (key) => !wrote.has(key) && !CONTENT_KEYS.includes(key),
@@ -144,7 +146,7 @@ describe('预设写的键', () => {
     )
 
     expect(wiped).toEqual([])
-    // 反过来锁住这三个键真的在清单里，免得改名之后这条断言变成空转
+    // 内容键均须对应已声明的配置字段。
     expect(CONTENT_KEYS.filter((key) => TOP_KEYS.has(key))).toEqual(
       CONTENT_KEYS,
     )
@@ -176,16 +178,16 @@ describe('预设写的取值', () => {
     expect(columns.every((value) => typeof value === 'string')).toBe(true)
   })
 
-  it('每套都把每一个簇写全，子键顺序与该字段缺省逐字相同', () => {
+  it('每套都写全观感配置簇，子键顺序与缺省值相同', () => {
     const drift = INFO_CARD_PRESETS.flatMap((preset) =>
-      OBJECT_FIELDS.map((field) => ({
+      APPEARANCE_OBJECT_FIELDS.map((field) => ({
         at: `${preset.id}.${field.key}`,
         wrote: Object.keys(asRecord(preset.config[field.key])).join(),
         want: Object.keys(asRecord(field.default)).join(),
       })),
     ).filter((row) => row.wrote !== row.want)
 
-    expect(OBJECT_FIELDS.length).toBeGreaterThan(0)
+    expect(APPEARANCE_OBJECT_FIELDS.length).toBeGreaterThan(0)
     expect(drift).toEqual([])
   })
 

@@ -78,7 +78,7 @@ export default defineModule({
   ],
   defaultSize: { width: 420, height: 220, minWidth: 120, minHeight: 64 },
   configPresets: INFO_CARD_PRESETS,
-  contentKeys: ['title', CARD_ITEMS_KEY, 'emptyText', 'rules'],
+  contentKeys: ['title', CARD_ITEMS_KEY, 'emptyText', 'rules', 'booleanColors'],
   configSchema: [
     {
       key: 'title',
@@ -367,6 +367,19 @@ export default defineModule({
       default: 'var(--accent-primary)',
       span: 'half',
       help: '设置未命中取值规则时的颜色；规则命中后优先使用规则颜色。',
+    },
+    {
+      key: 'booleanColors',
+      label: '开关量颜色',
+      type: 'object',
+      group: '数值',
+      span: 'full',
+      default: { trueColor: '', falseColor: '' },
+      help: '为有效开关量分别指定颜色，留空时沿用原有读数颜色。',
+      fields: [
+        { key: 'trueColor', label: '为真', type: 'color', default: '' },
+        { key: 'falseColor', label: '为假', type: 'color', default: '' },
+      ],
     },
     {
       key: 'valueFill',

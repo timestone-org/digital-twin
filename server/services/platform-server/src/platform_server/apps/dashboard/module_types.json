@@ -7172,6 +7172,32 @@
           "span": "half"
         },
         {
+          "key": "booleanColors",
+          "label": "开关量颜色",
+          "type": "object",
+          "default": {
+            "trueColor": "",
+            "falseColor": ""
+          },
+          "group": "数值",
+          "help": "为有效开关量分别指定颜色，留空时沿用原有读数颜色。",
+          "span": "full",
+          "fields": [
+            {
+              "key": "trueColor",
+              "label": "为真",
+              "type": "color",
+              "default": ""
+            },
+            {
+              "key": "falseColor",
+              "label": "为假",
+              "type": "color",
+              "default": ""
+            }
+          ]
+        },
+        {
           "key": "valueFill",
           "label": "读数填充",
           "type": "enum",
@@ -8099,7 +8125,8 @@
         "title",
         "items",
         "emptyText",
-        "rules"
+        "rules",
+        "booleanColors"
       ]
     },
     {

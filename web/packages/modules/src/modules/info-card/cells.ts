@@ -186,11 +186,17 @@ interface CellReading {
   digit: boolean
 }
 
+interface BooleanColors {
+  trueColor: string
+  falseColor: string
+}
+
 interface CellContext {
   raws: readonly unknown[]
   slots: Readonly<Record<string, ModuleSlotMeta>> | undefined
   hasSlots: boolean
   rules: readonly ValueRule[]
+  booleanColors: BooleanColors
   emptyText: string
   /** 数值要不要千分位。 */
   grouping: boolean
@@ -513,6 +519,21 @@ function gradientOf(
   return read.state === 'ok' && ctx.gradientOn && override === '' && read.digit
 }
 
+/** 返回当前开关量的颜色，留空时沿用这格的颜色。 */
+function booleanColorOf(
+  item: CardItem,
+  index: number,
+  raw: unknown,
+  state: CellState,
+  ctx: CellContext,
+): string {
+  if (item.kind !== 'boolean' || state !== 'ok') return ''
+  if (slotAt(ctx, index, 'value')?.isStale === true) return ''
+  const value = toBool(raw)
+  if (value === null) return ''
+  return value ? ctx.booleanColors.trueColor : ctx.booleanColors.falseColor
+}
+
 /**
  * 一格配置 + 这一格两槽的结论 → 一格。
  * @param item 归一化后的这一格
@@ -524,7 +545,9 @@ function toCell(item: CardItem, index: number, ctx: CellContext): CardCell {
   const read = readingOf(item, index, ctx)
   const hit = hitOf(raw, item, read.state, ctx)
   // ⚠ 命中色压过逐格静态色：静态色是身份，告警是此刻的事实
-  const override = hit?.color ?? item.color
+  const override =
+    hit?.color ??
+    (booleanColorOf(item, index, raw, read.state, ctx) || item.color)
   const compare =
     read.state === 'ok'
       ? compareOf(raw, rawAt(ctx, index, 'aux'), item, ctx)
@@ -564,11 +587,16 @@ function readCompare(config: Record<string, unknown>): CompareLook {
  */
 function cellContext(input: CardCellsInput): CellContext {
   const config = input.config
+  const booleanColors = readRecord(config.booleanColors)
   return {
     raws: readArray(input.rows),
     slots: input.slots,
     hasSlots: input.slots !== undefined,
     rules: normalizeValueRules(config.rules),
+    booleanColors: {
+      trueColor: readTrimmedText(booleanColors.trueColor),
+      falseColor: readTrimmedText(booleanColors.falseColor),
+    },
     emptyText: readTrimmedText(config.emptyText) || NO_DATA,
     grouping: readBoolean(config.thousands),
     fixed: readBoolean(config.fixedDecimals),

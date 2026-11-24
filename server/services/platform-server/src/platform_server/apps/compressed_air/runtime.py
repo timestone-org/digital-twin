@@ -4,9 +4,14 @@ from functools import partial
 
 from platform_server.apps.collect.services import ReadOnlyHistorySource
 from platform_server.apps.collect.services.state_source import SourceStateSource
-from platform_server.apps.compressed_air.crud.calibration import load_curves
+from platform_server.apps.compressed_air.config import CompressedAirConfig
+from platform_server.apps.compressed_air.crud.calibration import (
+    load_curves,
+    load_dataset_curves,
+)
 from platform_server.apps.compressed_air.services.publication import (
     LEASE_TTL_S,
+    CalibrationSource,
     CompressedAirPublisher,
     PublicationSources,
 )
@@ -35,13 +40,23 @@ def build_compressed_air(
             PublicationSources(
                 container.snapshots,
                 SourceStateSource(container.history),
-                partial(
-                    load_curves,
-                    ReadOnlyHistorySource(container.history_database),
-                    config,
-                ),
+                _calibration_source(container, config),
             ),
             container.nodes,
             lease,
         ),
+    )
+
+
+def _calibration_source(
+    container: Container, config: CompressedAirConfig
+) -> CalibrationSource:
+    """装配历史实测台账或累计归档。Args: container, config。"""
+    table_id = config.calibration_table_id
+    if table_id is not None:
+        return partial(
+            load_dataset_curves, container.database, config, table_id
+        )
+    return partial(
+        load_curves, ReadOnlyHistorySource(container.history_database), config
     )
