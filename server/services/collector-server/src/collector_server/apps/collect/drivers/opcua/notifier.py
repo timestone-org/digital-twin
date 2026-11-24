@@ -14,6 +14,9 @@ from collector_server.apps.collect.drivers.base import (
     ValueSink,
 )
 from collector_server.apps.collect.drivers.opcua import mapping
+from collector_server.apps.collect.drivers.opcua.recovery import (
+    BadQualityMonitor,
+)
 from collector_server.clock import Clock
 
 
@@ -33,6 +36,7 @@ class DataChangeNotifier:
         self._next_version = 0
         self._provisional: dict[str, Sample | None] = {}
         self._failed_status: ua.StatusCode | None = None
+        self.bad_quality = BadQualityMonitor()
 
     def status_change_notification(
         self, status: ua.StatusChangeNotification
@@ -75,6 +79,7 @@ class DataChangeNotifier:
         node_id = self._node_ids.pop(point_code, None)
         self._versions.pop(point_code, None)
         self._provisional.pop(point_code, None)
+        self.bad_quality.forget(point_code)
         if node_id is None:
             return
         tracked = self._codes[node_id]
@@ -106,6 +111,7 @@ class DataChangeNotifier:
         if point_code in self._provisional:
             self._provisional[point_code] = sample
             return
+        self.bad_quality.observe(point_code, sample[2])
         self._sink(point_code, *sample)
 
     def datachange_notification(
