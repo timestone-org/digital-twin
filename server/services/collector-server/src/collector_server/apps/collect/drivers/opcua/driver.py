@@ -39,6 +39,9 @@ from collector_server.apps.collect.drivers.opcua.initial import read_initial
 from collector_server.apps.collect.drivers.opcua.notifier import (
     DataChangeNotifier,
 )
+from collector_server.apps.collect.drivers.opcua.recovery import (
+    SubscriptionRecovery,
+)
 from collector_server.clock import Clock, utc_now_ms
 from collectwire import DEFAULT_BROWSE_LIMIT, DataType
 from lib.logging import get_logger
@@ -289,6 +292,7 @@ class OpcuaDriver:
         self._notifier: DataChangeNotifier | None = None
         self._points: dict[str, PointSpec] = {}
         self._handles: dict[str, int] = {}
+        self._recovery = SubscriptionRecovery(batch_size=MAX_NODES_PER_READ)
 
     @property
     def capabilities(self) -> DriverCapabilities:
@@ -345,8 +349,15 @@ class OpcuaDriver:
         client = self._require_client()
         async with asyncio.timeout(self._connection.timeouts.request_s):
             await client.check_connection()
-        if self._notifier is not None:
-            self._notifier.check_subscription()
+        notifier = self._notifier
+        if notifier is not None:
+            notifier.check_subscription()
+            await self._recovery.check(
+                notifier.bad_quality,
+                self.read_many,
+                is_current=lambda code: self._notifier is notifier
+                and code in self._handles,
+            )
 
     async def subscribe(
         self, points: Sequence[PointSpec], on_value: ValueSink
