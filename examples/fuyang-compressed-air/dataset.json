@@ -177,6 +177,30 @@
       "formula": "{power_4} * {site_qdb_4} / 60",
       "unit": "m³/min",
       "decimals": 3
+    },
+    {
+      "key": "power_system",
+      "name": "系统总有功功率",
+      "source": "formula",
+      "formula": "{power_all} + {power_cooling}",
+      "unit": "kW",
+      "decimals": 3
+    },
+    {
+      "key": "flow_est_system",
+      "name": "估算总产气",
+      "source": "formula",
+      "formula": "IF(AND({flow_est_1} >= 0, {flow_est_2} >= 0, {flow_est_3} >= 0, {flow_est_4} >= 0), {flow_est_1} + {flow_est_2} + {flow_est_3} + {flow_est_4}, None)",
+      "unit": "m³/min",
+      "decimals": 3
+    },
+    {
+      "key": "site_qdb_system_est",
+      "name": "系统气电比（估算）",
+      "source": "formula",
+      "formula": "IF(AND({power_all} >= 0, {power_cooling} >= 0, {power_system} > 0), 60 * {flow_est_system} / {power_system}, None)",
+      "unit": "m³/kWh",
+      "decimals": 3
     }
   ]
 }

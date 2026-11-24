@@ -713,15 +713,15 @@
       "client_key": "station-power",
       "module_type": "trend-chart",
       "x": 24,
-      "y": 717,
+      "y": 518,
       "w": 928,
-      "h": 315,
+      "h": 247,
       "config_json": {
         "unit": "kW",
-        "title": "主机总功率趋势",
+        "title": "系统总功率趋势",
         "series": [
           {
-            "name": "主机总功率趋势",
+            "name": "系统总功率趋势",
             "unit": "kW",
             "color": "var(--state-warning)",
             "axis": "left"
@@ -733,7 +733,7 @@
         "precision": 2,
         "yAxisName": "kW",
         "chartStyle": "line",
-        "showLegend": true,
+        "showLegend": false,
         "showSymbol": false,
         "symbolSize": 6,
         "areaOpacity": 0.14,
@@ -753,7 +753,7 @@
           "field_key": "seriesValues[0].series",
           "source_kind": "dataset",
           "detail_json": {
-            "dataset_key": "ds:fuyang_air_minute_live:power_all",
+            "dataset_key": "ds:fuyang_air_minute_live:power_system",
             "range": {
               "last_window": "24h"
             }
@@ -765,10 +765,10 @@
     {
       "client_key": "station-pressure",
       "module_type": "trend-chart",
-      "x": 24,
-      "y": 391,
-      "w": 1872,
-      "h": 309,
+      "x": 968,
+      "y": 518,
+      "w": 928,
+      "h": 247,
       "config_json": {
         "unit": "MPa",
         "title": "储气母管压力趋势",
@@ -786,7 +786,7 @@
         "precision": 3,
         "yAxisName": "MPa",
         "chartStyle": "line",
-        "showLegend": true,
+        "showLegend": false,
         "showSymbol": false,
         "symbolSize": 6,
         "areaOpacity": 0.14,
@@ -819,20 +819,20 @@
       "is_visible": false
     },
     {
-      "client_key": "station-cooling",
+      "client_key": "station-system-flow",
       "module_type": "trend-chart",
       "x": 968,
-      "y": 717,
+      "y": 782,
       "w": 928,
-      "h": 315,
+      "h": 250,
       "config_json": {
-        "unit": "kW",
-        "title": "冷却辅机功率趋势",
+        "unit": "m³/min",
+        "title": "估算总产气趋势",
         "series": [
           {
-            "name": "冷却辅机功率趋势",
-            "unit": "kW",
-            "color": "var(--state-success)",
+            "name": "估算总产气趋势",
+            "unit": "m³/min",
+            "color": "var(--accent-primary)",
             "axis": "left"
           }
         ],
@@ -840,9 +840,9 @@
         "palette": [],
         "animation": false,
         "precision": 2,
-        "yAxisName": "kW",
+        "yAxisName": "m³/min",
         "chartStyle": "line",
-        "showLegend": true,
+        "showLegend": false,
         "showSymbol": false,
         "symbolSize": 6,
         "areaOpacity": 0.14,
@@ -862,7 +862,7 @@
           "field_key": "seriesValues[0].series",
           "source_kind": "dataset",
           "detail_json": {
-            "dataset_key": "ds:fuyang_air_minute_live:power_cooling",
+            "dataset_key": "ds:fuyang_air_minute_live:flow_est_system",
             "range": {
               "last_window": "24h"
             }
@@ -2190,6 +2190,177 @@
           }
         }
       ]
+    },
+    {
+      "client_key": "station-system-efficiency",
+      "module_type": "trend-chart",
+      "is_visible": false,
+      "config_json": {
+        "unit": "m³/kWh",
+        "title": "系统气电比趋势（估算）",
+        "series": [
+          {
+            "name": "系统气电比趋势（估算）",
+            "unit": "m³/kWh",
+            "color": "var(--state-success)",
+            "axis": "left"
+          }
+        ],
+        "yScale": true,
+        "palette": [],
+        "animation": false,
+        "precision": 2,
+        "yAxisName": "m³/kWh",
+        "chartStyle": "line",
+        "showLegend": false,
+        "showSymbol": false,
+        "symbolSize": 6,
+        "areaOpacity": 0.14,
+        "boundaryGap": false,
+        "showTooltip": true,
+        "areaGradient": false,
+        "areaTopAlpha": 0.35,
+        "showDataZoom": true,
+        "rightAxisName": "",
+        "areaGradientTo": "",
+        "showValueLabel": false,
+        "animationDuration": 600,
+        "emptyText": "所选窗口暂无有效归档"
+      },
+      "bindings": [
+        {
+          "field_key": "seriesValues[0].series",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:site_qdb_system_est",
+            "range": {
+              "last_window": "24h"
+            }
+          }
+        }
+      ],
+      "x": 24,
+      "y": 782,
+      "w": 928,
+      "h": 250
+    },
+    {
+      "client_key": "station-system-summary",
+      "module_type": "info-card",
+      "x": 24,
+      "y": 392,
+      "w": 1872,
+      "h": 108,
+      "is_visible": false,
+      "config_json": {
+        "gapX": 12,
+        "gapY": 4,
+        "icon": {
+          "gap": 10,
+          "bgTo": "",
+          "glow": 8,
+          "mode": "badge",
+          "size": 40,
+          "shape": "circle",
+          "bgFrom": "",
+          "bgAngle": 135,
+          "opacity": 1,
+          "fontSize": 18,
+          "position": "left",
+          "borderColor": ""
+        },
+        "padX": 10,
+        "padY": 5,
+        "unit": {
+          "size": 12,
+          "tone": "primary",
+          "place": "baseline",
+          "opacity": 0.5
+        },
+        "align": "left",
+        "hover": "none",
+        "items": [
+          {
+            "label": "系统总有功功率",
+            "unit": "kW",
+            "precision": 1
+          },
+          {
+            "label": "母管压力（实时）",
+            "unit": "MPa",
+            "precision": 3
+          },
+          {
+            "label": "系统气电比（估算）",
+            "unit": "m³/kWh",
+            "precision": 2
+          },
+          {
+            "label": "估算总产气量",
+            "unit": "m³/min",
+            "precision": 1
+          }
+        ],
+        "title": "空压系统 · 最近一分钟",
+        "layout": "grid",
+        "columns": "4",
+        "compare": {
+          "mode": "percent",
+          "show": false,
+          "label": "",
+          "invertTrend": false
+        },
+        "cellPadX": 10,
+        "cellPadY": 5,
+        "cellShell": "plain",
+        "labelSize": 14,
+        "labelTone": "title",
+        "statusDot": "none",
+        "thousands": false,
+        "valueFill": "solid",
+        "valueFont": "digit",
+        "valueGlow": 5,
+        "valueSize": 26,
+        "labelPlace": "above",
+        "valueColor": "var(--accent-primary)",
+        "labelOpacity": 0.68,
+        "fixedDecimals": false,
+        "gradientAngle": 0,
+        "valueGradient": [],
+        "textPlainFallback": true,
+        "emptyText": "—"
+      },
+      "bindings": [
+        {
+          "field_key": "cardValues[0].value",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:power_system",
+            "range": {}
+          }
+        },
+        {
+          "field_key": "cardValues[1].value",
+          "source_kind": "opcua",
+          "node_key": "01a1e74c-49c6-770c-9347-d1f394e465c4:KY_AI_FQG1_PT"
+        },
+        {
+          "field_key": "cardValues[2].value",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:site_qdb_system_est",
+            "range": {}
+          }
+        },
+        {
+          "field_key": "cardValues[3].value",
+          "source_kind": "dataset",
+          "detail_json": {
+            "dataset_key": "ds:fuyang_air_minute_live:flow_est_system",
+            "range": {}
+          }
+        }
+      ]
     }
   ],
   "chrome_json": {
@@ -2251,13 +2422,19 @@
               "value": "station",
               "targets": [
                 {
-                  "client_key": "station-pressure"
+                  "client_key": "station-system-summary"
                 },
                 {
                   "client_key": "station-power"
                 },
                 {
-                  "client_key": "station-cooling"
+                  "client_key": "station-pressure"
+                },
+                {
+                  "client_key": "station-system-efficiency"
+                },
+                {
+                  "client_key": "station-system-flow"
                 }
               ]
             },
