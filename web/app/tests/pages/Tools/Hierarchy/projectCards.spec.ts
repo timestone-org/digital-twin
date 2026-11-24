@@ -1,5 +1,5 @@
 /** @fileoverview 项目卡片整卡激活、选中反馈与加载期间禁用。 */
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, expect, it, vi } from 'vitest'
 import * as api from '@/api/hierarchy'
 import Projects from '../../../../src/pages/Tools/Hierarchy/components/HierarchyProjects.vue'
@@ -67,6 +67,64 @@ it('加载期间整卡禁用，表格视图保留项目和版本信息', async (
   expect(wrapper.get('tbody').text()).toContain('v34')
   await wrapper.get('tbody button').trigger('click')
   expect(wrapper.emitted('open')).toEqual([['water']])
+  wrapper.unmount()
+  parent.wrapper.unmount()
+})
+
+it('单页为项目让出分页空间，多页仍可翻页', async () => {
+  const { parent, wrapper } = setup()
+  expect(wrapper.find('nav[aria-label="分页"]').exists()).toBe(false)
+  parent.state.total.value = 21
+  await wrapper.vm.$nextTick()
+  const list = vi.spyOn(api, 'listProjects').mockResolvedValue({
+    items: [],
+    page: 2,
+    size: 20,
+    total: 21,
+  })
+  await wrapper
+    .get('nav[aria-label="分页"]')
+    .findAll('button')
+    .find((item) => item.text() === '下一页')
+    ?.trigger('click')
+  expect(list).toHaveBeenCalledWith(
+    expect.objectContaining({ page: 2 }),
+    expect.anything(),
+  )
+  await flushPromises()
+  list.mockResolvedValue({ items: [], page: 1, size: 20, total: 20 })
+  parent.state.total.value = 20
+  await flushPromises()
+  expect(list).toHaveBeenLastCalledWith(
+    expect.objectContaining({ page: 1 }),
+    expect.anything(),
+  )
+  expect(wrapper.find('nav[aria-label="分页"]').exists()).toBe(false)
+  wrapper.unmount()
+  parent.wrapper.unmount()
+})
+
+it('查询按钮和回车都按当前项目名称查询', async () => {
+  const { parent, wrapper } = setup()
+  const list = vi.spyOn(api, 'listProjects').mockResolvedValue({
+    items: [],
+    page: 1,
+    size: 20,
+    total: 0,
+  })
+  const input = wrapper.get('[aria-label="搜索项目"]')
+  await input.setValue('蒸汽')
+  await wrapper.get('button[aria-label="查询项目"]').trigger('click')
+  expect(list).toHaveBeenCalledWith(
+    { page: 1, size: 20, q: '蒸汽' },
+    expect.anything(),
+  )
+  await input.setValue('空气')
+  await input.trigger('keydown', { key: 'Enter' })
+  expect(list).toHaveBeenLastCalledWith(
+    { page: 1, size: 20, q: '空气' },
+    expect.anything(),
+  )
   wrapper.unmount()
   parent.wrapper.unmount()
 })

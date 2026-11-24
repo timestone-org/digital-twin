@@ -42,15 +42,15 @@ const emit = defineEmits<{
     >
       ●
     </DtButton>
-    <div class="node-code">
+    <div class="node-code truncate" :title="node.code">
       {{ node.code }}
     </div>
     <template v-if="node.kind === 'meter'">
-      <div class="node-parameter">
+      <div class="node-parameter truncate" :title="node.parameter">
         {{ node.parameter || '圆内下栏' }}
       </div>
-      <div class="node-name">
-        {{ node.name }}
+      <div class="node-name" :title="node.name">
+        <span class="line-clamp-2">{{ node.name }}</span>
       </div>
     </template>
     <span v-else class="junction-label"> 汇流点 </span>
@@ -94,13 +94,12 @@ const emit = defineEmits<{
   align-items: center;
   justify-content: center;
   gap: 10px;
+  padding: 0 12px;
   border-radius: 28px;
 }
 .node-code {
   padding: 12px 8px 6px;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .junction .node-code {
   padding: 0;
@@ -114,12 +113,12 @@ const emit = defineEmits<{
   border-top: 1px solid var(--border-subtle);
   padding: 12px;
   white-space: pre-line;
+  overflow-wrap: anywhere;
   line-height: 1.4;
-  overflow: hidden;
-  max-height: 62px;
 }
 .junction-label {
-  font-size: 12px;
+  flex: none;
+  font-size: var(--font-size-caption);
   color: var(--text-secondary);
 }
 .port {

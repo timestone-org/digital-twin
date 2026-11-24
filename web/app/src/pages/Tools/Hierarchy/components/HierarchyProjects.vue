@@ -2,8 +2,15 @@
 /** @fileoverview 层级图项目导航、搜索与分页。 */
 import { computed } from 'vue'
 import { listEmptyState } from '@/utils/listEmpty'
-import { DtButton, DtDataView, DtIcon, DtInput } from '@dt/ui'
-import type { DtDataColumn } from '@dt/contracts'
+import {
+  DtButton,
+  DtDataView,
+  DtIconButton,
+  DtIcon,
+  DtInput,
+  DtSegmented,
+} from '@dt/ui'
+import type { DtDataColumn, DtSegmentedOption } from '@dt/contracts'
 import { useViewMode } from '@/composables/useViewMode'
 import type { useHierarchyProjects } from '../scripts/useHierarchyProjects'
 import HierarchyProjectSummary from './HierarchyProjectSummary.vue'
@@ -21,6 +28,21 @@ const emptyState = computed(() =>
 )
 const emit = defineEmits<{ open: [id: string] }>()
 const view = useViewMode('hierarchy-projects', 'card')
+const VIEW_OPTIONS: readonly DtSegmentedOption[] = [
+  { value: 'table', label: '表格视图', icon: 'table', iconOnly: true },
+  { value: 'card', label: '卡片视图', icon: 'layout-grid', iconOnly: true },
+]
+const PAGE_SIZE = 20
+const pagination = computed(() => {
+  const { page, total } = props.projects
+  if (page.value === 1 && total.value <= PAGE_SIZE) return null
+  return {
+    page: page.value,
+    size: PAGE_SIZE,
+    total: total.value,
+    sizeOptions: [PAGE_SIZE],
+  }
+})
 const COLUMNS: readonly DtDataColumn[] = [
   { key: 'title', label: '项目', card: 'title' },
   { key: 'node_count', label: '计量节点', card: 'meta', width: '4.5rem' },
@@ -31,26 +53,41 @@ const COLUMNS: readonly DtDataColumn[] = [
     class="project-panel flex min-h-0 min-w-0 flex-1 flex-col gap-3 p-3"
     aria-label="层级图项目"
   >
-    <div class="flex items-center justify-between gap-2 py-1">
-      <h2 class="flex items-center gap-2 text-sm font-semibold">
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <h2
+        class="flex items-center gap-1 whitespace-nowrap text-sm font-semibold"
+      >
         <DtIcon name="folder-open" :size="16" />我的项目
       </h2>
-      <span class="text-xs text-text-secondary"
+      <span class="whitespace-nowrap text-xs text-text-secondary"
         >{{ projects.total.value }} 个</span
       >
+      <DtSegmented
+        v-model="view"
+        class="ml-auto"
+        size="sm"
+        :options="VIEW_OPTIONS"
+        aria-label="切换展示方式"
+      />
     </div>
-    <DtInput
-      :model-value="projects.query.value"
-      aria-label="搜索项目"
-      placeholder="按项目名称搜索"
-      type="search"
-      size="sm"
-      @update:model-value="projects.setQuery"
-      @enter="projects.search"
-    />
-    <DtButton size="sm" variant="outline" @click="projects.search">
-      查询项目
-    </DtButton>
+    <div class="flex shrink-0 items-center gap-1.5">
+      <DtInput
+        :model-value="projects.query.value"
+        class="min-w-0 flex-1"
+        aria-label="搜索项目"
+        placeholder="按项目名称搜索"
+        type="search"
+        size="sm"
+        @update:model-value="projects.setQuery"
+        @enter="projects.search"
+      />
+      <DtIconButton
+        icon="search"
+        label="查询项目"
+        variant="outline"
+        @click="projects.search"
+      />
+    </div>
     <DtDataView
       v-model:view="view"
       :class="{ 'project-table': view === 'table' }"
@@ -61,15 +98,11 @@ const COLUMNS: readonly DtDataColumn[] = [
       :layout="{
         minWidth: '0',
         fixedLayout: true,
+        toggle: false,
         cardColumns: 1,
         cardMinWidth: '0',
       }"
-      :pagination="{
-        page: projects.page.value,
-        size: 20,
-        total: projects.total.value,
-        sizeOptions: [20],
-      }"
+      :pagination="pagination"
       :empty="emptyState"
       @update:page="projects.goToPage"
       @retry="projects.refresh"

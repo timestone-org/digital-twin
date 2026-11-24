@@ -98,9 +98,10 @@ function focus(id: string) {
     bounds = frame.value?.getBoundingClientRect()
   if (!node || !bounds) return
   props.editor.select([id])
+  const size = editorSize(node)
   setView({
-    x: bounds.width / 2 - node.position.x - 104,
-    y: bounds.height / 2 - node.position.y - 74,
+    x: (bounds.width - size.width) / 2 - node.position.x,
+    y: (bounds.height - size.height) / 2 - node.position.y,
     zoom: 1,
   })
 }
@@ -115,7 +116,11 @@ function add(kind: NodeKind, event?: DragEvent) {
     bounds,
     view.value,
   )
-  props.editor.add(kind, { x: point.x - 104, y: point.y - 74 })
+  const size = editorSize({ kind })
+  props.editor.add(kind, {
+    x: point.x - size.width / 2,
+    y: point.y - size.height / 2,
+  })
 }
 function drop(event: DragEvent) {
   const kind = event.dataTransfer?.getData('application/hierarchy-node')
@@ -171,119 +176,133 @@ function nudge(event: KeyboardEvent) {
 defineExpose({ fit, focus, add })
 </script>
 <template>
-  <div
-    ref="frame"
-    class="hierarchy-canvas"
-    tabindex="0"
-    aria-label="层级图编辑画布"
-    @pointerdown.self="pointer.backgroundDown"
-    @pointermove="pointer.move"
-    @pointerup="pointer.finish"
-    @pointercancel="pointer.cancel"
-    @wheel.prevent="wheel"
-    @keydown="keydown"
-    @dragover.prevent
-    @drop.prevent="drop"
-  >
-    <div class="canvas-world" :style="{ transform }">
-      <HierarchyEdges
-        :edges="edges"
-        :edge-id="editor.edgeId.value"
-        :marker="edgeMarker"
-        :pending="pendingPath"
-        :box="selectionBox"
-        @select="editor.selectEdge"
-      />
-      <HierarchyNode
-        v-for="node in nodes"
-        :key="node.id"
-        :node="node"
-        :selected="editor.selectedIds.value.includes(node.id)"
-        :readonly="readonly"
-        @down="pointer.nodeDown(node, $event)"
-        @select="editor.select([node.id])"
-        @port="onPort"
-        @key-port="pointer.keyPort"
-      />
-    </div>
+  <div class="canvas-editor">
     <div
-      v-for="guide in guides"
-      :key="guide.axis"
-      class="guide"
-      :class="guide.axis"
-      :style="
-        guide.axis === 'x'
-          ? { left: `${guide.value * view.zoom + view.x}px` }
-          : { top: `${guide.value * view.zoom + view.y}px` }
-      "
-    />
-    <div v-if="!nodes.length" class="canvas-empty">
-      <p>添加计量节点或汇流点，然后连接上下游。</p>
-      <DtButton v-if="!readonly" @click="add('meter')"> 添加计量节点 </DtButton>
-    </div>
-    <div class="canvas-controls" @pointerdown.stop>
-      <DtPopover side="top" align="end" panel-label="画布辅助设置">
-        <template #default="{ toggle, isOpen }">
-          <DtIconButton
-            icon="magnet"
-            label="画布辅助"
-            :pressed="isOpen"
-            @click="toggle"
-          />
-        </template>
-        <template #content>
-          <div class="flex flex-col gap-3 p-1">
-            <strong class="text-sm">画布辅助</strong>
-            <DtCheckbox v-model="snap" label="网格吸附" />
-            <DtCheckbox v-model="showGuides" label="对齐辅助线" />
-          </div>
-        </template>
-      </DtPopover>
-      <DtButton
-        size="sm"
-        variant="ghost"
-        aria-label="缩小画布"
-        @click="zoom(0.8)"
-      >
-        −
-      </DtButton>
-      <span> {{ Math.round(view.zoom * 100) }}% </span>
-      <DtButton
-        size="sm"
-        variant="ghost"
-        aria-label="放大画布"
-        @click="zoom(1.25)"
-      >
-        ＋
-      </DtButton>
-      <DtIconButton
-        size="sm"
-        variant="ghost"
-        intent="neutral"
-        icon="maximize"
-        label="适应全部"
-        @click="fit()"
+      ref="frame"
+      class="hierarchy-canvas"
+      tabindex="0"
+      aria-label="层级图编辑画布"
+      @pointerdown.self="pointer.backgroundDown"
+      @pointermove="pointer.move"
+      @pointerup="pointer.finish"
+      @pointercancel="pointer.cancel"
+      @wheel.prevent="wheel"
+      @keydown="keydown"
+      @dragover.prevent
+      @drop.prevent="drop"
+    >
+      <div class="canvas-world" :style="{ transform }">
+        <HierarchyEdges
+          :edges="edges"
+          :edge-id="editor.edgeId.value"
+          :marker="edgeMarker"
+          :pending="pendingPath"
+          :box="selectionBox"
+          @select="editor.selectEdge"
+        />
+        <HierarchyNode
+          v-for="node in nodes"
+          :key="node.id"
+          :node="node"
+          :selected="editor.selectedIds.value.includes(node.id)"
+          :readonly="readonly"
+          @down="pointer.nodeDown(node, $event)"
+          @select="editor.select([node.id])"
+          @port="onPort"
+          @key-port="pointer.keyPort"
+        />
+      </div>
+      <div
+        v-for="guide in guides"
+        :key="guide.axis"
+        class="guide"
+        :class="guide.axis"
+        :style="
+          guide.axis === 'x'
+            ? { left: `${guide.value * view.zoom + view.x}px` }
+            : { top: `${guide.value * view.zoom + view.y}px` }
+        "
       />
-      <DtIconButton
-        size="sm"
-        variant="ghost"
-        :disabled="!editor.selectedIds.value.length"
-        intent="neutral"
-        icon="focus"
-        label="定位选中"
-        @click="fit(true)"
-      />
+      <div v-if="!nodes.length" class="canvas-empty">
+        <p>添加计量节点或汇流点，然后连接上下游。</p>
+        <DtButton v-if="!readonly" @click="add('meter')">
+          添加计量节点
+        </DtButton>
+      </div>
     </div>
-    <div class="canvas-hint">
-      {{
-        connection
-          ? '点击目标输入端口完成连接 · Esc 取消'
-          : '拖动空白处平移 · 滚轮缩放 · Shift 多选'
-      }}
+    <div class="canvas-statusbar">
+      <div class="canvas-hint" :class="{ connecting: connection }">
+        {{
+          connection
+            ? '点击目标输入端口完成连接 · Esc 取消'
+            : '拖动空白处平移 · 滚轮缩放 · Shift 多选'
+        }}
+      </div>
+      <div class="canvas-controls" role="group" aria-label="画布视图">
+        <DtPopover side="top" align="end" panel-label="画布辅助设置">
+          <template #default="{ toggle, isOpen }">
+            <DtIconButton
+              icon="magnet"
+              label="画布辅助"
+              :pressed="isOpen"
+              @click="toggle"
+            />
+          </template>
+          <template #content>
+            <div class="flex flex-col gap-3 p-1">
+              <strong class="text-sm">画布辅助</strong>
+              <DtCheckbox v-model="snap" label="网格吸附" />
+              <DtCheckbox v-model="showGuides" label="对齐辅助线" />
+            </div>
+          </template>
+        </DtPopover>
+        <DtButton
+          size="sm"
+          variant="ghost"
+          aria-label="缩小画布"
+          @click="zoom(0.8)"
+        >
+          −
+        </DtButton>
+        <span> {{ Math.round(view.zoom * 100) }}% </span>
+        <DtButton
+          size="sm"
+          variant="ghost"
+          aria-label="放大画布"
+          @click="zoom(1.25)"
+        >
+          ＋
+        </DtButton>
+        <DtIconButton
+          size="sm"
+          variant="ghost"
+          intent="neutral"
+          icon="maximize"
+          label="适应全部"
+          @click="fit()"
+        />
+        <DtIconButton
+          size="sm"
+          variant="ghost"
+          :disabled="!editor.selectedIds.value.length"
+          intent="neutral"
+          icon="focus"
+          label="定位选中"
+          @click="fit(true)"
+        />
+      </div>
     </div>
   </div>
 </template>
 <style scoped lang="scss">
+.canvas-editor {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+  container-type: inline-size;
+}
 .hierarchy-canvas {
   position: relative;
   flex: 1;
@@ -309,34 +328,31 @@ defineExpose({ fit, focus, add })
 .canvas-world :deep(.hierarchy-node) {
   pointer-events: auto;
 }
-.canvas-controls {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
+.canvas-statusbar {
   display: flex;
+  flex: none;
   flex-wrap: wrap;
-  max-width: calc(100% - 24px);
-  white-space: nowrap;
   align-items: center;
-  gap: 6px;
+  gap: 4px 12px;
+  padding: 3px 8px;
+  border-top: 1px solid var(--border-subtle);
   background: var(--surface-panel);
-  padding: 6px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-default);
-  font-size: 12px;
+  font-size: var(--font-size-caption);
+}
+.canvas-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
 }
 .canvas-hint {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  font-size: 12px;
   color: var(--text-secondary);
-  pointer-events: none;
-  max-width: calc(100% - 24px);
-  padding: 6px 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--surface-panel);
+}
+@container (max-width: 30rem) {
+  .canvas-hint:not(.connecting) {
+    display: none;
+  }
 }
 .canvas-empty {
   position: absolute;

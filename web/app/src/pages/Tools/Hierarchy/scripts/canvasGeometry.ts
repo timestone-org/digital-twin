@@ -28,11 +28,6 @@ export function edgePath(source: GraphNode, target: GraphNode): string {
 const MIN_FIT_ZOOM = 0.4
 /** 画布四周留白。 */
 const FIT_MARGIN = 40
-/** 右下角缩放工具条占的高度，取景时让开它。 */
-const ZOOM_BAR_HEIGHT = 48
-/** 左上角操作提示条占的高度，顶端对齐时让开它。 */
-const HINT_HEIGHT = 32
-
 /**
  * 让节点落进画布的视口；内容大到要缩到 40% 以下时停在 40%，顶端对齐、水平居中
  * （层级图的根在上方正中）。
@@ -54,21 +49,20 @@ export function fitViewport(
     bottom = Math.max(
       ...nodes.map((node) => node.position.y + editorSize(node).height),
     )
-  const usableHeight = height - ZOOM_BAR_HEIGHT
   const fitted = Math.min(
     1,
     (width - FIT_MARGIN * 2) / (right - left),
-    (usableHeight - FIT_MARGIN * 2) / (bottom - top),
+    (height - FIT_MARGIN * 2) / (bottom - top),
   )
   if (fitted < MIN_FIT_ZOOM)
     return {
       x: (width - (right + left) * MIN_FIT_ZOOM) / 2,
-      y: FIT_MARGIN + HINT_HEIGHT - top * MIN_FIT_ZOOM,
+      y: FIT_MARGIN - top * MIN_FIT_ZOOM,
       zoom: MIN_FIT_ZOOM,
     }
   return {
     x: (width - (right + left) * fitted) / 2,
-    y: (usableHeight - (bottom + top) * fitted) / 2,
+    y: (height - (bottom + top) * fitted) / 2,
     zoom: fitted,
   }
 }
