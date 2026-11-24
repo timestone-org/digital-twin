@@ -21,6 +21,7 @@ from platform_server.apps.assets.services.compress_worker import (
 from platform_server.apps.collect.services.point_index_worker import (
     PointIndexWorker,
 )
+from platform_server.apps.compressed_air.runtime import build_compressed_air
 from platform_server.apps.dataset.services import register_provider
 from platform_server.apps.dataset.services.collector import (
     CollectorContext,
@@ -526,15 +527,13 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
     """装配并跑到收到终止信号为止。Args: settings, wait。"""
     compressor_runtime = await _check_compressor(settings)
     container = build_container(settings)
-    # ⚠ worker 也要注册：回填与重算跑在这里
     register_provider(ModelingAnalysisProvider(store=container.object_store))
     await selfcheck(container)
-    # 单 worker 进程池：训练一次只跑一个，防止两次训练互相抢核
     pool = TrainerPool()
-    # 建模使用独立算子池，防止长时间的空调训练阻塞建模。
     node_pool = NodePool()
     word_pool = WordPool()
     publisher = build_publish_loop(container)
+    air = build_compressed_air(container)
     scheduler = build_daily_scheduler(container)
     collector = build_dataset_collector(container)
     retention = build_dataset_retention(container)
@@ -546,6 +545,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     build_trainer(container, pool=pool),
                     build_ac_dispatcher(container),
                     publisher,
+                    *air,
                     scheduler,
                     build_daily_consumer(container),
                     build_model_compressor(container, compressor_runtime),
@@ -562,7 +562,7 @@ async def serve(settings: Settings, *, wait: Wait) -> None:
                     *_report_consumers(container, word_pool),
                     PointIndexWorker(container.database, container.llm.cipher),
                 ),
-                leaseholders=(publisher, scheduler, collector, retention),
+                leaseholders=(publisher, scheduler, collector, retention, *air),
                 container=container,
                 wait=wait,
             ),

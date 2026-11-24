@@ -18,6 +18,7 @@ from lib.config import (
     SqlServerSettings,
 )
 from lib.objectstore import ObjectStoreSettings
+from platform_server.apps.compressed_air.config import CompressedAirConfig
 from platform_server.apps.report.schemas.api_source import ReportApiConnection
 
 SERVICE_NAME = "platform-server"
@@ -69,6 +70,7 @@ class Settings(
         frozen=True,
     )
 
+    compressed_air: CompressedAirConfig | None = None
     report_schedule_enabled: bool = False
     modeling_trusted_operator_accounts: tuple[uuid.UUID, ...] = ()
     report_api_connections: list[ReportApiConnection] = Field(
