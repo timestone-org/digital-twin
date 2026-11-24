@@ -116,6 +116,7 @@ export class Controller {
     this.state.editor.document.value = null
     this.state.saving.projectId.value = ''
     this.state.drawing.value = null
+    this.state.mode.value = 'edit'
     const first = this.state.projects.items.value[0]
     if (first) await this.state.projects.open(first.id)
   }

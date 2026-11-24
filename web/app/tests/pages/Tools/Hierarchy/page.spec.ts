@@ -312,19 +312,62 @@ it('预览中修改图纸宽度标记过期，重新生成后更新预览', asyn
   wrapper.unmount()
 })
 
-it('窄屏一次显示一个面板，切换配置保留草稿并可返回项目画布', async () => {
-  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(640)
+it('批量出图错误可展开并定位到对应节点', async () => {
+  const invalid = project()
+  invalid.document.nodes.forEach((node) => {
+    if (node.kind === 'meter') node.parameter = '这是超出计量圆内下栏容量的参数'
+  })
+  stored = [invalid]
+  const wrapper = await setup()
+  await button(wrapper, '生成层级图').trigger('click')
+  await flushPromises()
+  const issues = wrapper.get('details')
+  expect(issues.attributes('open')).toBeUndefined()
+  expect(issues.get('summary').text()).toContain('33')
+  await issues.get('summary').trigger('click')
+  const lastIssue = issues.findAll('button').at(-1)
+  expect(lastIssue).toBeDefined()
+  await lastIssue?.trigger('click')
+  expect(
+    wrapper.get('.hierarchy-node.selected').attributes('data-node-id'),
+  ).toBe(invalid.document.nodes.at(-1)?.id)
+  wrapper.unmount()
+})
+
+it('预览中删除当前项目后打开剩余项目的编辑画布', async () => {
+  stored.push(project('second'))
+  const wrapper = await setup()
+  await button(wrapper, '生成层级图').trigger('click')
+  await flushPromises()
+  expect(wrapper.find('img[alt="标准计量层级图"]').exists()).toBe(true)
+  await button(wrapper, '项目操作').trigger('click')
+  await button(wrapper, '删除项目').trigger('click')
+  useConfirm().resolve(true)
+  await flushPromises()
+  expect(api.getProject).toHaveBeenLastCalledWith(
+    'second',
+    expect.any(AbortSignal),
+  )
+  expect(wrapper.getComponent(HierarchyCanvas).isVisible()).toBe(true)
+  expect(wrapper.find('img[alt="标准计量层级图"]').exists()).toBe(false)
+  wrapper.unmount()
+})
+
+it('三栏最小宽度不足时只显示一套面板入口，切换后保留草稿', async () => {
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(823)
   const wrapper = await setup()
   expect(wrapper.findAll('[data-pane]')).toHaveLength(1)
   expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('canvas')
+  expect(wrapper.find('[aria-label="项目列表"]').exists()).toBe(false)
+  expect(wrapper.find('[aria-label="配置面板"]').exists()).toBe(false)
   await wrapper.get('.hierarchy-node').trigger('keydown', { key: 'Enter' })
-  await button(wrapper, '配置面板').trigger('click')
+  await button(wrapper, '配置').trigger('click')
   expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('inspector')
   await wrapper.get('textarea').setValue('窄屏编辑草稿')
   await button(wrapper, '编辑画布').trigger('click')
   await button(wrapper, '配置').trigger('click')
   expect(wrapper.get('textarea').element.value).toBe('窄屏编辑草稿')
-  await button(wrapper, '项目列表').trigger('click')
+  await button(wrapper, '我的项目').trigger('click')
   expect(wrapper.get('[data-pane]').attributes('data-pane')).toBe('projects')
   await button(wrapper, '蒸汽计量系统').trigger('click')
   await flushPromises()

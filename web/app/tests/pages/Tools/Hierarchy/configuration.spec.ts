@@ -241,3 +241,58 @@ it('工具栏按选择数量启用对齐与分布，全部导出格式与帮助�
   wrapper.unmount()
   parent.wrapper.unmount()
 })
+
+it('紧凑工具栏直接添加与出图，编辑菜单按选择数量和文档状态执行操作', async () => {
+  const { parent, editor, first, second } = setup()
+  editor.select([])
+  const wrapper = mount(Toolbar, {
+    props: {
+      editor,
+      readonly: false,
+      busy: false,
+      mode: 'edit',
+      compact: true,
+    },
+    global: { stubs: { teleport: true } },
+  })
+  expect(wrapper.find('[aria-label="项目列表"]').exists()).toBe(false)
+  expect(wrapper.find('[aria-label="配置面板"]').exists()).toBe(false)
+  for (const label of ['计量节点', '汇流点', '生成层级图'])
+    await button(wrapper, label).trigger('click')
+  expect(wrapper.emitted('add')).toEqual([['meter'], ['junction']])
+  expect(wrapper.emitted('draw')).toHaveLength(1)
+  const tools = wrapper.get('[aria-label="编辑工具"]')
+  const open = () => tools.trigger('click')
+  await open()
+  expect(button(wrapper, '删除选中').attributes('disabled')).toBeDefined()
+  expect(button(wrapper, '左对齐').attributes('disabled')).toBeDefined()
+  expect(button(wrapper, '重做').attributes('disabled')).toBeDefined()
+  await button(wrapper, '整理画布').trigger('click')
+  expect(wrapper.emitted('arrange')).toHaveLength(1)
+  editor.select([first.id, second.id])
+  await open()
+  expect(button(wrapper, '水平等距').attributes('disabled')).toBeDefined()
+  await button(wrapper, '右对齐').trigger('click')
+  expect(required(editor.document.value).nodes[0]?.position.x).toBe(300)
+  await open()
+  await button(wrapper, '撤销').trigger('click')
+  expect(required(editor.document.value).nodes[0]?.position.x).toBe(0)
+  await open()
+  await button(wrapper, '重做').trigger('click')
+  expect(required(editor.document.value).nodes[0]?.position.x).toBe(300)
+  editor.select([first.id])
+  await open()
+  await button(wrapper, '删除选中').trigger('click')
+  expect(required(editor.document.value).nodes).toHaveLength(2)
+  await wrapper.setProps({ busy: true })
+  expect(tools.attributes('disabled')).toBeDefined()
+  await wrapper.setProps({ mode: 'drawing', busy: false })
+  expect(wrapper.find('[aria-label="编辑工具"]').exists()).toBe(false)
+  await button(wrapper, '返回编辑').trigger('click')
+  expect(wrapper.emitted('edit')).toHaveLength(1)
+  await button(wrapper, '导出').trigger('click')
+  await button(wrapper, 'SVG · 可编辑矢量图').trigger('click')
+  expect(wrapper.emitted('export')).toEqual([['svg']])
+  wrapper.unmount()
+  parent.wrapper.unmount()
+})

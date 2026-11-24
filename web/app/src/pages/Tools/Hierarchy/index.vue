@@ -6,17 +6,16 @@ import type { ExportFormat, NodeKind } from './scripts/types'
 import {
   DtButton,
   DtCheckbox,
-  DtFilePicker,
   DtInput,
   DtModal,
   DtNotice,
   DtResizableLayout,
   DtSegmented,
-  DtDropdownMenu,
   DtEmpty,
-  DtIcon,
 } from '@dt/ui'
 import { AppShell } from '@/components/layout'
+import HierarchyProjectActions from './components/HierarchyProjectActions.vue'
+import HierarchyDrawingError from './components/HierarchyDrawingError.vue'
 import HierarchyCanvas from './components/HierarchyCanvas.vue'
 import HierarchyProjects from './components/HierarchyProjects.vue'
 import HierarchyInspector from './components/HierarchyInspector.vue'
@@ -50,8 +49,27 @@ const { document } = editor
 const workspace = ref<HTMLElement | null>(null)
 const workspaceWidth = ref(0)
 const compactPane = ref('canvas')
+const projectPane = {
+  id: 'projects',
+  label: '层级图项目',
+  size: 19,
+  minSize: 210,
+}
+const canvasPane = { id: 'canvas', label: '层级图画布', size: 55, minSize: 320 }
+const inspectorPane = {
+  id: 'inspector',
+  label: '层级图配置',
+  size: 26,
+  minSize: 270,
+}
+const handleWidth = 12 // DtResizableLayout 拖动柄宽度
+const fullLayoutWidth =
+  projectPane.minSize +
+  canvasPane.minSize +
+  inspectorPane.minSize +
+  2 * handleWidth
 const isCompact = computed(
-  () => workspaceWidth.value > 0 && workspaceWidth.value < 760,
+  () => workspaceWidth.value > 0 && workspaceWidth.value < fullLayoutWidth,
 )
 const projectsVisible = computed(() =>
   isCompact.value ? compactPane.value === 'projects' : showProjects.value,
@@ -84,35 +102,20 @@ watch([() => saving.projectId.value, mode], () => {
   compactPane.value = 'canvas'
 })
 const panes = computed(() => [
-  ...(projectsVisible.value
-    ? [{ id: 'projects', label: '层级图项目', size: 19, minSize: 210 }]
-    : []),
+  ...(projectsVisible.value ? [projectPane] : []),
   ...(!isCompact.value ||
   compactPane.value === 'canvas' ||
   (!document.value && compactPane.value === 'inspector')
-    ? [{ id: 'canvas', label: '层级图画布', size: 55, minSize: 320 }]
+    ? [canvasPane]
     : []),
-  ...(document.value && inspectorVisible.value
-    ? [{ id: 'inspector', label: '层级图配置', size: 26, minSize: 270 }]
-    : []),
+  ...(document.value && inspectorVisible.value ? [inspectorPane] : []),
 ])
 function toggleProjects() {
-  if (isCompact.value) compactPane.value = 'projects'
-  else showProjects.value = !showProjects.value
+  showProjects.value = !showProjects.value
 }
 function toggleInspector() {
-  if (isCompact.value) compactPane.value = 'inspector'
-  else showInspector.value = !showInspector.value
+  showInspector.value = !showInspector.value
 }
-const projectActions = computed<DtMenuItem[]>(() => [
-  { value: 'history', label: '历史版本', icon: 'layers' },
-  ...(canEdit.value
-    ? [
-        { value: 'duplicate', label: '复制', icon: 'copy' },
-        { value: 'remove', label: '删除项目', icon: 'trash', danger: true },
-      ]
-    : []),
-])
 function projectAction(item: DtMenuItem) {
   const actions: Record<string, () => Promise<unknown>> = {
     history: page.history,
@@ -183,63 +186,18 @@ function onRestore(revision: number) {
     subtitle="计量关系编排与标准图纸"
   >
     <template #actions>
-      <div v-if="available" class="hierarchy-actions flex items-center gap-2">
-        <span
-          v-if="document"
-          class="save-status"
-          role="status"
-          :data-pending="saving.dirty.value"
-          :data-error="!!saving.error.value"
-        >
-          <DtIcon
-            :name="
-              saving.error.value
-                ? 'alert-circle'
-                : saving.dirty.value
-                  ? 'pencil'
-                  : 'check'
-            "
-            :size="14"
-          />
-          <span class="compact-label">
-            {{ canEdit ? status : '只读模式' }}
-          </span>
-        </span>
-        <template v-if="canEdit">
-          <DtButton
-            size="sm"
-            :disabled="busy"
-            variant="outline"
-            @click="startProject()"
-          >
-            <template #leading><DtIcon name="plus" :size="14" /></template>
-            新建项目
-          </DtButton>
-          <DtFilePicker
-            label="导入配置"
-            accept=".json,.xlsx"
-            size="sm"
-            :disabled="busy"
-            @select="onImport"
-          />
-          <!-- 编辑会自动保存：只有还没存下的改动时才用主色催一下 -->
-          <DtButton
-            size="sm"
-            :variant="saving.dirty.value ? 'solid' : 'outline'"
-            :disabled="!document || busy || saving.saving.value"
-            @click="page.safe(saving.flush)"
-          >
-            <template #leading><DtIcon name="save" :size="14" /></template
-            ><span class="compact-label"> 保存 </span>
-          </DtButton>
-        </template>
-        <DtDropdownMenu
-          :items="projectActions"
-          label="项目操作"
-          :disabled="!document || busy"
-          @select="projectAction"
-        />
-      </div>
+      <HierarchyProjectActions
+        v-if="available"
+        :can-edit="canEdit"
+        :has-project="!!document"
+        :saving="saving"
+        :status="status"
+        :busy="busy"
+        @create="startProject()"
+        @import="onImport"
+        @save="page.safe(saving.flush)"
+        @action="projectAction"
+      />
     </template>
     <div
       ref="workspace"
@@ -264,23 +222,18 @@ function onRestore(revision: number) {
             重新加载服务器版本
           </DtButton>
         </DtNotice>
-        <DtNotice v-if="compute.error.value" intent="danger">
-          {{ compute.error.value }}
-          <DtButton
-            v-for="issue in compute.issues.value"
-            :key="issue.message"
-            size="sm"
-            variant="ghost"
-            @click="issue.nodeId && focus(issue.nodeId)"
-          >
-            {{ issue.message }}
-          </DtButton>
-        </DtNotice>
+        <HierarchyDrawingError
+          v-if="compute.error.value"
+          :error="compute.error.value"
+          :issues="compute.issues.value"
+          @focus="focus"
+        />
         <HierarchyToolbar
           v-if="document"
           :editor="editor"
           :readonly="!canEdit"
           :busy="busy"
+          :compact="isCompact"
           :mode="mode"
           :panels="{ projects: projectsVisible, inspector: inspectorVisible }"
           @add="onAddNode"
@@ -299,7 +252,7 @@ function onRestore(revision: number) {
           aria-label="工作区面板"
         />
         <DtResizableLayout
-          class="hierarchy-layout min-h-0 flex-1"
+          class="hierarchy-layout flex-1"
           storage-key="dt.hierarchy.layout"
           :panes="panes"
         >
@@ -349,7 +302,7 @@ function onRestore(revision: number) {
                 :hint="
                   canEdit
                     ? '建立计量关系，生成清晰的标准图纸。可从空白项目、示例或配置文件开始。'
-                    : '暂无可查看的项目。已有项目可在左侧搜索打开。'
+                    : '暂无可查看的项目。可在“我的项目”中搜索打开。'
                 "
               />
               <div
@@ -414,18 +367,11 @@ function onRestore(revision: number) {
 </template>
 
 <style scoped lang="scss">
-.save-status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--state-success);
+.hierarchy-page {
+  overflow-y: auto;
 }
-.save-status[data-pending='true'] {
-  color: var(--state-warning);
-}
-.save-status[data-error='true'] {
-  color: var(--state-danger);
+.hierarchy-layout {
+  min-height: 19rem;
 }
 .canvas-panel {
   overflow: hidden;
@@ -435,19 +381,22 @@ function onRestore(revision: number) {
 }
 @media (max-width: 640px) {
   .hierarchy-shell :deep(header:has(.hierarchy-actions)) {
-    flex-direction: column;
-    align-items: stretch;
+    column-gap: 4px;
+    padding-inline: 8px;
+    > div {
+      column-gap: 6px;
+    }
   }
-  .hierarchy-actions {
-    gap: 4px;
+  .hierarchy-shell :deep(.workspace-tabs) {
+    position: relative;
+    left: auto;
+    align-self: center;
+    max-width: calc(100% - 24px);
+    margin-top: 4px;
+    transform: none;
   }
-  .compact-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
+  .hierarchy-shell :deep(main) {
+    padding-top: 8px;
   }
 }
 </style>

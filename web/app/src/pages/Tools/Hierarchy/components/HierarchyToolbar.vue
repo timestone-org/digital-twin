@@ -19,6 +19,7 @@ const props = withDefaults(
     readonly: boolean
     busy: boolean
     mode: string
+    compact?: boolean
     panels?: { projects: boolean; inspector: boolean }
   }>(),
   { panels: () => ({ projects: true, inspector: true }) },
@@ -63,6 +64,52 @@ const alignOptions = computed<DtMenuItem[]>(() => [
     disabled: selectionCount.value < 3,
   },
 ])
+const editOptions = computed<DtMenuItem[]>(() => [
+  {
+    value: 'undo',
+    label: '撤销',
+    icon: 'undo',
+    disabled: !props.editor.past.value.length,
+  },
+  {
+    value: 'redo',
+    label: '重做',
+    icon: 'redo',
+    disabled: !props.editor.future.value.length,
+  },
+  {
+    value: 'arrange',
+    label: '整理画布',
+    icon: 'workflow',
+    disabled: !document.value?.nodes.length,
+  },
+  ...alignOptions.value.map((item) => ({
+    ...item,
+    disabled: selectionCount.value < 2 || item.disabled === true,
+  })),
+  {
+    value: 'remove',
+    label: '删除选中',
+    icon: 'trash',
+    danger: true,
+    disabled: !selectionCount.value && !props.editor.edgeId.value,
+  },
+])
+function editAction(item: DtMenuItem) {
+  if (props.busy || props.readonly || props.mode !== 'edit') return
+  switch (item.value) {
+    case 'undo':
+      return props.editor.undo()
+    case 'redo':
+      return props.editor.undo(true)
+    case 'arrange':
+      return emit('arrange')
+    case 'remove':
+      return props.editor.remove()
+    default:
+      return align(item)
+  }
+}
 const formats = [
   { value: 'svg', label: 'SVG · 可编辑矢量图', icon: 'image' },
   { value: 'png', label: 'PNG · 高清图片', icon: 'image' },
@@ -103,26 +150,38 @@ function drag(event: DragEvent, kind: NodeKind) {
 </script>
 
 <template>
-  <section class="hierarchy-toolbar" aria-label="层级图工具栏">
+  <section
+    class="hierarchy-toolbar"
+    :class="{ 'is-compact': compact }"
+    aria-label="层级图工具栏"
+  >
     <div class="workspace-heading">
       <div class="workspace-identity flex min-w-0 flex-1 items-center gap-3">
-        <div class="project-symbol"><DtIcon name="network" :size="24" /></div>
+        <div v-if="!compact" class="project-symbol">
+          <DtIcon name="network" :size="24" />
+        </div>
         <div class="min-w-0">
           <h2 class="truncate text-base font-semibold" :title="document?.title">
             {{ document?.title }}
           </h2>
           <p class="mt-1 text-xs leading-relaxed text-text-secondary">
-            {{ meterCount }} 个计量节点 · {{ junctionCount }} 个汇流点 ·
-            {{ document?.edges.length ?? 0 }} 条连接
+            <template v-if="compact"
+              >计量 {{ meterCount }} · 汇流 {{ junctionCount }} · 连接
+              {{ document?.edges.length ?? 0 }}</template
+            >
+            <template v-else
+              >{{ meterCount }} 个计量节点 · {{ junctionCount }} 个汇流点 ·
+              {{ document?.edges.length ?? 0 }} 条连接</template
+            >
           </p>
         </div>
       </div>
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="mode-label">
+      <div class="workspace-actions flex flex-wrap items-center gap-2">
+        <span v-if="!compact" class="mode-label">
           {{ mode === 'edit' ? '关系编辑' : '标准图预览' }}
         </span>
         <DtButton
-          v-if="mode === 'drawing'"
+          v-if="mode === 'drawing' && !compact"
           size="sm"
           variant="outline"
           :disabled="busy"
@@ -132,7 +191,9 @@ function drag(event: DragEvent, kind: NodeKind) {
         </DtButton>
         <!-- 只禁用不转圈：busy 也覆盖导出与加载项目，转圈会让人以为在出图 -->
         <DtButton size="sm" :disabled="busy" @click="emit('draw')">
-          <template #leading><DtIcon name="eye" :size="16" /></template>
+          <template v-if="!compact" #leading
+            ><DtIcon name="eye" :size="16"
+          /></template>
           {{ mode === 'drawing' ? '重新生成' : '生成层级图' }}
         </DtButton>
         <DtDropdownMenu
@@ -150,7 +211,8 @@ function drag(event: DragEvent, kind: NodeKind) {
               aria-haspopup="menu"
               @click="toggle"
             >
-              <template #leading><DtIcon name="download" :size="16" /></template
+              <template v-if="!compact" #leading
+                ><DtIcon name="download" :size="16" /></template
               >导出
               <template #trailing
                 ><DtIcon name="chevron-down" :size="14"
@@ -161,7 +223,7 @@ function drag(event: DragEvent, kind: NodeKind) {
       </div>
     </div>
     <div class="workspace-tools">
-      <div class="tool-group">
+      <div v-if="!compact" class="tool-group">
         <DtIconButton
           icon="folder"
           label="项目列表"
@@ -202,7 +264,32 @@ function drag(event: DragEvent, kind: NodeKind) {
             汇流点
           </DtButton>
         </div>
-        <div class="tool-group">
+        <DtDropdownMenu
+          v-if="compact"
+          label="层级图编辑工具"
+          :items="editOptions"
+          :disabled="busy"
+          @select="editAction"
+        >
+          <template #trigger="{ toggle, isOpen, panelId }">
+            <DtButton
+              size="sm"
+              variant="ghost"
+              aria-label="编辑工具"
+              aria-haspopup="menu"
+              :aria-expanded="isOpen"
+              :aria-controls="panelId"
+              :disabled="busy"
+              @click="toggle"
+            >
+              编辑工具
+              <template #trailing
+                ><DtIcon name="chevron-down" :size="14"
+              /></template>
+            </DtButton>
+          </template>
+        </DtDropdownMenu>
+        <div v-else class="tool-group">
           <DtIconButton
             :disabled="busy || !editor.past.value.length"
             icon="undo"
@@ -225,7 +312,7 @@ function drag(event: DragEvent, kind: NodeKind) {
             @click="editor.remove"
           />
         </div>
-        <div class="tool-group">
+        <div v-if="!compact" class="tool-group">
           <DtButton
             size="sm"
             variant="ghost"
@@ -256,17 +343,31 @@ function drag(event: DragEvent, kind: NodeKind) {
             </template>
           </DtDropdownMenu>
         </div>
-        <span v-if="selectionCount" class="text-xs text-accent-on-surface">
+        <span
+          v-if="selectionCount && !compact"
+          class="text-xs text-accent-on-surface"
+        >
           已选 {{ selectionCount }} 个节点
         </span>
       </template>
-      <span v-else class="text-xs text-text-secondary">
-        {{
-          readonly
-            ? '只读模式 · 可浏览关系、生成与导出图纸'
-            : '标准图按连接关系自动排版，可在右侧调整图纸宽度'
-        }}
-      </span>
+      <template v-else>
+        <DtButton
+          v-if="compact && mode === 'drawing'"
+          size="sm"
+          variant="outline"
+          :disabled="busy"
+          @click="emit('edit')"
+        >
+          返回编辑
+        </DtButton>
+        <span class="text-xs text-text-secondary">
+          {{
+            readonly
+              ? '只读模式 · 可浏览关系、生成与导出图纸'
+              : '可在配置面板调整图纸宽度'
+          }}
+        </span>
+      </template>
       <DtPopover align="end" panel-label="层级图操作指南" class="ml-auto">
         <template #default="{ toggle, isOpen }">
           <DtIconButton
@@ -342,19 +443,28 @@ function drag(event: DragEvent, kind: NodeKind) {
   padding-right: 8px;
   border-right: 1px solid var(--border-subtle);
 }
-@media (max-width: 640px) {
-  .workspace-tools > .tool-group:first-child {
-    display: none;
-  }
-  .workspace-identity {
-    flex-basis: 100%;
-  }
-  .mode-label {
-    display: none;
-  }
+.is-compact {
+  --ctl-btn-px-sm: 8px;
+
   .workspace-heading {
-    gap: 12px;
-    padding: 12px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px 10px;
   }
+  .workspace-tools {
+    gap: 4px;
+    padding: 4px 8px;
+  }
+  .workspace-actions {
+    gap: 4px;
+  }
+  .tool-group {
+    padding-right: 4px;
+  }
+}
+:global(.dt-menu[aria-label='层级图编辑工具']) {
+  max-height: calc(50dvh - 48px);
+  overflow-y: auto;
 }
 </style>

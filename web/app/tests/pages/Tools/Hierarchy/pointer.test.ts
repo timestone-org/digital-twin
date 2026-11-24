@@ -174,5 +174,5 @@ it('⚠ 适应全部不缩到看不清：内容太大时停在 40%，顶端对�
   expect(view.zoom).toBe(0.4)
   const right = 100 + 39 * 300 + 208
   expect(view.x).toBeCloseTo((1000 - (right + 100) * 0.4) / 2)
-  expect(view.y).toBeCloseTo(40 + 32 - 60 * 0.4)
+  expect(view.y).toBeCloseTo(40 - 60 * 0.4)
 })
