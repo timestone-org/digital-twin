@@ -511,6 +511,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_AI_ENABLED: 'true'
+        VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS: ${VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS:-20}
     sysctls:
       net.ipv4.ip_unprivileged_port_start: 0
     # 首屏必经的两个服务等到**真的能应答**再放边缘出来：裸依赖只等到容器进程被
@@ -556,6 +557,8 @@ services:
     build:
       context: ../server
       dockerfile: deploy/Dockerfile
+    depends_on:
+      minio-init: {condition: service_completed_successfully}
     environment:
       <<: [*auth-environment, *platform-environment]
       COLLECT_POSTGRES_HOST: ${POSTGRES_HOST:?必填}
@@ -757,21 +760,20 @@ services:
   # 匿名前缀没设上，而现象要等到现场大屏机取模型时才是一个 403。
   # 共享桶的素材暂存到期由存储管理员合并，见 docker/README.md。
   minio-init:
-    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    image: digitaltwin/minio-client:2025.08.13-7394ce0d
+    pull_policy: build
+    build:
+      context: ./minio
+      target: client
     environment:
+      OSS_INIT_BUCKET: ${OSS_INIT_BUCKET:-true}
       OSS_ENDPOINT: ${OSS_ENDPOINT:?必填：对象存储地址，带 scheme}
       OSS_BUCKET: ${OSS_BUCKET:-digitaltwin}
       OSS_ACCESS_KEY: ${OSS_ACCESS_KEY:?必填}
       OSS_SECRET_KEY: ${OSS_SECRET_KEY:?必填}
-    entrypoint: ['/bin/sh', '-c']
-    command:
-      - |
-        set -e
-        mc alias set dt "$$OSS_ENDPOINT" "$$OSS_ACCESS_KEY" "$$OSS_SECRET_KEY"
-        mc mb --ignore-existing "dt/$$OSS_BUCKET"
-        for prefix in models images icons; do
-          mc anonymous set download "dt/$$OSS_BUCKET/$$prefix"
-        done
+    entrypoint: ['/bin/sh', '/init-bucket.sh']
+    volumes:
+      - ./minio/init-bucket.sh:/init-bucket.sh:ro
     restart: 'no'
 
   # 外部解析服务（ADR-0043）：PDF 与扫描件走它，Office 与纯文本仍由
@@ -921,3 +923,8 @@ volumes:
   # 它与代码无关，烤进去每次重建都要重下一遍
   mineru-models:
   opcua-pki:
+
+networks:
+  default:
+    name: ${APP_NETWORK_NAME:-${COMPOSE_PROJECT_NAME}_default}
+    external: ${APP_NETWORK_EXTERNAL:-false}

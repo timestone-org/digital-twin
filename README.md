@@ -1,6 +1,6 @@
 # DigitalTwin
 
-工业数字孪生平台。后端 6 个代码单元 / 9 个部署单元，前端一个 pnpm workspace。
+工业数字孪生平台。后端 8 个服务代码单元，连同边缘网关共 12 个部署单元，前端一个 pnpm workspace。
 
 > 上下文划分见 [`CONTEXT-MAP.md`](CONTEXT-MAP.md)，服务边界见
 > [`docs/ARCHITECTURE_MICROSERVICES.md`](docs/ARCHITECTURE_MICROSERVICES.md)，
@@ -45,6 +45,8 @@ scripts/ci-local.sh --all     # 可选：高风险或 CI 改动时在 act 中跑
 其余服务按 [ARCHITECTURE §8](docs/ARCHITECTURE_MICROSERVICES.md#8-建设顺序) 的顺序接。
 
 ## 起一套本地环境
+
+Docker 与手动部署的完整入口见 [部署编排](docker/README.md#选择-compose-入口)。
 
 ### 1. 配置
 
@@ -99,8 +101,7 @@ cd web && pnpm install && pnpm dev                            # :5173
 ⚠ 业务服务**不能单独对外服务**：它们读的是边缘调过 `/verify` 之后注入的签名身份头，
 直连端口一律 401。要走通完整链路就起 `docker/compose.yml`，前端的 `/api` 代到边缘。
 
-生产形态用 `docker/compose.yml`（边缘网关 + auth-server），
-前端构建产物挂进 nginx。
+完整栈与无 AI 栈均在构建网关镜像时打包前端。
 
 ## 闸门
 

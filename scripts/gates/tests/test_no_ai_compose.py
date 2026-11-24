@@ -7,7 +7,6 @@ import os
 import re
 import subprocess
 import unittest
-from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -20,7 +19,14 @@ type JsonObject = dict[str, JsonValue]
 ROOT: Path = Path(__file__).resolve().parents[3]
 COMPOSE: Path = ROOT / "docker" / "compose.no-ai.yml"
 BASE_COMPOSE: Path = ROOT / "docker" / "compose.yml"
+STORAGE_COMPOSE: Path = ROOT / "docker" / "compose.storage.yml"
 TEMPLATE: Path = ROOT / "docker" / "no-ai.env.example"
+STORAGE_TEMPLATE: Path = ROOT / "docker" / "storage.env.example"
+MANUAL_TEMPLATES: tuple[Path, ...] = (
+    *sorted((ROOT / "server" / "services").glob("*/.env.example")),
+    ROOT / "server" / "deploy" / ".env.example",
+    ROOT / "web" / "app" / ".env.example",
+)
 AI_PREFIXES: tuple[str, ...] = (
     "ASSISTANT_",
     "KNOWLEDGE_",
@@ -115,11 +121,10 @@ def _render_compose(
     *,
     profile: str | None = None,
     overrides: Mapping[str, str] | None = None,
-    additional_files: tuple[Path, ...] = (),
 ) -> JsonObject:
     """用隔离环境展开配置，不连接 Docker daemon。
 
-    Args: path, profile, overrides, additional_files。
+    Args: path, profile, overrides。
     """
     command = [
         "docker",
@@ -131,8 +136,6 @@ def _render_compose(
         "-f",
         str(path),
     ]
-    for additional_file in additional_files:
-        command.extend(("-f", str(additional_file)))
     if profile is not None:
         command.extend(("--profile", profile))
     command.extend(("config", "--format", "json"))
@@ -171,49 +174,53 @@ def _read_variable_shapes(
     }
 
 
-class NoAiComposeTests(unittest.TestCase):
-    """部署配置可以独立审阅且所有非 AI 参数可从模板发现。"""
+class DeploymentComposeTests(unittest.TestCase):
+    """部署入口与环境变量模板契约。"""
 
     def test_compose_does_not_depend_on_another_compose_file(self) -> None:
         source = COMPOSE.read_text(encoding="utf-8")
         assert re.search(r"(?m)^\s*extends\s*:", source) is None
 
     def test_template_covers_non_ai_deployment_variables(self) -> None:
-        source = BASE_COMPOSE.read_text(encoding="utf-8")
-        source += COMPOSE.read_text(encoding="utf-8")
-        variables = {
-            name
-            for name in re.findall(r"(?<!\$)\$\{([A-Z][A-Z0-9_]*)", source)
-            if not name.startswith(AI_PREFIXES)
-        }
-        declared = set(
-            re.findall(
-                r"(?m)^\s*#?\s*([A-Z][A-Z0-9_]*)=",
-                TEMPLATE.read_text(encoding="utf-8"),
-            )
-        )
-        assert variables - declared == set()
+        for compose, template in (
+            (COMPOSE, TEMPLATE),
+            (STORAGE_COMPOSE, STORAGE_TEMPLATE),
+        ):
+            with self.subTest(compose=compose.name):
+                variables = {
+                    item.name
+                    for item in interpolations(
+                        compose.read_text(encoding="utf-8")
+                    )
+                }
+                declared = set(
+                    re.findall(
+                        r"(?m)^\s*#?\s*([A-Z][A-Z0-9_]*)=",
+                        template.read_text(encoding="utf-8"),
+                    )
+                )
+                assert variables == declared
 
     def test_template_declares_each_variable_once(self) -> None:
-        names = re.findall(
-            r"(?m)^\s*#?\s*([A-Z][A-Z0-9_]*)=",
-            TEMPLATE.read_text(encoding="utf-8"),
-        )
-        duplicates = {
-            name for name, count in Counter(names).items() if count > 1
-        }
-        assert not duplicates
+        for template in (TEMPLATE, STORAGE_TEMPLATE, *MANUAL_TEMPLATES):
+            names = re.findall(
+                r"(?m)^\s*#?\s*([A-Z][A-Z0-9_]*)=",
+                template.read_text(encoding="utf-8"),
+            )
+            with self.subTest(template=template):
+                assert len(names) == len(set(names))
 
     def test_template_explains_each_variable_in_chinese(self) -> None:
-        lines = TEMPLATE.read_text(encoding="utf-8").splitlines()
-        for index, line in enumerate(lines):
-            match = re.match(r"^\s*#?\s*([A-Z][A-Z0-9_]*)=", line)
-            if match is None:
-                continue
-            previous = lines[index - 1].strip() if index else ""
-            with self.subTest(variable=match.group(1)):
-                assert previous.startswith("#")
-                assert re.search(r"[\u4e00-\u9fff]", previous)
+        variable = re.compile(r"^\s*#?\s*([A-Z][A-Z0-9_]*)=")
+        for template in (TEMPLATE, STORAGE_TEMPLATE, *MANUAL_TEMPLATES):
+            lines = template.read_text(encoding="utf-8").splitlines()
+            for index, line in enumerate(lines):
+                if match := variable.match(line):
+                    previous = lines[index - 1].strip() if index else ""
+                    with self.subTest(template=template, variable=match[1]):
+                        assert previous.startswith("#")
+                        assert variable.match(previous) is None
+                        assert re.search(r"[\u4e00-\u9fff]", previous)
 
     def test_default_services_exclude_ai_and_optional_hierarchy(self) -> None:
         services = _read_object(_render_compose(COMPOSE).get("services"))
@@ -346,26 +353,64 @@ class NoAiComposeTests(unittest.TestCase):
         ]
         assert all(mount.get("read_only") is True for mount in mounts)
 
-    def test_host_frontend_mount_requires_explicit_override(self) -> None:
-        config = _render_compose(
-            BASE_COMPOSE,
-            additional_files=(ROOT / "docker" / "compose.web-host.yml",),
-        )
+    def test_no_ai_gateway_loads_the_api_block(self) -> None:
+        config = _render_compose(COMPOSE)
         gateway = _read_service(config, "edge-gateway")
         mounts = _read_objects(gateway.get("volumes"))
-        html_mounts = [
-            mount
+        assert any(
+            mount.get("target") == "/etc/nginx/dt-edge/disable-ai.conf"
+            and mount.get("read_only") is True
             for mount in mounts
-            if mount.get("target") == "/usr/share/nginx/html"
-        ]
-        assert len(html_mounts) == 1
-        assert html_mounts[0].get("source") == str(ROOT / "web/app/dist")
-        assert html_mounts[0].get("type") == "bind"
-        assert html_mounts[0].get("read_only") is True
-        original = _read_service(_render_compose(BASE_COMPOSE), "edge-gateway")
-        for name in ("build", "image", "depends_on", "environment", "ports"):
-            with self.subTest(field=name):
-                assert gateway.get(name) == original.get(name)
+        )
+
+    def test_full_gateway_receives_the_live_card_build_limit(self) -> None:
+        config = _render_compose(
+            BASE_COMPOSE,
+            overrides={"VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS": "8"},
+        )
+        build = _read_object(_read_service(config, "edge-gateway").get("build"))
+        args = _read_object(build.get("args"))
+        assert args.get("VITE_KNOWLEDGE_CHAT_MAX_ACTIVE_LIVE_CARDS") == "8"
+
+    def test_storage_only_exposes_the_three_storage_services(self) -> None:
+        config = _render_compose(STORAGE_COMPOSE)
+        assert set(_read_object(config.get("services"))) == {
+            "postgres",
+            "redis",
+            "minio",
+            "minio-init",
+        }
+        for service, targets in (
+            ("postgres", [5432]),
+            ("redis", [6379]),
+            ("minio", [9000, 9001]),
+        ):
+            with self.subTest(service=service):
+                ports = _read_objects(
+                    _read_service(config, service).get("ports")
+                )
+                assert [port.get("target") for port in ports] == targets
+                assert {port.get("host_ip") for port in ports} == {"127.0.0.1"}
+
+    def test_full_stack_can_join_storage_network(self) -> None:
+        storage = _render_compose(STORAGE_COMPOSE)
+        network = _read_object(
+            _read_object(storage.get("networks")).get("default")
+        )
+        name = network.get("name")
+        assert isinstance(name, str)
+        app = _render_compose(
+            BASE_COMPOSE,
+            overrides={
+                "APP_NETWORK_NAME": name,
+                "APP_NETWORK_EXTERNAL": "true",
+            },
+        )
+        app_network = _read_object(
+            _read_object(app.get("networks")).get("default")
+        )
+        assert app_network.get("name") == name
+        assert app_network.get("external") is True
 
     def test_migration_selects_all_six_non_ai_owners(self) -> None:
         config = _render_compose(COMPOSE)

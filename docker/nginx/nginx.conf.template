@@ -151,6 +151,7 @@ map $host $hierarchy_upstream { default 'hierarchy-server:8010'; }
 
   server {
     listen 80;
+    include /etc/nginx/dt-edge/*.conf;
 
     # ⚠ 客户端伪造这几个头就等于伪造身份，server 级先一律置空。
     # ⚠ 这几行**只**管到自己一条 proxy_set_header 都没写的 location：写了任何一条
