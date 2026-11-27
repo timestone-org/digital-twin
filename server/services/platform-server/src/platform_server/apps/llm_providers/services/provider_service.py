@@ -88,14 +88,27 @@ def key_hint(api_key: str) -> str:
     return f"…{api_key[-API_KEY_HINT_CHARS:]}"
 
 
-def models_json_of(models: list[LlmModelIn]) -> list[dict[str, Any]]:
+def models_json_of(
+    models: list[LlmModelIn], previous: Sequence[LlmModelOut] = ()
+) -> list[dict[str, Any]]:
     """入参的模型清单摊成落库的形状。
 
     Args: models。
     """
+    inherited = {
+        one.name: one.knowledge_reasoning_effort
+        for one in previous
+        if one.kind == "chat"
+    }
     return [
         {
             "name": one.name,
+            "knowledge_reasoning_effort": (
+                inherited.get(one.name)
+                if one.kind == "chat"
+                and "knowledge_reasoning_effort" not in one.model_fields_set
+                else one.knowledge_reasoning_effort
+            ),
             "kind": one.kind,
             "has_vision": one.has_vision,
             "dimensions": one.dimensions,
@@ -125,6 +138,9 @@ def models_of(row: LlmProvider) -> list[LlmModelOut]:
                 name=name,
                 kind=kind,
                 has_vision=bool(fields.get("has_vision", False)),
+                knowledge_reasoning_effort=fields.get(
+                    "knowledge_reasoning_effort"
+                ),
                 dimensions=dimensions if isinstance(dimensions, int) else None,
             )
         )
@@ -301,7 +317,7 @@ async def delete_provider(
 
 async def stored_api_key(
     session: AsyncSession, provider_id: uuid.UUID, *, cipher: SecretCipher
-) -> tuple[str, str]:
+) -> tuple[str, str, str]:
     """取一路的端点与解开的密钥，给「按已存的密钥探一次」用。
 
     ⚠ 只给探测这一条路用，绝不摊进任何出参。解不开时给空串，探测会如实报
@@ -314,7 +330,7 @@ async def stored_api_key(
     row = await _row(session, provider_id)
     if row.base_url is None or row.api_key_enc is None:
         raise LlmProviderShapeRejected("这一路没有端点，探不了")
-    stored = row.base_url, cipher.decrypt(row.api_key_enc) or ""
+    stored = row.kind, row.base_url, cipher.decrypt(row.api_key_enc) or ""
     await session.rollback()
     return stored
 
@@ -347,7 +363,7 @@ def _apply_plain_fields(row: LlmProvider, body: LlmProviderUpdateIn) -> None:
     if "extra_body" in body.model_fields_set:
         row.extra_body_json = body.extra_body
     if body.models is not None:
-        row.models_json = models_json_of(body.models)
+        row.models_json = models_json_of(body.models, models_of(row))
     if body.notes is not None:
         row.notes = body.notes
 

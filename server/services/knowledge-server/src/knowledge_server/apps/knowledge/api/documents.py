@@ -90,10 +90,11 @@ async def upload_ticket(
 
     Args: session, container, _actor, base_id, body。
     """
+    parsers = await container.current_external_parsers()
     await library_service.read_base(session, base_id)
     return ok(
         await document_service.presign_upload(
-            container.objectstore, base_id, body, container.external_parsers
+            container.objectstore, base_id, body, parsers
         )
     )
 
@@ -115,8 +116,8 @@ async def register(
 
     Args: session, container, _actor, base_id, body。
     """
+    parsers = await container.current_external_parsers()
     await library_service.read_base(session, base_id)
-    parsers = container.external_parsers
     made = await document_service.register_upload(
         session, container.objectstore, base_id, body, parsers
     )

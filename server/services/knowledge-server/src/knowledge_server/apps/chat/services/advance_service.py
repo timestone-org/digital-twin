@@ -193,6 +193,7 @@ class AdvanceInput:
     )
     # 这一页实现了哪些客户端工具（前端自报）。没报的模型看不见
     client_tools: tuple[str, ...] = ()
+    reasoning_effort: str | None = None
 
 
 # 一条客户端回执最多占多少字；窗口折出来的预算更窄时取更窄的那个
@@ -349,8 +350,7 @@ async def advance(
     if payload.tool_results:
         ledger.seed(loaded.carried)
     registry = deps.tools(loaded.scope, ledger)
-    specs = _turn_specs(registry.specs, payload.client_tools)
-    turn = _turn_deps(deps, loaded, selected, registry, specs)
+    turn = _turn_deps(deps, loaded, selected, registry, payload)
     if payload.user_text is not None:
         turn = replace(
             turn,
@@ -382,9 +382,10 @@ def _turn_deps(
     loaded: LoadedContext,
     selected: tuple[SkillManifest, ...],
     registry: ToolRegistry,
-    specs: tuple[ToolSpec, ...],
+    payload: AdvanceInput,
 ) -> TurnDeps:
     """把业务范围、当次工具预算和模型输入投影装配在同一个回合。"""
+    specs = _turn_specs(registry.specs, payload.client_tools)
     return TurnDeps(
         model=deps.model,
         specs=specs,
@@ -396,7 +397,7 @@ def _turn_deps(
             max_skill_chars=deps.tool_result_chars,
             result_reserve_chars=400 if deps.context_chars > 0 else 0,
         ),
-        choice=ModelChoice(),
+        choice=ModelChoice(effort=payload.reasoning_effort),
         max_context_chars=deps.context_chars,
         max_tool_result_chars=deps.tool_result_chars,
         prepare_messages=ContextProjection(

@@ -147,6 +147,7 @@ def _frame_of(item: TurnEvent | SessionTitled | CitationsFound) -> str:
 def _to_input(payload: ChatAdvanceIn) -> advance_service.AdvanceInput:
     return advance_service.AdvanceInput(
         user_text=payload.user_text,
+        reasoning_effort=payload.reasoning_effort,
         tool_results=[
             advance_service.ClientToolResult(
                 call_id=result.call_id,

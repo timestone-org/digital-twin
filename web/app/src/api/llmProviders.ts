@@ -8,6 +8,7 @@
  * ⚠ 密钥只在建与改的请求体里出现一次，任何出参里都没有它。
  */
 import type {
+  KnowledgeReasoningEffort,
   LlmCredential,
   LlmDeviceLoginPoll,
   LlmDeviceLoginStart,
@@ -32,6 +33,7 @@ function onPlatform(options: RequestOptions = {}): RequestOptions {
 
 /** 登记一个模型的入参。嵌入模型必须带维数，对话模型不许带。 */
 export interface LlmModelInput {
+  knowledge_reasoning_effort?: KnowledgeReasoningEffort | null
   name: string
   kind: string
   has_vision: boolean
@@ -125,6 +127,7 @@ export async function deleteProvider(providerId: string): Promise<void> {
 
 /** 保存前拿表单里的地址与密钥探一次端点。不落任何东西。 */
 export async function probeDraft(input: {
+  kind?: string
   base_url: string
   api_key: string
 }): Promise<LlmProbeResult> {

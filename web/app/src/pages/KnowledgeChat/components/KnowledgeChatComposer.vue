@@ -2,9 +2,13 @@
 /** @fileoverview 知识库输入区与语音转写，协议见 ADR-0038。 */
 import { computed, ref, watch } from 'vue'
 import type { KnowledgeChatScopeBase } from '@dt/contracts'
-import { DtButton, DtNotice, DtTextarea } from '@dt/ui'
+import { DtButton, DtNotice, DtSelect, DtTextarea } from '@dt/ui'
 
 import AiInputBox from '@/components/ai/AiInputBox.vue'
+import {
+  effortOptions,
+  type EffortSelection,
+} from '@/features/knowledgeChat/reasoningEffort'
 import { composeKeyOf } from '@/features/ai/composeKeys'
 import { useSpeechInput } from '@/features/speech/useSpeechInput'
 import type { KnowledgeBase } from '@/api/knowledge'
@@ -26,6 +30,12 @@ const emit = defineEmits<{
   stop: []
   scope: [ids: string[] | null]
 }>()
+
+const effort = defineModel<EffortSelection>('effort', { default: 'default' })
+function setEffort(value: string): void {
+  const selected = effortOptions.find((one) => one.value === value)
+  if (selected) effort.value = selected.value
+}
 
 const draft = ref('')
 const speech = useSpeechInput()
@@ -138,9 +148,19 @@ function onKeydown(event: KeyboardEvent): void {
         @keydown="onKeydown"
       />
 
-      <template v-if="props.speechEnabled" #tools>
+      <template #tools>
+        <DtSelect
+          class="kb-compose__effort"
+          :model-value="effort"
+          :options="effortOptions"
+          :disabled="props.running || props.asking"
+          aria-label="思考强度"
+          size="sm"
+          @update:model-value="setEffort"
+        />
         <!-- pressed 一给，外观就由它定（DtButton），所以不再写 variant / intent -->
         <DtButton
+          v-if="props.speechEnabled"
           size="sm"
           class="kb-compose__mic"
           :icon="isRecording ? 'square' : 'mic'"
@@ -182,6 +202,10 @@ function onKeydown(event: KeyboardEvent): void {
 </template>
 
 <style scoped lang="scss">
+.kb-compose__effort {
+  width: 10rem;
+}
+
 .kb-compose {
   position: relative;
   padding: 0.625rem 0.75rem 0.75rem;

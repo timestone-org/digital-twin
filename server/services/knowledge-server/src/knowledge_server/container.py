@@ -93,7 +93,6 @@ class Container:
     # 接了哪几路外部解析后端（ADR-0043）。⚠ 装在容器上而不是各调用点各装一份：
     # 能力面、上传校验与 worker 三处必须看到同一份，不然会出现「界面收 PDF 而
     # worker 解不了」这种不对称，且两边单看都对
-    external_parsers: tuple[ExternalParserBackend, ...]
     # 嵌入那一路。⚠ 没接时 `can_embed` 为假而不是 `None`：调用方于是不必
     # 写「这一路在不在」的分支，而缺席由 `can_embed` 如实说出来
     embedder: Embedder
@@ -121,6 +120,17 @@ class Container:
     # 只用它会让旧进程在新 owner 接管后仍被 Lua 误判为 owner。
     ingest_consumer_nonce: uuid.UUID = field(default_factory=uuid.uuid4)
     skills: SkillCatalog | None = None
+
+    def external_parsers(self) -> tuple[ExternalParserBackend, ...]:
+        """从当前目录快照装配文档解析后端。"""
+        return external_parsers(self.settings, self.catalog.snapshot())
+
+    async def current_external_parsers(
+        self,
+    ) -> tuple[ExternalParserBackend, ...]:
+        """在申请或确认上传前刷新解析能力。"""
+        await self.catalog.refresh()
+        return self.external_parsers()
 
     def ingest_group(self) -> StreamGroup:
         """摄取队列的消费组身份。
@@ -201,7 +211,6 @@ def build_container(settings: Settings) -> Container:
         # ⚠ 这一份是**不带身份头**的：能力面报「接了哪几路来源」用得着它，
         # 而真要代表用户去拉数据时，api 侧会按请求另造一份带头的
         sources=build_sources(SourceDeps(store=store, platform=platform)),
-        external_parsers=external_parsers(settings),
         embedder=_build_embedder(settings, catalog),
         catalog=catalog,
         # ⚠ 断路器一个进程一份、跟着容器活，且 `:ask` 与对话面**共用**这一份：

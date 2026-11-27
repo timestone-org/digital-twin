@@ -4,7 +4,7 @@
 要求、又看到上一轮的反问回执——它多半会把两件事揉成一件做。
 """
 
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
@@ -28,6 +28,7 @@ class ToolResultIn(InputModel):
 class ChatAdvanceIn(InputModel):
     """推进一个回合。"""
 
+    reasoning_effort: Literal["low", "medium", "high"] | None = None
     user_text: str | None = Field(
         default=None, min_length=1, max_length=MAX_USER_TEXT
     )

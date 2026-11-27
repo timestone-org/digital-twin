@@ -60,6 +60,18 @@ const KINDS: LlmProviderKind[] = [
     ],
   },
   {
+    code: 'mineru',
+    label: 'MinerU 文档解析',
+    description: '',
+    is_endpoint_required: true,
+    is_login_required: false,
+    consumers: ['knowledge'],
+    model_kinds: ['parser'],
+    efforts: [],
+    rerank_dialects: [],
+    presets: [],
+  },
+  {
     code: 'codex_oauth',
     label: 'Codex 订阅',
     description: '登录一次',
@@ -241,6 +253,38 @@ describe('按类型摆格子', () => {
     found?.vm.$emit('update:modelValue', code)
     await flushPromises()
   }
+
+  it('MinerU 使用部署地址与专用密钥，直接登记 pipeline', async () => {
+    const wrapper = render()
+    await pickKind(wrapper, 'mineru')
+    await inputOf(wrapper, '名称').setValue('解析服务')
+    await inputOf(wrapper, '端点地址').setValue(
+      'https://host/mineru/deployments/demo',
+    )
+    await inputOf(wrapper, 'API 密钥').setValue('test-token')
+    await inputOf(wrapper, 'OCR 语言').setValue('en')
+    await clickButton(wrapper, '测试连接')
+    expect(llm.probeDraft).toHaveBeenCalledWith({
+      kind: 'mineru',
+      base_url: 'https://host/mineru/deployments/demo',
+      api_key: 'test-token',
+    })
+    await clickButton(wrapper, '保存')
+    expect(llm.createProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'mineru',
+        models: [
+          {
+            name: 'pipeline',
+            kind: 'parser',
+            dimensions: null,
+            has_vision: false,
+          },
+        ],
+        options: { lang: 'en', formula_enabled: true, table_enabled: true },
+      }),
+    )
+  })
 
   it('端点那一类摆地址、密钥与测试连接', () => {
     const wrapper = render()

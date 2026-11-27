@@ -5,7 +5,7 @@
 """
 
 import uuid
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     AfterValidator,
@@ -17,6 +17,7 @@ from pydantic import (
 
 from platform_server.apps.llm_providers.enums import (
     MODEL_KIND_EMBEDDING,
+    MODEL_KIND_PARSER,
     MODEL_KINDS,
     PROVIDER_KIND_CODES,
     PROVIDER_KIND_OPENAI_COMPAT,
@@ -74,11 +75,15 @@ ProviderKind = Annotated[
 ]
 
 
+KnowledgeEffort = Literal["low", "medium", "high"]
+
+
 class LlmModelIn(InputModel):
     """一路供应商上登记的一个模型。"""
 
     name: ModelName
     kind: ModelKind
+    knowledge_reasoning_effort: KnowledgeEffort | None = None
     has_vision: bool = False
     # 嵌入模型的向量维数。⚠ 落库前拿它核对端点回来的长度：换了模型而维数
     # 变了的话，旧条目与新条目算不出有意义的余弦
@@ -87,6 +92,12 @@ class LlmModelIn(InputModel):
     @model_validator(mode="after")
     def _embedding_needs_dimensions(self) -> "LlmModelIn":
         """嵌入模型必须带维数，对话模型不许带。"""
+        if self.knowledge_reasoning_effort is not None and self.kind != "chat":
+            raise ValueError("只有对话模型可设置知识库默认思考强度")
+        if self.kind == MODEL_KIND_PARSER and (
+            self.name != "pipeline" or self.has_vision
+        ):
+            raise ValueError("MinerU 文档解析使用 pipeline")
         if self.kind == MODEL_KIND_EMBEDDING and self.dimensions is None:
             raise ValueError("嵌入模型必须填向量维数")
         if self.kind != MODEL_KIND_EMBEDDING and self.dimensions is not None:
@@ -213,6 +224,8 @@ class LlmProviderKindOut(OutputModel):
 class LlmProbeIn(InputModel):
     """保存前先探一次端点通不通。"""
 
+    kind: ProviderKind = PROVIDER_KIND_OPENAI_COMPAT
+
     base_url: BaseUrl
     api_key: SecretStr = Field(min_length=1, max_length=512)
 
@@ -223,6 +236,7 @@ class LlmModelOut(OutputModel):
     name: str
     kind: str
     has_vision: bool
+    knowledge_reasoning_effort: KnowledgeEffort | None = None
     dimensions: int | None
 
 

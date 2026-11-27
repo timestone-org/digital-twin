@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, cast
 
 import httpx
+from pydantic import SecretStr
 
 from knowledge_server.apps.knowledge.services.parsing.mineru_table import (
     table_rows,
@@ -204,8 +205,14 @@ def _ref_of(item: dict[str, Any]) -> str:
     return str(raw).rsplit("/", 1)[-1] if isinstance(raw, str) else ""
 
 
+def _image_caption(item: dict[str, Any]) -> str:
+    """取插图或图表的图注。Args: item。"""
+    key = "chart_caption" if item.get("type") == "chart" else "image_caption"
+    return _joined(item, key)
+
+
 def _image_item(walk: _Walk, item: dict[str, Any], page: int) -> None:
-    """一条 `image`：出一个 `figure` 块，正文取图注。
+    """插图与图表都产出正文为图注的 `figure` 块。
 
     ⚠ 图注要进正文：不进的话「图 1 冷却水回路示意图」这句话在库里根本不存在，
     检索不到。没有图注的图用一句占位——块的正文不许为空（`text_present`
@@ -213,7 +220,7 @@ def _image_item(walk: _Walk, item: dict[str, Any], page: int) -> None:
 
     Args: walk, item, page。
     """
-    caption = _joined(item, "image_caption")
+    caption = _image_caption(item)
     walk.emit("figure", caption or _NO_CAPTION, page, ref=_ref_of(item))
 
 
@@ -223,6 +230,7 @@ _HANDLERS: dict[str, Callable[[_Walk, dict[str, Any], int], None]] = {
     "text": _text_item,
     "equation": _equation_item,
     "image": _image_item,
+    "chart": _image_item,
     "table": _table_item,
 }
 
@@ -313,16 +321,16 @@ def _figure_meta(items: list[object]) -> dict[str, _FigureMeta]:
     for item in items:
         one = _mapping(item)
         kind = one.get("type")
-        if kind not in ("image", "table"):
+        if kind not in ("image", "chart", "table"):
             continue
         ref = _ref_of(one)
         if not ref:
             continue
-        key = "image_caption" if kind == "image" else "table_caption"
+        is_table = kind == "table"
         made[ref] = (
-            "image" if kind == "image" else "table",
+            "table" if is_table else "image",
             _page_of(one),
-            _joined(one, key),
+            _joined(one, "table_caption") if is_table else _image_caption(one),
             _bbox_of(one),
         )
     return made
@@ -452,6 +460,7 @@ class MineruBackend:
         "image/png",
         "image/jpeg",
     )
+    api_key: SecretStr | None = field(default=None, repr=False)
 
     async def parse_remote(
         self, raw: RawItem, timeout_s: float
@@ -476,8 +485,15 @@ class MineruBackend:
         ⚠ 不做成长驻的：一次解析是分钟级的，开一个客户端那点开销可以忽略，
         而长驻的那一份要跟着容器一起收摊——多一条生命周期就多一处漏。
         """
+        headers = None
+        if self.api_key is not None:
+            headers = {
+                "Authorization": f"Bearer {self.api_key.get_secret_value()}"
+            }
         return httpx.AsyncClient(
             base_url=self.base_url,
+            headers=headers,
+            follow_redirects=False,
             timeout=httpx.Timeout(
                 _REQUEST_TIMEOUT_S, connect=_CONNECT_TIMEOUT_S
             ),

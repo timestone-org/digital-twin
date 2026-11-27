@@ -26,8 +26,10 @@ from knowledge_server.apps.knowledge.services.retrieval import (
     RetrievalStrategy,
     build_strategies,
 )
+from knowledge_server.llm_purposes import PURPOSE_PARSE
 from knowledge_server.schema import SchemaFacts
 from knowledge_server.settings import Settings
+from llmcore import ModelCatalog
 
 
 def index_pair(settings: Settings, facts: SchemaFacts) -> IndexPair:
@@ -43,6 +45,7 @@ def index_pair(settings: Settings, facts: SchemaFacts) -> IndexPair:
 
 def external_parsers(
     settings: Settings,
+    catalog: ModelCatalog | None = None,
 ) -> tuple[ExternalParserBackend, ...]:
     """这套部署接了哪几路外部解析后端（ADR-0043）。
 
@@ -55,6 +58,29 @@ def external_parsers(
 
     Args: settings。
     """
+    if catalog is not None and catalog.assigned(PURPOSE_PARSE) is not None:
+        resolved = catalog.resolve(PURPOSE_PARSE)
+        if (
+            resolved is None
+            or resolved.provider.kind != "mineru"
+            or resolved.model.kind != "parser"
+        ):
+            return ()
+        provider = resolved.provider
+        options = provider.options or {}
+        return (
+            MineruBackend(
+                base_url=provider.base_url,
+                api_key=provider.api_key,
+                lang=options.get("lang", settings.mineru_lang),
+                formula_enabled=options.get(
+                    "formula_enabled", settings.mineru_formula_enabled
+                ),
+                table_enabled=options.get(
+                    "table_enabled", settings.mineru_table_enabled
+                ),
+            ),
+        )
     if not settings.mineru_enabled:
         return ()
     return (
@@ -63,6 +89,7 @@ def external_parsers(
             lang=settings.mineru_lang,
             formula_enabled=settings.mineru_formula_enabled,
             table_enabled=settings.mineru_table_enabled,
+            api_key=settings.mineru_api_key,
         ),
     )
 

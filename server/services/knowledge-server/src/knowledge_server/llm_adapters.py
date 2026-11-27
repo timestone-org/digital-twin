@@ -13,7 +13,7 @@ import 副作用：隐式注册会让「接得了哪几种」取决于 import �
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from langchain_core.language_models import BaseChatModel
 
@@ -80,6 +80,14 @@ def _endpoint(
     )
     if endpoint is None:
         return None
+    if found.model.knowledge_reasoning_effort is not None:
+        endpoint = replace(
+            endpoint,
+            extra_body={
+                **(endpoint.extra_body or {}),
+                "reasoning_effort": found.model.knowledge_reasoning_effort,
+            },
+        )
     return OpenAiCompatAdapter(
         # ⚠ 每一档解出来的都是这一条：这一侧只有对话与折叠摘要两档，
         # 而它们打的是同一个端点
@@ -107,7 +115,9 @@ def _codex(
         # 界面上改了分配、这一侧还在打老那一个
         models=(found.model.name,),
         default_effort=(
-            effort_of(found.provider.options, CODEX_EFFORTS) or DEFAULT_EFFORT
+            found.model.knowledge_reasoning_effort
+            or effort_of(found.provider.options, CODEX_EFFORTS)
+            or DEFAULT_EFFORT
         ),
         timeout_s=deps.settings.model_timeout_s,
         tokens=deps.tokens,

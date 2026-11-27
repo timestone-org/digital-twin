@@ -135,12 +135,15 @@ describe('知识库对话的回合门面', () => {
     )
 
     await runKnowledgeTurn(
-      { advance, sessionId: 's1', userText: '上限多少' },
+      { advance, sessionId: 's1', userText: '上限多少', effort: 'medium' },
       sink,
     )
 
     expect(replies).toEqual(['上限 65 ℃ [1]'])
-    expect(bodies).toHaveLength(2)
+    expect(bodies.map((body) => body.reasoning_effort)).toEqual([
+      'medium',
+      'medium',
+    ])
     expect(bodies[1]?.tool_results).toEqual([
       {
         call_id: 'q1',

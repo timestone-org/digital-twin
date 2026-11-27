@@ -80,7 +80,9 @@ async def test_a_stored_key_is_read_out_before_the_transaction_ends(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     row = LlmProvider(
-        base_url=BASE_URL, api_key_enc=CIPHER.encrypt("sk-stored")
+        kind=PROVIDER_KIND_OPENAI_COMPAT,
+        base_url=BASE_URL,
+        api_key_enc=CIPHER.encrypt("sk-stored"),
     )
     session = session_over(monkeypatch, row)
 
@@ -89,5 +91,5 @@ async def test_a_stored_key_is_read_out_before_the_transaction_ends(
     )
 
     # ⚠ 先放事务后取值的话，读到的是已过期的行
-    assert stored == (BASE_URL, "sk-stored")
+    assert stored == (PROVIDER_KIND_OPENAI_COMPAT, BASE_URL, "sk-stored")
     assert session.rollbacks == 1

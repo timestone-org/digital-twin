@@ -37,6 +37,7 @@ class CatalogModelOut(BaseModel):
     kind: str
     has_vision: bool
     dimensions: int | None
+    knowledge_reasoning_effort: str | None = None
 
 
 class CatalogProviderOut(BaseModel):
@@ -152,6 +153,7 @@ def _provider_out(
                 kind=one.kind,
                 has_vision=one.has_vision,
                 dimensions=one.dimensions,
+                knowledge_reasoning_effort=one.knowledge_reasoning_effort,
             )
             for one in models_of(row)
         ],

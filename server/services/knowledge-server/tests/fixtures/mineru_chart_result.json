@@ -1,0 +1,12 @@
+{
+  "backend": "pipeline",
+  "version": "3.4.5",
+  "results": {
+    "sample": {
+      "content_list": "[{\"type\":\"chart\",\"img_path\":\"images/chart.jpg\",\"content\":\"\",\"chart_caption\":[\"Figure 1. Cooling unit and its pipe connections.\"],\"chart_footnote\":[],\"bbox\":[100,235,810,501],\"page_idx\":2}]",
+      "images": {
+        "chart.jpg": "data:image/jpeg;base64,/9j/2Q=="
+      }
+    }
+  }
+}

@@ -93,6 +93,7 @@ export type {
   KnowledgeBaseMetadataPatch,
   KnowledgeCapability,
   KnowledgeChatAdvanceIn,
+  KnowledgeReasoningEffort,
   KnowledgeChatMessage,
   KnowledgeChatScopeBase,
   KnowledgeChatSession,

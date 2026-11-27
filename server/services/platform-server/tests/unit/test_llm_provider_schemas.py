@@ -235,3 +235,37 @@ def test_the_update_body_carries_no_kind() -> None:
     """⚠ 改形态等于换一路接法：密钥、登录态与模型清单全部作废，
     那是删了重建。放行的话，一路配好的供应商会在改名的那一次静默换掉接法。"""
     assert "kind" not in LlmProviderUpdateIn.model_fields
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"lang": ""},
+        {"lang": 2},
+        {"lang": "a" * 33},
+        {"formula_enabled": "false"},
+        {"table_enabled": 0},
+        {"secret": "value"},
+    ],
+)
+def test_mineru_rejects_invalid_parse_options(
+    options: dict[str, object],
+) -> None:
+    with pytest.raises(ValidationError):
+        _provider(
+            kind="mineru",
+            models=[{"kind": "parser", "name": "pipeline"}],
+            options=options,
+        )
+
+
+def test_mineru_only_registers_the_pipeline_parser() -> None:
+    with pytest.raises(ValidationError):
+        _provider(kind="mineru", models=[{"kind": "parser", "name": "unused"}])
+    with pytest.raises(ValidationError):
+        _provider(kind="mineru", models=[{"kind": "chat", "name": "pipeline"}])
+    with pytest.raises(ValidationError):
+        _provider(
+            kind="openai_compat",
+            models=[{"kind": "parser", "name": "pipeline"}],
+        )

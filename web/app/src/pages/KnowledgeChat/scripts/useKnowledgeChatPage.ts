@@ -1,6 +1,7 @@
 /**
  * @fileoverview 知识库对话页的交互编排：把状态与动作绑成页面手上的一件东西。
  */
+import type { KnowledgeReasoningEffort } from '@dt/contracts'
 import * as actions from './knowledgeChatActions'
 import { createState } from './knowledgeChatState'
 import type { KnowledgeConversation } from '@/composables/useKnowledgeConversation'
@@ -16,7 +17,8 @@ export function useKnowledgeChatPage(chat?: KnowledgeConversation) {
       actions.rename(state, sessionId, title),
     archive: (sessionId: string) => actions.archive(state, sessionId),
     remove: (sessionId: string) => actions.remove(state, sessionId),
-    send: (text: string) => actions.send(state, text),
+    send: (text: string, effort?: KnowledgeReasoningEffort) =>
+      actions.send(state, text, effort),
     setScope: (baseScopeIds: string[] | null) =>
       actions.setScope(state, baseScopeIds),
   }

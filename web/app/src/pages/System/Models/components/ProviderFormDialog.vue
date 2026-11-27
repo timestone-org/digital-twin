@@ -1,16 +1,5 @@
 <script setup lang="ts">
-/**
- * @fileoverview 新建 / 编辑一路供应商的弹窗：先选形态，再配这一形态自己的那几格。
- *
- * ⚠ 摆哪几格由**后端下发的形态清单**说了算，不在这里另写一份判断：靠登录的
- * 那些形态没有端点与密钥，摆出来的话人会填、填了后端拒，而那句话指不回是
- * 哪一格多余。
- * ⚠ 形态**只在新建时选得了**：改形态等于换一路接法，密钥、登录态与模型清单
- * 全部作废——那是删了重建。
- * ⚠ 密钥只在这里出现一次：编辑态那一格留空即沿用旧的，界面上永远拿不回明文。
- * ⚠ 「测试连接」不落任何东西：新建态拿表单里的地址与密钥探，编辑态没填新密钥
- * 就拿库里那一把探——两条路后端分开，前端不许把旧密钥拼进请求。
- */
+/** @fileoverview 模型供应商的创建、编辑与连接测试表单。 */
 import { computed, ref, watch } from 'vue'
 import type {
   DtSelectOption,
@@ -30,6 +19,7 @@ import {
   DtIconButton,
 } from '@dt/ui'
 
+import ModelReasoningField from './ModelReasoningField.vue'
 import * as llm from '@/api/llmProviders'
 import { describeError } from '@/composables/useAsyncList'
 import { useFormDirty } from '@/composables/useFormDirty'
@@ -63,6 +53,7 @@ const MODEL_KIND_LABELS: Readonly<Record<string, string>> = {
   chat: '对话',
   embedding: '嵌入',
   rerank: '重排',
+  parser: '文档解析',
 }
 // 方言体那一格的示例。⚠ 绑成表达式而不是写在模板属性里：JSON 里的双引号会让
 // 模板属性的引号风格在 prettier 与 eslint 之间打架
@@ -118,14 +109,13 @@ const dialectHint = computed(
 
 /** 端点那几格只在这一形态真要它们时才摆。 */
 const hasEndpoint = computed(() => kind.value?.is_endpoint_required !== false)
+const isMineru = computed(() => form.value.kind === 'mineru')
 const mustSaveBeforeProbe = computed(
   () =>
     props.provider !== null &&
     form.value.apiKey.trim() === '' &&
     form.value.baseUrl.trim() !== (props.provider.base_url ?? '').trim(),
 )
-// ⚠ 摆不摆的判断写成 computed 而不是模板里的表达式：模板里出现 `>` 会把
-// 嵌套层数那道闸的标签匹配截断，报出来的是一句「嵌套 7 层」，指不回这里
 const hasPresets = computed(
   () => !isEdit.value && (kind.value?.presets.length ?? 0) > 0,
 )
@@ -136,6 +126,7 @@ const hasDialects = computed(
 
 /** 换类型清掉上一类专属的格子，名称与备注是各类共有的，留着。 */
 function pickKind(code: string): void {
+  probe.value = null
   const { name, notes } = form.value
   form.value = { ...emptyForm(code), name, notes }
 }
@@ -200,6 +191,7 @@ async function onProbe(): Promise<void> {
       form.value.apiKey.trim() === '' && props.provider
         ? await llm.probeProvider(props.provider.id)
         : await llm.probeDraft({
+            ...(isMineru.value ? { kind: 'mineru' } : {}),
             base_url: form.value.baseUrl.trim(),
             api_key: form.value.apiKey.trim(),
           })
@@ -295,8 +287,14 @@ async function onSubmit(): Promise<void> {
         v-model="form.baseUrl"
         label="端点地址"
         required
-        placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1"
-        hint="OpenAI 兼容口径的根，通常以 /v1 结尾"
+        :placeholder="
+          isMineru ? 'https://host/mineru/deployments/…' : 'https://host/v1'
+        "
+        :hint="
+          isMineru
+            ? '填写完整部署地址，保留部署 ID，结尾省略 /health 或 /tasks'
+            : 'OpenAI 兼容口径的根，通常以 /v1 结尾'
+        "
       />
       <DtInput
         v-if="hasEndpoint"
@@ -326,6 +324,19 @@ async function onSubmit(): Promise<void> {
         :hint="dialectHint"
       />
 
+      <template v-if="isMineru">
+        <DtInput
+          v-model="form.lang"
+          label="OCR 语言"
+          required
+          :maxlength="32"
+          hint="简体中文使用 ch"
+        />
+        <div class="flex items-center gap-3">
+          <DtSwitch v-model="form.formulaEnabled" label="公式识别" />
+          <DtSwitch v-model="form.tableEnabled" label="表格识别" />
+        </div>
+      </template>
       <div class="dt-form-grid__wide flex items-center gap-3">
         <DtButton
           v-if="hasEndpoint"
@@ -362,7 +373,7 @@ async function onSubmit(): Promise<void> {
         </button>
       </div>
 
-      <section class="dt-form-grid__wide flex flex-col gap-2">
+      <section v-if="!isMineru" class="dt-form-grid__wide flex flex-col gap-2">
         <div class="flex items-center justify-between">
           <span class="text-sm text-text-title">登记的模型</span>
           <DtIconButton
@@ -414,11 +425,16 @@ async function onSubmit(): Promise<void> {
             aria-label="删这一行"
             @click="removeRow(index)"
           />
+          <ModelReasoningField
+            v-if="row.kind === 'chat'"
+            v-model="row.knowledgeEffort"
+            class="model-row__effort"
+          />
         </div>
       </section>
 
       <DtTextarea
-        v-if="hasEndpoint"
+        v-if="hasEndpoint && !isMineru"
         v-model="form.extraBody"
         class="dt-form-grid__wide"
         label="额外请求体（可选）"
@@ -455,6 +471,9 @@ async function onSubmit(): Promise<void> {
 </template>
 
 <style scoped lang="scss">
+.model-row__effort {
+  grid-column: 1 / -1;
+}
 .model-row {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) 7rem minmax(0, 1fr) auto;

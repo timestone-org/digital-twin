@@ -1,7 +1,10 @@
 /**
  * @fileoverview 知识库对话页的动作：列、建、选、改名、归档、删、发一句。
  */
-import { KNOWLEDGE_CHAT_CONFLICT_CODE } from '@dt/contracts'
+import {
+  KNOWLEDGE_CHAT_CONFLICT_CODE,
+  type KnowledgeReasoningEffort,
+} from '@dt/contracts'
 
 import { BizError } from '@/api/client'
 import { listBases, readCapability } from '@/api/knowledge'
@@ -197,20 +200,22 @@ export async function remove(
 export async function send(
   state: KnowledgeChatState,
   text: string,
+  effort?: KnowledgeReasoningEffort,
 ): Promise<void> {
   const wanted = text.trim()
   if (wanted === '' || state.chat.isRunning.value) return
   if (state.selectedId.value === null) {
-    await startFirstTurn(state, wanted)
+    await startFirstTurn(state, wanted, effort)
     return
   }
-  await state.chat.send(wanted)
+  await state.chat.send(wanted, effort)
 }
 
 /** 首句发送时创建会话，首轮完成前不放进清单。 */
 async function startFirstTurn(
   state: KnowledgeChatState,
   text: string,
+  effort?: KnowledgeReasoningEffort,
 ): Promise<void> {
   state.error.value = ''
   state.isCreating.value = true
@@ -232,7 +237,7 @@ async function startFirstTurn(
     },
   )
   if (createdId !== null && state.selectedId.value === createdId) {
-    await state.chat.send(text)
+    await state.chat.send(text, effort)
   }
 }
 

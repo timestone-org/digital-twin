@@ -160,6 +160,7 @@ async def probe_draft(
     Args: body, _write, timeout_s。
     """
     made = await probe_endpoint(
+        kind=body.kind,
         base_url=body.base_url,
         api_key=body.api_key.get_secret_value(),
         timeout_s=timeout_s,
@@ -183,10 +184,10 @@ async def probe_stored(
 
     Args: provider_id, session, cipher, _write, timeout_s。
     """
-    base_url, api_key = await provider_service.stored_api_key(
+    kind, base_url, api_key = await provider_service.stored_api_key(
         session, provider_id, cipher=cipher
     )
     made = await probe_endpoint(
-        base_url=base_url, api_key=api_key, timeout_s=timeout_s
+        kind=kind, base_url=base_url, api_key=api_key, timeout_s=timeout_s
     )
     return ok(LlmProbeOut(**made.__dict__))

@@ -15,6 +15,7 @@ def test_chat_contract_has_no_page_context() -> None:
         "user_text",
         "tool_results",
         "client_tools",
+        "reasoning_effort",
     }
     messages = service.assemble(
         payload=service.AdvanceInput(user_text="查手册"),

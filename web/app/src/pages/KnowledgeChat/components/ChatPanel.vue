@@ -6,14 +6,18 @@
  * ⚠ `--ai-edge` 在这里的根上再声明一遍：助手把它声明在 `.ai-panel` 上，
  * 这一页不套那层壳，标题栏与输入区的两条发光线引的都是这一份。
  */
-import { computed, onScopeDispose, provide } from 'vue'
+import { computed, ref, onScopeDispose, provide } from 'vue'
 import { LIVE_SOURCES, createLiveSources } from '../scripts/liveSources'
 import { livePointOfStep } from '@/features/knowledgeChat/liveTools'
+import type { EffortSelection } from '@/features/knowledgeChat/reasoningEffort'
 import ChatToolStep from './ChatToolStep.vue'
 import ChatLivePoint from './ChatLivePoint.vue'
 import { liveCardRows } from '../scripts/liveCardRows'
 import { MAX_ACTIVE_LIVE_CARDS } from '@/config/app'
-import type { KnowledgeChatScopeBase } from '@dt/contracts'
+import type {
+  KnowledgeChatScopeBase,
+  KnowledgeReasoningEffort,
+} from '@dt/contracts'
 import { DtButton, DtCard, DtTag } from '@dt/ui'
 
 import type { KnowledgeBase } from '@/api/knowledge'
@@ -53,12 +57,17 @@ const activeCards = computed(
     ),
 )
 
-defineEmits<{
-  send: [text: string]
+const effort = ref<EffortSelection>('default')
+const emit = defineEmits<{
+  send: [text: string, effort?: KnowledgeReasoningEffort | undefined]
   scope: [ids: string[] | null]
   /** 开一段新对话：只清屏的话下一句仍带着这一段的服务端上下文，与「清空」字面不符。 */
   restart: []
 }>()
+function send(text: string): void {
+  emit('send', text, effort.value === 'default' ? undefined : effort.value)
+  effort.value = 'default'
+}
 </script>
 
 <template>
@@ -92,14 +101,11 @@ defineEmits<{
       :entries="cardRows.entries"
       :starters="starters"
       empty-title="查资料，也能查看实时数据"
-      @starter="$emit('send', $event)"
+      @starter="send"
       @answer="chat.answerAsk"
     >
       <template #empty>
-        <KnowledgeWelcome
-          :starters="starters"
-          @starter="$emit('send', $event)"
-        />
+        <KnowledgeWelcome :starters="starters" @starter="send" />
       </template>
       <template #tool="{ step, entryId }">
         <li v-if="cardRows.rows.has(entryId)" class="chat-panel__card-row">
@@ -126,12 +132,13 @@ defineEmits<{
     </div>
 
     <KnowledgeChatComposer
+      v-model:effort="effort"
       :running="chat.isRunning.value"
       :asking="chat.isAsking.value"
       :speech-enabled="speechEnabled"
       :bases="bases"
       :scope="scope"
-      @send="$emit('send', $event)"
+      @send="send"
       @stop="chat.stop"
       @scope="$emit('scope', $event)"
     />

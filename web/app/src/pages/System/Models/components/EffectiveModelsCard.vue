@@ -54,6 +54,12 @@ defineProps<{
       </p>
       <ul v-else class="effective__list">
         <li class="effective__row">
+          <span class="text-text-title">MinerU 文档解析</span>
+          <DtTag size="sm">{{
+            knowledge.acceptedSuffixes.includes('.pdf') ? '已配置' : '未配置'
+          }}</DtTag>
+        </li>
+        <li class="effective__row">
           <span class="text-text-title">文档嵌入</span>
           <DtTag
             :intent="knowledge.isEmbeddingEnabled ? 'success' : 'warning'"

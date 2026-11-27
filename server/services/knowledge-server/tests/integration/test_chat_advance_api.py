@@ -49,13 +49,16 @@ def _install(
     stack: DbStack,
     model: BaseChatModel,
     tools: Callable[[BaseScope, Ledger], ToolRegistry] | None = None,
+    choices: list[ModelChoice] | None = None,
 ) -> None:
     """把假模型与用例那条连接装进推进依赖。
 
     Args: stack, model, tools（换掉整份工具注册表；不给就是真的那一份）。
     """
 
-    async def source(_choice: ModelChoice) -> BaseChatModel:
+    async def source(choice: ModelChoice) -> BaseChatModel:
+        if choices is not None:
+            choices.append(choice)
         return model
 
     @asynccontextmanager
@@ -127,6 +130,20 @@ async def test_a_plain_answer_streams_a_delta_a_step_then_done(
         "turn.done",
     ]
     assert events[-1][1]["reply"] == "9.8 MPa [1]"
+
+
+async def test_selected_effort_reaches_the_chat_model(
+    db_stack: DbStack,
+) -> None:
+    choices: list[ModelChoice] = []
+    _install(
+        db_stack, ScriptedChat(reply=AIMessage(content="好")), choices=choices
+    )
+    session_id = await _new_session(db_stack.client)
+    await _advance(
+        db_stack.client, session_id, user_text="在吗", reasoning_effort="low"
+    )
+    assert choices == [ModelChoice(effort="low")]
 
 
 async def test_the_turn_is_persisted_with_its_steps(

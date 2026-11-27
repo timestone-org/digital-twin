@@ -8,11 +8,18 @@
  * 钉在 openapi 上；用途码与模型种类还对着三个服务的源码逐字比。
  */
 
+import type { KnowledgeReasoningEffort } from './knowledge'
+
 /**
  * 一路供应商上登记的模型种类。三种互不通用：拿对话模型名去打 embeddings
  * 端点、或拿嵌入模型去做重排，都是必然失败的调用。
  */
-export const LLM_MODEL_KINDS = ['chat', 'embedding', 'rerank'] as const
+export const LLM_MODEL_KINDS = [
+  'chat',
+  'embedding',
+  'rerank',
+  'parser',
+] as const
 export type LlmModelKind = (typeof LLM_MODEL_KINDS)[number]
 
 /**
@@ -28,7 +35,11 @@ export type LlmRerankDialectCode = (typeof LLM_RERANK_DIALECTS)[number]
  * 和助手的 `llm/ports.py` 逐字一致；漂开的表现是「界面上配好了一路 Codex、
  * 助手却当它不存在」，而两边代码单看都对。
  */
-export const LLM_PROVIDER_KINDS = ['openai_compat', 'codex_oauth'] as const
+export const LLM_PROVIDER_KINDS = [
+  'openai_compat',
+  'codex_oauth',
+  'mineru',
+] as const
 export type LlmProviderKindCode = (typeof LLM_PROVIDER_KINDS)[number]
 
 /** 用途属于哪个消费方，界面按它分组。 */
@@ -48,6 +59,7 @@ export const LLM_PURPOSES = [
   'knowledge.chat',
   'knowledge.embedding',
   'knowledge.rerank',
+  'knowledge.parse',
 ] as const
 
 /** 一套重排线形：打端点根下的哪个路径、请求体长什么样。 */
@@ -93,6 +105,7 @@ export interface LlmProviderKind {
 
 /** 一路供应商上登记的一个模型。 */
 export interface LlmModel {
+  knowledge_reasoning_effort?: KnowledgeReasoningEffort | null
   name: string
   kind: string
   has_vision: boolean

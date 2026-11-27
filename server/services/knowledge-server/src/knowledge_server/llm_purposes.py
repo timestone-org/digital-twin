@@ -11,4 +11,5 @@ PURPOSE_CHAT = "knowledge.chat"
 PURPOSE_EMBEDDING = "knowledge.embedding"
 # 混合召回之后按它把候选重排一次。⚠ 与嵌入不同，它什么都不落库：换重排模型
 # 不作废任何存量向量，也不用重建索引
+PURPOSE_PARSE = "knowledge.parse"
 PURPOSE_RERANK = "knowledge.rerank"

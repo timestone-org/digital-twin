@@ -125,6 +125,27 @@ def test_the_table_screenshot_comes_out_alongside_its_rows() -> None:
     assert any(one.kind == "table_row" for one in made.blocks)
 
 
+def test_chart_keeps_its_caption_and_image_location() -> None:
+    fixture = FIXTURE.with_name("mineru_chart_result.json")
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    made = document_of("sample.pdf", payload)
+
+    (block,) = made.blocks
+    (figure,) = made.figures
+    assert block.kind == "figure"
+    assert block.figure_ref == figure.ref == "chart.jpg"
+    assert block.locator.page == figure.page == 3
+    assert (
+        block.text
+        == figure.caption
+        == ("Figure 1. Cooling unit and its pipe connections.")
+    )
+    assert figure.kind == "image"
+    assert figure.bbox == (100, 235, 810, 501)
+    assert figure.media_type == "image/jpeg"
+    assert figure.content == b"\xff\xd8\xff\xd9"
+
+
 def test_a_figure_without_a_caption_still_gets_a_block() -> None:
     """⚠ 块的正文不许为空（`text_present` 那条 CHECK），而一张没有图注的图
     仍然值得在引用面上摆出来——所以用一句占位，不是丢掉它。"""

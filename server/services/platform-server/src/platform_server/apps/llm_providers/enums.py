@@ -17,7 +17,13 @@ from dataclasses import dataclass
 MODEL_KIND_CHAT = "chat"
 MODEL_KIND_EMBEDDING = "embedding"
 MODEL_KIND_RERANK = "rerank"
-MODEL_KINDS = (MODEL_KIND_CHAT, MODEL_KIND_EMBEDDING, MODEL_KIND_RERANK)
+MODEL_KIND_PARSER = "parser"
+MODEL_KINDS = (
+    MODEL_KIND_CHAT,
+    MODEL_KIND_EMBEDDING,
+    MODEL_KIND_RERANK,
+    MODEL_KIND_PARSER,
+)
 
 # 登录那一路的认证方式。⚠ 闭合集合；API Key 那一路不落库，它在供应商行上
 AUTH_MODE_CHATGPT = "chatgpt"
@@ -32,6 +38,7 @@ CONSUMERS = (CONSUMER_ASSISTANT, CONSUMER_KNOWLEDGE)
 # 那一侧拿哪一个适配器去接。⚠ 形态是**行为**不是取值——加一种形态一定要有一个
 # 消费方真接得了它，光在这里加一档只会让界面配得出、那一侧一句话都说不出来
 PROVIDER_KIND_OPENAI_COMPAT = "openai_compat"
+PROVIDER_KIND_MINERU = "mineru"
 PROVIDER_KIND_CODEX_OAUTH = "codex_oauth"
 
 
@@ -127,7 +134,7 @@ PROVIDER_KINDS: tuple[ProviderKindSpec, ...] = (
         ),
         is_endpoint_required=True,
         is_login_required=False,
-        model_kinds=MODEL_KINDS,
+        model_kinds=(MODEL_KIND_CHAT, MODEL_KIND_EMBEDDING, MODEL_KIND_RERANK),
         consumers=CONSUMERS,
         rerank_dialects=RERANK_DIALECTS,
         presets=(
@@ -140,6 +147,18 @@ PROVIDER_KINDS: tuple[ProviderKindSpec, ...] = (
                 base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
             ),
         ),
+    ),
+    ProviderKindSpec(
+        code=PROVIDER_KIND_MINERU,
+        label="MinerU 文档解析",
+        description=(
+            "使用部署地址与专用密钥解析 PDF 和扫描件。"
+            "保存后在知识库文档解析用途中选择此部署。"
+        ),
+        is_endpoint_required=True,
+        is_login_required=False,
+        model_kinds=(MODEL_KIND_PARSER,),
+        consumers=(CONSUMER_KNOWLEDGE,),
     ),
     ProviderKindSpec(
         code=PROVIDER_KIND_CODEX_OAUTH,
@@ -230,6 +249,13 @@ PURPOSES: tuple[PurposeSpec, ...] = (
         label="文档嵌入",
         description="文档切块后按它转成向量；已建库的向量钉在建库那一刻的模型上",
         kind=MODEL_KIND_EMBEDDING,
+        consumer=CONSUMER_KNOWLEDGE,
+    ),
+    PurposeSpec(
+        code="knowledge.parse",
+        label="知识库文档解析",
+        description="使用 MinerU 解析 PDF 和扫描件，保留页码、表格和插图。",
+        kind=MODEL_KIND_PARSER,
         consumer=CONSUMER_KNOWLEDGE,
     ),
     PurposeSpec(

@@ -18,6 +18,7 @@ import type {
 import type { KnowledgeCapability } from '@/api/knowledge'
 import KnowledgeChatPage from '@/pages/KnowledgeChat/index.vue'
 import ChatPanel from '@/pages/KnowledgeChat/components/ChatPanel.vue'
+import KnowledgeChatComposer from '@/pages/KnowledgeChat/components/KnowledgeChatComposer.vue'
 import ChatSessionList from '@/pages/KnowledgeChat/components/ChatSessionList.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -509,6 +510,29 @@ describe('发一句', () => {
     expect(api.advanceTurn).toHaveBeenCalledTimes(1)
   })
 
+  it('首次提问使用临时强度，下一次回到模型默认', async () => {
+    api.listSessions.mockResolvedValue([])
+    api.createSession.mockResolvedValue(sessionOf('s9'))
+    api.readSession.mockResolvedValue({ ...sessionOf('s9'), messages: [] })
+    const wrapper = await render()
+    wrapper
+      .getComponent(KnowledgeChatComposer)
+      .vm.$emit('update:effort', 'high')
+    await flushPromises()
+    for (const question of ['第一次', '第二次']) {
+      await wrapper.get('textarea').setValue(question)
+      await wrapper.get('button[aria-label="发送"]').trigger('click')
+      await flushPromises()
+    }
+    expect(api.advanceTurn.mock.calls[0]?.[1]).toHaveProperty(
+      'reasoning_effort',
+      'high',
+    )
+    expect(api.advanceTurn.mock.calls[1]?.[1]).not.toHaveProperty(
+      'reasoning_effort',
+    )
+  })
+
   it('信封里自报反问和采集工具，没有工作面', async () => {
     api.listSessions.mockResolvedValue([])
     api.createSession.mockResolvedValue(sessionOf('s9'))
@@ -520,6 +544,7 @@ describe('发一句', () => {
     await flushPromises()
 
     const body = api.advanceTurn.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(body).not.toHaveProperty('reasoning_effort')
     expect(body.client_tools).toEqual([
       'user.ask',
       'collect.search_points',
@@ -724,6 +749,7 @@ describe('语音输入', () => {
     await flushPromises()
 
     const body = api.advanceTurn.mock.calls[0]?.[1] as Record<string, unknown>
+    expect(body).not.toHaveProperty('reasoning_effort')
     expect(body.user_text).toBe('冷却水出口温度的上限是多少？')
   })
 })

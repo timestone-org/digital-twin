@@ -132,7 +132,7 @@ class IngestDeps:
     # 生产的 worker 必须把它接上，理由见模块头
     refresh: Refresh = _no_refresh
     # 接了哪几路外部解析后端。⚠ 一期恒空——没接就是诚实缺席（ADR-0043）
-    external_parsers: tuple[ExternalParserBackend, ...] = ()
+    external_parsers: Callable[[], tuple[ExternalParserBackend, ...]] = tuple
     # 外部那一路一次调用最多等多久
     external_parse_timeout_s: float = 180.0
     # DOCX 的显示派生物；None 即明确走浏览器兼容预览
@@ -258,7 +258,7 @@ async def _parsed(deps: IngestDeps, raw: RawItem) -> ParsedDocument:
 
     Args: deps, raw。
     """
-    backend = external_for(raw, deps.external_parsers)
+    backend = external_for(raw, deps.external_parsers())
     if backend is None:
         return await _parsed_locally(deps, raw)
     return await _parsed_remotely(backend, deps, raw)

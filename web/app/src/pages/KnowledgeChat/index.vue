@@ -107,7 +107,7 @@ onMounted(() => void page.reload())
               :speech-enabled="page.isAsrEnabled.value"
               :bases="page.bases.value"
               :scope="page.scope.value"
-              @send="(text: string) => void page.send(text)"
+              @send="(text, effort) => void page.send(text, effort)"
               @restart="page.create"
               @scope="(ids: string[] | null) => void page.setScope(ids)"
             />

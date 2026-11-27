@@ -13176,10 +13176,27 @@
             "enum": [
               "chat",
               "embedding",
-              "rerank"
+              "rerank",
+              "parser"
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "knowledge_reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Reasoning Effort"
           },
           "name": {
             "maxLength": 128,
@@ -13217,6 +13234,22 @@
             "title": "Kind",
             "type": "string"
           },
+          "knowledge_reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Knowledge Reasoning Effort"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -13248,6 +13281,16 @@
             "minLength": 8,
             "pattern": "^https?://[^\\s/]+",
             "title": "Base Url",
+            "type": "string"
+          },
+          "kind": {
+            "default": "openai_compat",
+            "enum": [
+              "openai_compat",
+              "mineru",
+              "codex_oauth"
+            ],
+            "title": "Kind",
             "type": "string"
           }
         },
@@ -13338,6 +13381,7 @@
             "default": "openai_compat",
             "enum": [
               "openai_compat",
+              "mineru",
               "codex_oauth"
             ],
             "title": "Kind",

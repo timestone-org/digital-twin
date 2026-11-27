@@ -33,6 +33,7 @@ const KIND_LABELS: Record<string, string> = {
   chat: '对话',
   embedding: '嵌入',
   rerank: '重排',
+  parser: '文档解析',
 }
 
 /** 这一档在标签上用哪种色，认不出的种类按中性走。 */

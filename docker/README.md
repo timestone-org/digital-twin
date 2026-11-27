@@ -89,10 +89,12 @@ cd docker
 cp ../.env.template .env   # 填数据库、Redis、对象存储、外部 EMS 库与几个密钥
 docker compose up -d --build
 
-# 要 MinerU（PDF 与扫描件的解析后端，ADR-0043）才加这个 profile：
-# 镜像 2.4 GB、权重另有 2.4 GB，而没有它整套照样跑得起来，只是不收 PDF
-docker compose --profile mineru up -d --build
+# 已有远端 MinerU 时，以上启动命令即可。
+# 仅需在本机自建解析器时使用可选 profile：
+# docker compose --profile mineru up -d --build
 ```
+
+在「系统 → 模型管理」新建「MinerU 文档解析」供应商，填写完整的部署地址与专用访问密钥，点击「测试连接」，保存后分配给「知识库文档解析」用途。
 
 普通编排与 no-ai 编排共用 `web/Dockerfile`：构建阶段安装锁定的 pnpm 依赖并打包
 前端，运行阶段只把 `app/dist` 复制进 Nginx 镜像。默认网关不再依赖宿主机的

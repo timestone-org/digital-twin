@@ -12,6 +12,7 @@ import { computed, onScopeDispose, ref, shallowRef, type Ref } from 'vue'
 import type {
   AssistantAskAnswer,
   KnowledgeChatSessionDetail,
+  KnowledgeReasoningEffort,
 } from '@dt/contracts'
 
 import { createBufferedLog } from '@/features/knowledgeChat/bufferedLog'
@@ -37,7 +38,7 @@ export interface KnowledgeConversation {
   /** 正等着用户回答。⚠ 这期间输入框上锁。 */
   isAsking: Ref<boolean>
   /** 发一句话，跑一个回合。 */
-  send: (text: string) => Promise<void>
+  send: (text: string, effort?: KnowledgeReasoningEffort) => Promise<void>
   /** 掐掉正在跑的那个回合。 */
   stop: () => void
   /** 清空这一屏（不动库里的历史）。 */
@@ -96,9 +97,9 @@ export function useKnowledgeConversation(
     entries: computed(() => log.value.entries),
     isRunning,
     isAsking,
-    send: async (text) => {
+    send: async (text, effort) => {
       try {
-        await createKnowledgeSender(parts)(text)
+        await createKnowledgeSender(parts)(text, effort)
       } finally {
         flush()
       }

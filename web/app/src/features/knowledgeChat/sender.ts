@@ -16,6 +16,7 @@ import {
   type ChatEntry,
   type ConversationLog,
 } from '@/features/ai/conversationLog'
+import type { KnowledgeReasoningEffort } from '@dt/contracts'
 import type { RunState } from '@/features/ai/conversationSender'
 import {
   runKnowledgeTurn,
@@ -40,8 +41,11 @@ export interface KnowledgeSenderParts {
 /** 造出「发一句话」这个动作。 */
 export function createKnowledgeSender(
   parts: KnowledgeSenderParts,
-): (text: string) => Promise<void> {
-  return async function send(text: string): Promise<void> {
+): (text: string, effort?: KnowledgeReasoningEffort) => Promise<void> {
+  return async function send(
+    text: string,
+    effort?: KnowledgeReasoningEffort,
+  ): Promise<void> {
     const id = parts.sessionId()
     if (id === null) {
       parts.edit((log) => withSaid(log, 'error', '先选一个对话，或者新建一个'))
@@ -60,6 +64,7 @@ export function createKnowledgeSender(
           advance: parts.advance,
           sessionId: id,
           userText: text,
+          effort,
           signal: controller.signal,
           onTitled: scoped.onTitled,
           onCited: (items) => scoped.edit((log) => withCitations(log, items)),

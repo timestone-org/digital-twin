@@ -91,7 +91,7 @@ const KIND_MIGRATION = join(
   'platform-server',
   'migrations',
   'versions',
-  '2026_09_03_1000-a7e1c93b6d40_add_llm_provider_kind.py',
+  '2026_11_27_1000-mineru_catalog_20261127.py',
 )
 // ⚠ 放宽用途码 CHECK 的那一次。迁移是**逐次叠加**的：只读第一份的话，
 // 加一档用途之后这条闸会红在「平台多了一个」上，而库上其实认得它
@@ -101,7 +101,7 @@ const PURPOSE_MIGRATION = join(
   'platform-server',
   'migrations',
   'versions',
-  '2026_09_03_1600-b6f4a20d75e1_add_rerank_purpose.py',
+  '2026_11_27_1000-mineru_catalog_20261127.py',
 )
 // ⚠ 扫整个目录而不是列文件名：列名单的话，加一路方言时新文件不在名单里，
 // 这条闸对它一声不吭
@@ -162,6 +162,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     base_url: true,
   } satisfies Keys<LlmProviderPreset>,
   LlmModelOut: {
+    knowledge_reasoning_effort: true,
     name: true,
     kind: true,
     has_vision: true,

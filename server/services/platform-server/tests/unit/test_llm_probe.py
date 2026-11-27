@@ -104,3 +104,30 @@ async def test_a_timeout_says_so() -> None:
     is_ok, message, _ = await _probe(handle)
     assert is_ok is False
     assert "超时" in message
+
+
+@pytest.mark.parametrize(
+    ("body", "is_ready"),
+    [
+        (b'{"status":"healthy"}', True),
+        (b"login", False),
+        (b'{"status":"loading"}', False),
+    ],
+)
+async def test_mineru_probes_deployment_health(
+    body: bytes, is_ready: bool
+) -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/mineru/deployments/example/health"
+        assert request.headers["Authorization"] == f"Bearer {KEY}"
+        return httpx.Response(200, content=body)
+
+    result = await probe_endpoint(
+        kind="mineru",
+        base_url="https://host/mineru/deployments/example/",
+        api_key=KEY,
+        timeout_s=2,
+        transport=httpx.MockTransport(handle),
+    )
+    assert result.is_ok is is_ready
+    assert result.model_names == []

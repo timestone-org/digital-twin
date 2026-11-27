@@ -8,6 +8,9 @@ worker 少了那一路后端，传进来了也解不了。**三处单看都对�
 错误而不是静默只报本地那几路。这几条用例守的是「必填之后真的被传对了」。
 """
 
+from pathlib import Path
+
+import httpx
 import pytest
 from pydantic import SecretStr
 
@@ -19,14 +22,26 @@ from knowledge_server.apps.knowledge.services.capability import Installed
 from knowledge_server.apps.knowledge.services.document_service import (
     presign_upload,
 )
-from knowledge_server.apps.knowledge.services.parsing import MINERU_KIND
+from knowledge_server.apps.knowledge.services.parsing import (
+    MINERU_KIND,
+    MineruBackend,
+    RawItem,
+)
 from knowledge_server.settings import Settings
+from llmcore import ModelCatalog
 
 PLACEHOLDER = "knowledge-test"
 
 
-def _settings(**extra: object) -> Settings:
-    return Settings(  # pyright: ignore[reportArgumentType]
+@pytest.fixture(autouse=True)
+def isolate_dotenv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.chdir(tmp_path)
+
+
+def _settings(
+    *, mineru_enabled: bool = False, mineru_base_url: str = ""
+) -> Settings:
+    return Settings(
         postgres_host=PLACEHOLDER,
         postgres_user=PLACEHOLDER,
         postgres_password=SecretStr(PLACEHOLDER),
@@ -38,7 +53,8 @@ def _settings(**extra: object) -> Settings:
         objectstore_secret_key=SecretStr("s" * 16),
         edge_signing_secret=SecretStr("s" * 32),
         edge_service_key=SecretStr("k" * 32),
-        **extra,
+        mineru_enabled=mineru_enabled,
+        mineru_base_url=mineru_base_url,
     )
 
 
@@ -54,6 +70,65 @@ def test_mineru_is_assembled_from_the_configured_address() -> None:
     made = external_parsers(_wired())
     assert [one.name for one in made] == [MINERU_KIND]
     assert ".pdf" in made[0].suffixes
+
+
+@pytest.mark.parametrize(
+    ("configured", "prefix", "expected"),
+    [
+        (None, "", None),
+        ("  ", "", None),
+        (PLACEHOLDER, "/mineru", f"Bearer {PLACEHOLDER}"),
+    ],
+)
+async def test_mineru_requests_use_only_the_configured_bearer(
+    monkeypatch: pytest.MonkeyPatch,
+    configured: str | None,
+    prefix: str,
+    expected: str | None,
+) -> None:
+    if configured is None:
+        monkeypatch.delenv("KNOWLEDGE_MINERU_API_KEY", raising=False)
+    else:
+        monkeypatch.setenv("KNOWLEDGE_MINERU_API_KEY", configured)
+    requests: list[tuple[str, str, str | None]] = []
+    layout = '[{"type":"text","text":"样例","page_idx":0}]'
+    replies: tuple[dict[str, object], ...] = (
+        {"task_id": "sample-task"},
+        {"status": "completed"},
+        {"results": {"sample": {"content_list": layout}}},
+    )
+
+    async def handle(
+        _transport: httpx.AsyncHTTPTransport, request: httpx.Request
+    ) -> httpx.Response:
+        requests.append(
+            (
+                request.method,
+                request.url.path,
+                request.headers.get("Authorization"),
+            )
+        )
+        return httpx.Response(200, json=replies[len(requests) - 1])
+
+    monkeypatch.setattr(
+        httpx.AsyncHTTPTransport, "handle_async_request", handle
+    )
+    (backend,) = external_parsers(
+        _settings(
+            mineru_enabled=True,
+            mineru_base_url=f"https://mineru.invalid{prefix}",
+        )
+    )
+    raw = RawItem(
+        filename="sample.pdf", content=b"sample", media_type="application/pdf"
+    )
+    parsed = await backend.parse_remote(raw, timeout_s=2)
+    assert parsed.blocks[0].locator.page == 1
+    assert requests == [
+        ("POST", f"{prefix}/tasks", expected),
+        ("GET", f"{prefix}/tasks/sample-task", expected),
+        ("GET", f"{prefix}/tasks/sample-task/result", expected),
+    ]
 
 
 def test_connecting_mineru_puts_pdf_on_the_accept_list() -> None:
@@ -102,3 +177,48 @@ async def test_the_upload_check_lets_pdf_through_once_connected() -> None:
             UploadTicketIn(filename="图纸.pdf", size_bytes=1024),
             external_parsers(_wired()),
         )
+
+
+@pytest.mark.parametrize("is_enabled", [True, False])
+def test_catalog_overrides_env(is_enabled: bool) -> None:
+    endpoint = "https://mineru.invalid/mineru/deployments/example"
+    catalog = ModelCatalog.from_wire(
+        {
+            "providers": [
+                {
+                    "name": "解析",
+                    "kind": "mineru",
+                    "id": "p",
+                    "base_url": endpoint,
+                    "api_key": PLACEHOLDER,
+                    "is_enabled": is_enabled,
+                    "models": [{"name": "pipeline", "kind": "parser"}],
+                    "options": {
+                        "lang": "en",
+                        "table_enabled": False,
+                        "formula_enabled": False,
+                    },
+                }
+            ],
+            "assignments": [
+                {
+                    "purpose": "knowledge.parse",
+                    "provider_id": "p",
+                    "model_name": "pipeline",
+                }
+            ],
+        }
+    )
+    parsers = external_parsers(_wired(), catalog)
+    if not is_enabled:
+        assert parsers == ()
+        return
+    (parser,) = parsers
+    assert isinstance(parser, MineruBackend)
+    assert parser.base_url == endpoint
+    assert parser.api_key == SecretStr(PLACEHOLDER)
+    assert (parser.lang, parser.formula_enabled, parser.table_enabled) == (
+        "en",
+        False,
+        False,
+    )

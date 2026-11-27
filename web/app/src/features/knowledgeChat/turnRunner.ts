@@ -2,7 +2,11 @@
  * @fileoverview 知识库对话的回合门面：反问、资料引用与采集客户端工具。
  * 通用循环见 features/ai/turnLoop.ts，实时卡片契约见 KNOWLEDGE_LIVE_DATA_DESIGN.md。
  */
-import type { KnowledgeChatAdvanceIn, KnowledgeCitation } from '@dt/contracts'
+import type {
+  KnowledgeChatAdvanceIn,
+  KnowledgeCitation,
+  KnowledgeReasoningEffort,
+} from '@dt/contracts'
 
 import {
   BUILTIN_CLIENT_TOOLS,
@@ -31,6 +35,7 @@ export const MAX_ROUNDS = 20
 export interface KnowledgeRunnerInput {
   advance: KnowledgeAdvanceStream
   sessionId: string
+  effort?: KnowledgeReasoningEffort | undefined
   userText: string
   signal?: AbortSignal | undefined
   /**
@@ -59,6 +64,9 @@ export async function runKnowledgeTurn(
       advance: input.advance,
       sessionId: input.sessionId,
       envelope: () => ({
+        ...(input.effort === undefined
+          ? {}
+          : { reasoning_effort: input.effort }),
         client_tools: [...BUILTIN_CLIENT_TOOLS, ...LIVE_TOOLS],
       }),
       userText: input.userText,

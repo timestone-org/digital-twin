@@ -290,6 +290,7 @@ const SHAPES: Record<string, Record<string, true>> = {
     error: true,
   } satisfies Keys<KnowledgeChatToolResult>,
   ChatAdvanceIn: {
+    reasoning_effort: true,
     user_text: true,
     tool_results: true,
     client_tools: true,

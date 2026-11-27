@@ -8,6 +8,7 @@
 """
 
 import re
+from dataclasses import replace
 from typing import Any
 
 import pytest
@@ -33,6 +34,7 @@ from llmcore import (
     ProviderSpec,
 )
 from llmcore.codex import wire_names
+from llmcore.reasoning import ReasoningChatOpenAI
 
 SECRET = SecretStr("s" * 32)
 CODEX_ID = "8f0c1e3a-0000-7000-8000-000000000004"
@@ -266,3 +268,30 @@ def test_every_tool_this_service_declares_survives_the_wire_rename() -> None:
         wired = wire_names.to_wire(spec.name)
         assert ENDPOINT_PATTERN.fullmatch(wired)
         assert wire_names.from_wire(wired) == spec.name
+
+
+async def test_model_and_turn_efforts_reach_the_endpoint() -> None:
+    provider = replace(
+        _endpoint_provider(),
+        models=(
+            ModelSpec(
+                name="other", kind="chat", knowledge_reasoning_effort="high"
+            ),
+            ModelSpec(
+                name="qwen-plus", kind="chat", knowledge_reasoning_effort="low"
+            ),
+        ),
+        extra_body={"reasoning_effort": "medium", "temperature": 0.4},
+    )
+    adapter = _adapter(_assigned(provider, "qwen-plus"))
+    for effort, expected in ((None, "low"), ("high", "high"), ("none", "none")):
+        made = await adapter.build(ModelChoice(effort=effort))
+        assert isinstance(made, ReasoningChatOpenAI)
+        assert made.extra_body == {
+            "reasoning_effort": expected,
+            "temperature": 0.4,
+        }
+    assert provider.extra_body == {
+        "reasoning_effort": "medium",
+        "temperature": 0.4,
+    }

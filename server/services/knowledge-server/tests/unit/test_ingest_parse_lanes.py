@@ -72,7 +72,7 @@ def _deps(
         pool=pool,
         store=None,
         parse_timeout_s=30.0,
-        external_parsers=external,
+        external_parsers=lambda: external,
         external_parse_timeout_s=external_timeout_s,
     )
 

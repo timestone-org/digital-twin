@@ -111,7 +111,7 @@ server/services/knowledge-server/
 | 嵌入端点（经模型目录） | worker 摄取 | **摄不进任何文档**，每份文档判 `failed` 并说清缺什么 |
 | 对话端点（经模型目录） | 对话页、`agentic` 策略 | 对话页 409、`agentic` 如实不可用（不退化成 hybrid） |
 | 重排端点（**只有目录一个来源**） | `hybrid` / `agentic` | 按融合名次返回，`/capabilities` 如实说没接 |
-| MinerU（可选 profile） | PDF 与扫描件解析 | 不收 PDF，传 PDF 的人拿到一句点得出名字的错 |
+| MinerU（远端或本机可选 profile） | PDF 与扫描件解析 | 不收 PDF，传 PDF 的人拿到一句点得出名字的错 |
 | FunASR（可选，现场自建） | 语音输入 | 没有麦克风键 |
 
 ### 1.4 架构决策索引
@@ -363,6 +363,8 @@ P1 上线前后拿同一份真实报告重跑：
 | `.pdf` / 图片 | 走 MinerU（见下） | 关着 MinerU 时**当场拒收**，不是收下之后解成空的 |
 
 ### 4.6 外部解析后端：MinerU 那一路
+
+已有远端部署时，直接在模型管理新建「MinerU 文档解析」供应商。填写完整部署地址（如 `https://host/mineru/deployments/<id>`）及专用访问密钥，按需调整 OCR 语言、公式与表格识别。测试连接成功后保存，给「知识库文档解析」分配该供应商的 `pipeline`。API 与 worker 按目录刷新周期应用配置。停用已分配的供应商可暂停解析，清除分配后恢复环境变量默认值。本地 MinerU profile 仅供自建使用。
 
 `parsing/` 的扩展点分两级，因为外部服务与本地库不是一个形状：
 
@@ -940,6 +942,7 @@ schema `knowledge`，域前缀 `kb_`。主键 UUIDv7，时刻一律 `timestamptz
 | `KNOWLEDGE_OFFICE_PREVIEW_ENABLED` / `_COMMAND` / `_TIMEOUT_S` | 开 / `soffice` / `300` | 只控制新 PDF 派生；已有派生物仍可读 |
 | `KNOWLEDGE_EXTERNAL_PARSE_TIMEOUT_S` | `180` | 外部解析投任务 + 轮询的总预算 |
 | `KNOWLEDGE_MINERU_ENABLED` / `_BASE_URL` / `_LANG` / `_FORMULA_ENABLED` / `_TABLE_ENABLED` | 关 / `http://mineru:8000` / `ch` / 开 / 开 | 开了不给地址 = 启动即失败 |
+| `KNOWLEDGE_MINERU_API_KEY` | 留空 | 经网关接入时，填写当前 MinerU 部署的专用访问密钥。直连内网 MinerU 时留空 |
 | `KNOWLEDGE_ASR_ENABLED` / `_URL` / `_HOTWORDS` | 关 | 开了不给 `ws://`/`wss://` 地址 = 启动即失败 |
 | `KNOWLEDGE_ASR_TAIL_SILENCE_S` | `3.0` | 实测 1.5 s 不够 |
 
@@ -1000,7 +1003,7 @@ healthcheck。不等就迁移，主机重启时 Docker 常比 Postgres 先起来
 两份 `.env.example` 与 `compose.yml`（闸门 `check_config_secrets` 守着样例列全）。
 
 ⚠ MinerU 是**第三方镜像**：tag 钉死具体版本、**禁 `latest`**。它单开一个 profile，
-因为体量大且没有它整套仍然能跑（只是不收 PDF）。权重挂卷不烤进镜像：
+自建解析器时才需启动，使用远端部署可直接解析 PDF。权重挂卷不烤进镜像：
 它与代码无关，烤进去每次重建都要重下一遍。
 
 ⚠ 起 MinerU 的三个实测坑：只装 `mineru[pipeline]`（`core`/`all` 会拖进 vlm 与 gradio）；

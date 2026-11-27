@@ -396,10 +396,13 @@ export interface KnowledgeChatToolResult {
  * `client_tools` 是这一页实现了哪些客户端工具——对话页只会报 `user.ask`。
  */
 export interface KnowledgeChatAdvanceIn {
+  reasoning_effort?: KnowledgeReasoningEffort | null
   user_text?: string | null
   tool_results?: KnowledgeChatToolResult[]
   client_tools?: string[]
 }
+
+export type KnowledgeReasoningEffort = 'low' | 'medium' | 'high'
 
 /** 这个对话在别处改过了，手上这份是旧的；码值以 ERROR_CODES 为准。 */
 export const KNOWLEDGE_CHAT_CONFLICT_CODE = ERROR_CODES.knowledgeChatConflict

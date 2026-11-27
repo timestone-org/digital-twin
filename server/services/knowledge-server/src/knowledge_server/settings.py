@@ -191,6 +191,7 @@ class Settings(
     # 「起来之后每次解析才报错」比起不来难查得多
     mineru_enabled: bool = False
     mineru_base_url: str = ""
+    mineru_api_key: SecretStr | None = None
     # OCR 语言，原样交给 MinerU
     mineru_lang: str = "ch"
     mineru_formula_enabled: bool = True
@@ -283,6 +284,17 @@ class Settings(
         if not url.startswith(("ws://", "wss://")):
             raise ValueError("KNOWLEDGE_ASR_URL 必须以 ws:// 或 wss:// 开头")
         return self
+
+    @field_validator("mineru_api_key")
+    @classmethod
+    def normalize_mineru_api_key(
+        cls, given: SecretStr | None
+    ) -> SecretStr | None:
+        """空白凭证表示内网直连。Args: given。"""
+        if given is None:
+            return None
+        token = given.get_secret_value().strip()
+        return SecretStr(token) if token else None
 
     @model_validator(mode="after")
     def _mineru_needs_an_address(self) -> Self:

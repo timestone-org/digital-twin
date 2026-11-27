@@ -13,7 +13,7 @@
 
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
@@ -25,10 +25,12 @@ from llmcore.endpoints import ChatEndpoint, EmbeddingEndpoint, RerankEndpoint
 MODEL_KIND_CHAT = "chat"
 MODEL_KIND_EMBEDDING = "embedding"
 MODEL_KIND_RERANK = "rerank"
+MODEL_KIND_PARSER = "parser"
 MODEL_SPEC_KINDS: tuple[str, ...] = (
     MODEL_KIND_CHAT,
     MODEL_KIND_EMBEDDING,
     MODEL_KIND_RERANK,
+    MODEL_KIND_PARSER,
 )
 
 # 重排线形落在供应商的这一格配置上。⚠ 跟着**端点**走而不是跟着模型走：
@@ -44,6 +46,7 @@ OPTION_RERANK_DIALECT = "rerank_dialect"
 # 的 `llm-shapes.contract.spec.ts` 对着几份源码比。漂开的表现是「界面上配好了
 # 一路、消费方却当它不存在」，而两边代码单看都对
 PROVIDER_KIND_OPENAI_COMPAT = "openai_compat"
+PROVIDER_KIND_MINERU = "mineru"
 PROVIDER_KIND_CODEX_OAUTH = "codex_oauth"
 
 
@@ -60,6 +63,7 @@ class ModelSpec:
     has_vision: bool = False
     # 嵌入模型的向量维数；对话模型没有这一格
     dimensions: int | None = None
+    knowledge_reasoning_effort: str | None = None
 
 
 @dataclass(frozen=True)
@@ -319,15 +323,7 @@ def catalog_version(
                 "is_enabled": one.is_enabled,
                 "extra_body": one.extra_body,
                 "options": one.options,
-                "models": [
-                    {
-                        "name": model.name,
-                        "kind": model.kind,
-                        "has_vision": model.has_vision,
-                        "dimensions": model.dimensions,
-                    }
-                    for model in one.models
-                ],
+                "models": [asdict(model) for model in one.models],
             }
             for one in providers
         ],
@@ -353,6 +349,7 @@ class _ModelWire(BaseModel):
     kind: str = Field(min_length=1)
     has_vision: bool = False
     dimensions: int | None = None
+    knowledge_reasoning_effort: str | None = None
 
 
 class _ProviderWire(BaseModel):
@@ -412,6 +409,7 @@ def _provider_of(wire: _ProviderWire) -> ProviderSpec:
                 kind=one.kind,
                 has_vision=one.has_vision,
                 dimensions=one.dimensions,
+                knowledge_reasoning_effort=one.knowledge_reasoning_effort,
             )
             for one in wire.models
         ),

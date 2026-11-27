@@ -12,11 +12,13 @@ from typing import Any
 
 from platform_server.apps.llm_providers.enums import (
     DEFAULT_RERANK_DIALECT,
+    PROVIDER_KIND_MINERU,
     ProviderKindSpec,
     PurposeSpec,
 )
 
 # 推理档位落在这一格里。⚠ 形态之间的键不通用：`options` 的形状由形态说了算
+MAX_PARSE_LANG_LENGTH = 32
 OPTION_DEFAULT_EFFORT = "default_effort"
 # 重排线形落在这一格里。⚠ 与 llmcore 的 `OPTION_RERANK_DIALECT` 逐字一致。
 # ⚠ 配在**供应商**上而不是模型上：方言说的是「打哪个路径、什么请求体」，
@@ -92,6 +94,8 @@ def options_mismatch(
     """
     if not options:
         return None
+    if spec.code == PROVIDER_KIND_MINERU:
+        return _mineru_options_mismatch(options)
     allowed = allowed_options(spec)
     if not allowed:
         return f"「{spec.label}」没有可配的选项"
@@ -106,6 +110,25 @@ def options_mismatch(
         ),
         None,
     )
+
+
+def _mineru_options_mismatch(options: Mapping[str, Any]) -> str | None:
+    """校验 OCR 语言与识别开关。Args: options。"""
+    if options.keys() - {"lang", "formula_enabled", "table_enabled"}:
+        return "MinerU 选项仅支持 OCR 语言、公式和表格识别"
+    lang = options.get("lang", "ch")
+    if (
+        not isinstance(lang, str)
+        or not lang.strip()
+        or len(lang) > MAX_PARSE_LANG_LENGTH
+    ):
+        return "OCR 语言须为 1 到 32 个字符"
+    if any(
+        not isinstance(options.get(key, True), bool)
+        for key in ("formula_enabled", "table_enabled")
+    ):
+        return "公式和表格识别必须是开关"
+    return None
 
 
 def _value_mismatch(

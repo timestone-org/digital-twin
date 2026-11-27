@@ -537,3 +537,56 @@ async def test_the_kind_catalog_lists_the_rerank_dialects(
     assert by_code["codex_oauth"]["rerank_dialects"] == []
     assert "rerank" in by_code["openai_compat"]["model_kinds"]
     assert "rerank" not in by_code["codex_oauth"]["model_kinds"]
+
+
+async def test_mineru_assignment_delivers_parse_options_to_internal_catalog(
+    llm_context: AppContext, settings: Any
+) -> None:
+    options = {"lang": "ch", "table_enabled": True, "formula_enabled": False}
+    provider = await _create(
+        llm_context.client,
+        kind="mineru",
+        name="MinerU",
+        models=[{"kind": "parser", "name": "pipeline"}],
+        options=options,
+    )
+    assert "api_key" not in provider
+    assigned = await llm_context.client.put(
+        f"{PURPOSES}/knowledge.parse",
+        json={"provider_id": provider["id"], "model_name": "pipeline"},
+    )
+    assert assigned.status_code == httpx.codes.OK
+    catalog = data_of(
+        await llm_context.client.get(
+            CATALOG,
+            headers={
+                "X-Service-Key": settings.edge_service_key.get_secret_value()
+            },
+        )
+    )
+    assert catalog["assignments"][0]["purpose"] == "knowledge.parse"
+    assert catalog["providers"][0]["options"] == options
+    assert catalog["providers"][0]["api_key"] == "sk-very-secret-1234"
+
+
+async def test_model_effort_round_trips_and_legacy_updates_preserve_it(
+    llm_context: AppContext, settings: Any
+) -> None:
+    model = {"name": "qa-chat", "kind": "chat"}
+    field = "knowledge_reasoning_effort"
+    saved = await _create(
+        llm_context.client, models=[{**model, field: "medium"}]
+    )
+    url = f"{PROVIDERS}/{saved['id']}"
+    assert saved["models"][0][field] == "medium"
+    legacy = await llm_context.client.patch(url, json={"models": [model]})
+    assert data_of(legacy)["models"][0][field] == "medium"
+    catalog = await llm_context.client.get(
+        CATALOG,
+        headers={"X-Service-Key": settings.edge_service_key.get_secret_value()},
+    )
+    assert data_of(catalog)["providers"][0]["models"][0][field] == "medium"
+    cleared = await llm_context.client.patch(
+        url, json={"models": [{**model, field: None}]}
+    )
+    assert data_of(cleared)["models"][0][field] is None

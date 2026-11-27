@@ -59,7 +59,7 @@ def _capability_of(container: Container) -> CapabilityOut:
         Installed(
             sources=container.sources,
             strategies=lanes,
-            external_parsers=container.external_parsers,
+            external_parsers=container.external_parsers(),
         ),
         ModelLanes(
             is_embedding_enabled=container.embedder.can_embed,

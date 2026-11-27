@@ -11,6 +11,10 @@ from typing import Any, cast
 import httpx
 
 from lib.logging import get_logger
+from platform_server.apps.llm_providers.enums import (
+    PROVIDER_KIND_MINERU,
+    PROVIDER_KIND_OPENAI_COMPAT,
+)
 
 _logger = get_logger("platform.llm_providers.probe")
 
@@ -37,18 +41,20 @@ async def probe_endpoint(
     base_url: str,
     api_key: str,
     timeout_s: float,
+    kind: str = PROVIDER_KIND_OPENAI_COMPAT,
     transport: httpx.AsyncBaseTransport | None = None,
 ) -> ProbeResult:
     """打一次 `/models`。
 
     Args: base_url, api_key, timeout_s, transport（只给用例换传输层用）。
     """
+    path = "/health" if kind == PROVIDER_KIND_MINERU else MODELS_PATH
     try:
         async with httpx.AsyncClient(
             timeout=timeout_s, transport=transport
         ) as client:
             response = await client.get(
-                f"{base_url.rstrip('/')}{MODELS_PATH}",
+                f"{base_url.rstrip('/')}{path}",
                 headers={"Authorization": f"Bearer {api_key}"},
             )
     except httpx.TimeoutException:
@@ -60,10 +66,10 @@ async def probe_endpoint(
             error_type=type(error).__name__,
         )
         return ProbeResult(is_ok=False, message="端点连不上，检查地址与网络")
-    return _read(response)
+    return _read(response, path)
 
 
-def _read(response: httpx.Response) -> ProbeResult:
+def _read(response: httpx.Response, path: str) -> ProbeResult:
     """把上游的应答收成一句话。
 
     Args: response。
@@ -79,10 +85,34 @@ def _read(response: httpx.Response) -> ProbeResult:
         return ProbeResult(is_ok=False, message="端点拒绝了这把密钥")
     if status == HTTP_NOT_FOUND:
         return ProbeResult(
-            is_ok=False, message="端点上没有 /models，地址多半少了版本段"
+            is_ok=False, message=f"端点上没有 {path}，请检查部署地址"
         )
     if status >= HTTP_BAD_REQUEST:
         return ProbeResult(is_ok=False, message=f"端点回了 HTTP {status}")
+    return (
+        _health_result(response)
+        if path == "/health"
+        else _models_result(response)
+    )
+
+
+def _health_result(response: httpx.Response) -> ProbeResult:
+    """读取 MinerU 就绪状态。Args: response。"""
+    try:
+        body: object = response.json()
+    except ValueError:
+        body = None
+    healthy = isinstance(body, dict) and cast("dict[str, object]", body).get(
+        "status"
+    ) in ("healthy", "ok", "ready")
+    return ProbeResult(
+        is_ok=healthy,
+        message="MinerU 已就绪" if healthy else "MinerU 未报告就绪",
+    )
+
+
+def _models_result(response: httpx.Response) -> ProbeResult:
+    """读取兼容端点的模型清单。Args: response。"""
     names = _model_names(response)
     if names is None:
         return ProbeResult(

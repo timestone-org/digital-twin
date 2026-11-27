@@ -218,7 +218,7 @@ Restart-Service postgresql-x64-17
 那条命令 6.2 才有。老的 MSOpenTech 3.0 与 tporadowski 5.0 两个 Windows 移植**都不够用**，
 表现是 worker 起来就报未知命令、抽取任务永远不动。
 
-三条路，按现场条件选：
+按现场条件选择：
 
 | 方案 | 取舍 |
 |---|---|
@@ -336,12 +336,13 @@ nssm 的 PATH；开关为真而命令不存在时 worker 会在接队列前退�
 
 **MinerU 在 Windows 上怎么办。** 本仓只给了容器构建（[`docker/mineru/Dockerfile`](../docker/mineru/Dockerfile)：
 CPU 那一档 `mineru[pipeline]==3.4.5`，镜像 2.4 GB、权重另有 2.4 GB），**没有在
-Windows 上原生装过**。三条路，按现场条件选：
+Windows 上原生装过**。按现场条件选择：
 
 1. **不接**（默认）。`KNOWLEDGE_MINERU_ENABLED=false`，知识库照常跑，只是不收 PDF。
 2. **放在另一台 Linux/容器里**跑那份 Dockerfile，把
    `KNOWLEDGE_MINERU_BASE_URL` 指过去。⚠ 那条链路上没有鉴权，只能走内网。
-3. 按 MinerU 官方文档在这台机器上原生装（`pip install "mineru[pipeline]"` 之后
+3. 已有远端部署时，在模型管理新建 MinerU 供应商，填完整部署地址与专用访问密钥，测试并保存，再分配给「知识库文档解析」。部署默认值使用 `KNOWLEDGE_MINERU_ENABLED`、`KNOWLEDGE_MINERU_BASE_URL` 与 `KNOWLEDGE_MINERU_API_KEY`，知识库 API 和 worker 共享这些设置。
+4. 按 MinerU 官方文档在这台机器上原生装（`pip install "mineru[pipeline]"` 之后
    `mineru-api`）。**本手册没验证过这条**，尤其是 Windows 上 `torch` 的 CPU 轮子与
    `opencv` 的运行期依赖；真要走，先手工跑通 `curl http://127.0.0.1:8000/health`
    再改 `.env`。

@@ -968,6 +968,22 @@
             "title": "Client Tools",
             "type": "array"
           },
+          "reasoning_effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Effort"
+          },
           "tool_results": {
             "items": {
               "$ref": "#/components/schemas/ToolResultIn"

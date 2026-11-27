@@ -10,7 +10,12 @@
  * 后端都会 400，但那时表单已经提交、用户只看到一句「参数校验失败」，
  * 指不回是哪一格。
  */
-import type { LlmModelKind, LlmProvider, LlmProviderKind } from '@dt/contracts'
+import type {
+  KnowledgeReasoningEffort,
+  LlmModelKind,
+  LlmProvider,
+  LlmProviderKind,
+} from '@dt/contracts'
 import { LLM_MODEL_KINDS } from '@dt/contracts'
 
 import type {
@@ -21,6 +26,7 @@ import type {
 
 /** 表单里的一行模型。维数按字符串收，空串即「没填」。 */
 export interface ModelRow {
+  knowledgeEffort?: KnowledgeReasoningEffort | null | undefined
   /** 只给列表渲染用的稳定键，不进接口：按索引当键会在删中间一行时把其余行的本地状态串行 */
   key: string
   name: string
@@ -43,6 +49,9 @@ export interface ProviderForm {
   defaultEffort: string
   /** 重排走哪一套线形；空串即按这一形态的默认那一路。 */
   rerankDialect: string
+  lang: string
+  formulaEnabled: boolean
+  tableEnabled: boolean
   notes: string
   models: ModelRow[]
 }
@@ -80,8 +89,12 @@ export function emptyForm(kind: string = DEFAULT_KIND): ProviderForm {
     extraBody: '',
     defaultEffort: '',
     rerankDialect: '',
+    lang: 'ch',
+    formulaEnabled: true,
+    tableEnabled: true,
     notes: '',
-    models: [],
+    models:
+      kind === 'mineru' ? [{ ...emptyRow('parser'), name: 'pipeline' }] : [],
   }
 }
 
@@ -114,12 +127,16 @@ export function formOf(provider: LlmProvider): ProviderForm {
         : JSON.stringify(provider.extra_body, null, 2),
     defaultEffort: optionText(provider.options, OPTION_DEFAULT_EFFORT),
     rerankDialect: optionText(provider.options, OPTION_RERANK_DIALECT),
+    lang: optionText(provider.options, 'lang') || 'ch',
+    formulaEnabled: provider.options?.formula_enabled !== false,
+    tableEnabled: provider.options?.table_enabled !== false,
     notes: provider.notes,
     models: provider.models.map((one) => ({
       key: nextRowKey(),
       name: one.name,
       kind: isModelKind(one.kind) ? one.kind : 'chat',
       hasVision: one.has_vision,
+      knowledgeEffort: one.knowledge_reasoning_effort ?? undefined,
       dimensions: one.dimensions === null ? '' : String(one.dimensions),
     })),
   }
@@ -206,6 +223,7 @@ function validateEndpoint(
   kind: LlmProviderKind | null,
   isEdit: boolean,
 ): string | null {
+  if (form.kind === 'mineru' && !form.lang.trim()) return '请填 OCR 语言'
   if (form.name.trim() === '') return '请填供应商名称'
   // ⚠ 靠登录的那些形态整格没有端点：在这里也要求填的话，那一路根本建不出来
   if (kind !== null && !kind.is_endpoint_required) return null
@@ -261,6 +279,9 @@ function validateExtraBody(text: string): string | null {
 function modelInputs(rows: ModelRow[]): LlmModelInput[] {
   return rows.map((row) => ({
     name: row.name.trim(),
+    ...(row.kind === 'chat' && row.knowledgeEffort !== undefined
+      ? { knowledge_reasoning_effort: row.knowledgeEffort }
+      : {}),
     kind: row.kind,
     has_vision: row.kind === 'chat' && row.hasVision,
     // ⚠ 只有嵌入模型才有维数：给重排模型带一格，读侧会把它当成嵌入模型
@@ -280,6 +301,13 @@ function optionsOf(
   kind: LlmProviderKind | null,
 ): Record<string, unknown> | null {
   if (kind === null) return null
+  if (kind.code === 'mineru') {
+    return {
+      lang: form.lang.trim(),
+      formula_enabled: form.formulaEnabled,
+      table_enabled: form.tableEnabled,
+    }
+  }
   const made: Record<string, unknown> = {}
   if (kind.efforts.length > 0 && form.defaultEffort !== '') {
     made[OPTION_DEFAULT_EFFORT] = form.defaultEffort
