@@ -58,6 +58,12 @@ function cite(
 }
 
 describe('引用卡片', () => {
+  it('缺少定位的 DOCX 引用在收起时也能读到原文', () => {
+    const item = { ...cite('⑦', 'd1', null), heading_path: '', where: '' }
+    const made = mount(AiCitations, { props: { items: [item] } })
+    expect(made.get('button').text()).toContain(item.text)
+  })
+
   it('一份文档一行，页码合并成区间', () => {
     const made = mount(AiCitations, {
       props: { items: [cite('①', 'd1', 4, 6), cite('②', 'd1', 9)] },
@@ -73,10 +79,10 @@ describe('引用卡片', () => {
     expect(made.find('.cites__mark').text()).toBe('③')
   })
 
-  it('默认全收起，点开才有原文', () => {
+  it('收起时显示摘录，展开后显示完整的引用文本', () => {
     // ⚠ 依据是给要核对的人看的：默认摊开会把答案挤到屏幕外
     const made = mount(AiCitations, { props: { items: [cite('①', 'd1', 4)] } })
-    expect(made.text()).not.toContain('出口温度不得高于')
+    expect(made.find('.cites__body').exists()).toBe(false)
     return made
       .find('.cites__row')
       .trigger('click')

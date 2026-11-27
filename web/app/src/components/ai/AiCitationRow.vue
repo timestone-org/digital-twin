@@ -10,7 +10,7 @@
  * 写进 src 的表现是整张图 401、界面上一个碎图标，且不报任何错。所以这里取
  * 字节、转 object URL，并在卸载与收起时 revoke。
  */
-import { onUnmounted, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { DtIcon } from '@dt/ui'
 import type { KnowledgeCitation } from '@dt/contracts'
 
@@ -18,6 +18,26 @@ import { readFigureBytes } from '@/api/knowledge'
 import { useRacedFetch } from '@/composables/useRacedFetch'
 
 const props = defineProps<{ item: KnowledgeCitation }>()
+
+const location = computed(() => {
+  const { where, heading_path, page, page_end } = props.item
+  const pages = page
+    ? `第 ${page_end && page_end > page ? `${page}–${page_end}` : page} 页`
+    : ''
+  const label = where.trim() || pages
+  const heading = heading_path?.trim() ?? ''
+  return [label, heading && !label.includes(heading) ? heading : '']
+    .filter(Boolean)
+    .join(' · ')
+})
+const preview = computed(() => {
+  const text =
+    props.item.text?.trim() ||
+    props.item.figures?.find((fig) => fig.caption)?.caption
+  return (
+    text || (props.item.figures?.length ? '查看引用图片' : '未保存原文摘录')
+  )
+})
 
 /** ⚠ 默认收起：依据是给要核对的人看的，摊开会把答案挤到屏幕外。 */
 const isOpen = ref(false)
@@ -35,7 +55,7 @@ function release(): void {
 /** 取回这一条引用带的那几张图的字节。 */
 async function fetched(signal: AbortSignal): Promise<[string, Blob][]> {
   const made: [string, Blob][] = []
-  for (const figure of props.item.figures) {
+  for (const figure of props.item.figures ?? []) {
     try {
       made.push([
         figure.id,
@@ -80,7 +100,13 @@ onUnmounted(() => {
       @click="isOpen = !isOpen"
     >
       <span class="cites__mark">{{ item.marker }}</span>
-      <span class="cites__where">{{ item.where }}</span>
+      <span class="cites__summary">
+        <span v-if="location" class="cites__where">{{ location }}</span>
+        <span v-if="!isOpen || !item.text?.trim()" class="cites__preview">{{
+          preview
+        }}</span>
+        <span v-else-if="!location">原文摘录</span>
+      </span>
       <DtIcon
         :name="isOpen ? 'chevron-down' : 'chevron-right'"
         :size="13"
@@ -88,7 +114,7 @@ onUnmounted(() => {
       />
     </button>
     <div v-if="isOpen" class="cites__body">
-      <p class="cites__text">{{ item.text }}</p>
+      <p v-if="item.text?.trim()" class="cites__text">{{ item.text }}</p>
       <figure v-for="fig in item.figures" :key="fig.id" class="cites__figure">
         <img
           v-if="shown[fig.id]"
@@ -129,12 +155,23 @@ onUnmounted(() => {
   font-size: 0.875rem;
 }
 
-.cites__where {
+.cites__summary {
+  display: grid;
+  gap: 0.125rem;
   flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cites__where {
+  color: var(--text-secondary);
+}
+.cites__preview {
+  display: -webkit-box;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: var(--text-primary);
+  line-height: 1.5;
 }
 
 .cites__fold {
